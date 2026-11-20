@@ -116,10 +116,12 @@ class DexcomOnePlusStartActivity : MetroAppCompatActivity() {
         fun intent(context: Context, slot: SensorSlot): Intent =
             Intent(context, DexcomOnePlusStartActivity::class.java).putExtra(EXTRA_SLOT, slot.name)
 
-        /** The slot the Start screen opens on. Production when none was asked, as before. */
-        internal fun slotOf(intent: Intent?): SensorSlot =
+        /**
+         * The slot the Start screen is locked on, or null when none was asked (the settings entry):
+         * the screen then opens on production and either slot may be chosen.
+         */
+        internal fun slotOf(intent: Intent?): SensorSlot? =
             intent?.getStringExtra(EXTRA_SLOT)?.let { name -> SensorSlot.entries.firstOrNull { it.name == name } }
-                ?: SensorSlot.PRODUCTION
     }
 }
 

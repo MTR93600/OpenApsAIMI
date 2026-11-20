@@ -1,6 +1,7 @@
 package app.aaps.plugins.source.compose
 
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusAdvCandidate
+import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanResult
 
@@ -47,6 +48,18 @@ object DexcomOnePlusStartRules {
         devices.sortedByDescending {
             OnePlusAdvCandidate.rankScore(it.name, it.address, it.rssi, hint, it.phoneSlotHeld)
         }
+
+    /**
+     * Whether the code on screen is still the code of the last sensor of this slot.
+     *
+     * The field is filled from the store, which is what a reconnect needs. For a new sensor it is
+     * the wrong code, and the screen then says so under the field. Compared on the PIN and the
+     * serial: a typed four digit PIN that matches the stored one is the same code too.
+     */
+    fun showsStoredCode(onScreen: OnePlusSensorIdentity?, stored: OnePlusSensorIdentity?): Boolean =
+        onScreen != null && stored != null &&
+            onScreen.pin == stored.pin &&
+            (onScreen.serial == null || stored.serial == null || onScreen.serial == stored.serial)
 
     /**
      * Whether the row says "in use by another phone".

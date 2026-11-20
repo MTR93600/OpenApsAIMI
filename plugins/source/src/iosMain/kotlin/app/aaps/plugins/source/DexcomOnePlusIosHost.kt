@@ -34,6 +34,7 @@ import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.source.compose.DexcomOnePlusStartScreen
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupScreen
+import app.aaps.plugins.source.compose.IosApplicatorScanner
 import app.aaps.plugins.source.compose.OnePlusBlePermissionGate
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
@@ -313,8 +314,8 @@ class DexcomOnePlusIosHost(
      *   conflict dialog and cancel. Promotion itself stays on the status screen, which owns the
      *   confirmation and the gates; the conflict dialog opens that plugin tab. With the switch off,
      *   `onStagingDriver` is null and the chooser is not drawn. A started sensor closes the screen;
-     *   the warm-up is the next entry. There is no applicator scan button: the camera bridge of
-     *   this app takes photos and does not read a barcode, so the code is typed.
+     *   the warm-up is the next entry. The applicator code can be scanned with the camera
+     *   ([IosApplicatorScanner]) or typed.
      * - **Warm-up** is the shared countdown screen. Its log, start and status buttons are not
      *   drawn, for the reason above.
      *
@@ -326,8 +327,8 @@ class DexcomOnePlusIosHost(
             ComposeScreenContent { onBack ->
                 val navigate = LocalPluginNavigationRequest.current
                 val preSoak = iosPreSoakEnabled()
-                // The slot the opening button asked for, read once: the settings entry asks for none,
-                // so it starts production, as before.
+                // The slot the opening button asked for, read once. The settings entry asks for none,
+                // and then the person chooses on the screen.
                 val initialSlot = remember { takeRequestedStartSlot() }
                 DexcomOnePlusStartScreen(
                     host = this@DexcomOnePlusIosHost,
@@ -370,9 +371,8 @@ class DexcomOnePlusIosHost(
                     onSensorSessionStarted = { address, previousMac ->
                         plugin.onSensorSessionStarted(address, previousMac)
                     },
-                    // The camera bridge of this app takes photos and reads no barcode, so the code
-                    // is typed and the scan button is not drawn.
-                    applicatorScanner = null,
+                    // The shared AVFoundation camera reads the applicator Data Matrix, as on Android.
+                    applicatorScanner = IosApplicatorScanner,
                 )
             },
         ),
@@ -408,9 +408,12 @@ class DexcomOnePlusIosHost(
      */
     @Volatile private var requestedStartSlot: SensorSlot? = null
 
-    /** The slot asked for by the last [openScreen], or production; cleared, so it is used once. */
-    private fun takeRequestedStartSlot(): SensorSlot =
-        (requestedStartSlot ?: SensorSlot.PRODUCTION).also { requestedStartSlot = null }
+    /**
+     * The slot asked for by the last [openScreen], or null when the screen was opened from the
+     * settings; cleared, so it is used once.
+     */
+    private fun takeRequestedStartSlot(): SensorSlot? =
+        requestedStartSlot.also { requestedStartSlot = null }
 
     /** The setup screens live in the settings tree on this phone, see [screenItems]. */
     override fun openScreen(screen: DexcomOnePlusHost.Screen, navigate: (NavigationRequest) -> Unit) {

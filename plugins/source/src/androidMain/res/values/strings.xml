@@ -303,6 +303,12 @@
     <string name="dexcom_oneplus_applicator_scan_hint">Hold the code on the sensor applicator in front of the camera. The field is filled as soon as the code is read.</string>
     <string name="dexcom_oneplus_applicator_scan_camera_refused">The app may not use the camera, so the code cannot be scanned. You can still type it.</string>
     <string name="dexcom_oneplus_applicator_scan_retry">Ask again</string>
+    <string name="dexcom_oneplus_applicator_scan_camera_blocked">Camera access is not allowed on this phone, so the code cannot be scanned. You can still type it.</string>
+    <string name="dexcom_oneplus_applicator_scan_camera_unavailable">The camera cannot be used on this phone, so the code cannot be scanned. You can still type it.</string>
+    <string name="dexcom_oneplus_applicator_scan_open_settings">Open settings</string>
+    <string name="dexcom_oneplus_slot_locked_production">This screen replaces the sensor in use. To start a pre-soak sensor, use the Pre-soak card on the Status screen.</string>
+    <string name="dexcom_oneplus_slot_locked_staging">This screen starts a pre-soak sensor. To replace the sensor in use, use Start / new sensor on the Status screen.</string>
+    <string name="dexcom_oneplus_code_is_stored">This is the code of the last sensor started here. For a new sensor, replace it with the code on the new applicator.</string>
     <string name="dexcom_oneplus_staging_readings_label">Readings collected</string>
     <string name="dexcom_oneplus_staging_last_label">Last reading</string>
     <string name="dexcom_oneplus_end_of_life_title">Sensor is near its end</string>

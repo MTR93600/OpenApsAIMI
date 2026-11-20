@@ -426,6 +426,16 @@ class DexcomOnePlusStatusStateTest {
         assertEquals(true, DexcomOnePlusStatusState.build(input(stagingState = StagingState.WARMUP), format, actions).staging != null)
     }
 
+    /** A soaking sensor goes under the banner; an empty slot, which only offers to start one, does not. */
+    @Test
+    fun soakingSensorCardGoesOnTop() {
+        assertEquals(false, DexcomOnePlusStatusState.build(input(lifecycle = lifecycle()), format, actions).stagingOnTop)
+        for (state in listOf(StagingState.WARMUP, StagingState.SETTLING, StagingState.READY)) {
+            assertEquals(true, DexcomOnePlusStatusState.build(input(stagingState = state, lifecycle = lifecycle()), format, actions).stagingOnTop, "$state")
+        }
+        assertEquals(false, DexcomOnePlusStatusState.build(input(stagingSupported = false, stagingState = StagingState.WARMUP), format, actions).stagingOnTop)
+    }
+
     @Test
     fun scannedTextMustBeAnApplicatorCode() {
         assertTrue(acceptApplicatorScan("1234"))

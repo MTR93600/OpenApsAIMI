@@ -145,7 +145,18 @@ data class DexcomOnePlusStatusView(
     val staging: DexcomOnePlusStagingCard?,
     /** Start time the "correct insertion date" action works on, or null when the action is hidden. */
     val correctInsertionStartMs: Long?,
-)
+) {
+
+    /**
+     * Whether the pre-soak card goes at the top of the screen, under the banner.
+     *
+     * Yes while a sensor is soaking: its progress and its Promote button are what the person comes
+     * for. An empty slot only offers to start one, so it stays at the end. The end-of-life card,
+     * which makes the same offer when it matters, is always at the top.
+     */
+    val stagingOnTop: Boolean
+        get() = staging != null && staging.state != StagingState.ABSENT
+}
 
 /** Turns a [DexcomOnePlusStatusInput] into a [DexcomOnePlusStatusView]. Pure: no clock, no driver. */
 object DexcomOnePlusStatusState {

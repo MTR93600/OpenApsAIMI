@@ -40,9 +40,10 @@ import kotlin.time.Instant
  *
  * It is the shared pump overview: a banner with the phase, the facts of the sensor that feeds the
  * loop, and the buttons to start a sensor, follow the warm-up and read the driver log. Below the
- * facts come the cards the Android status screen always had: calibration, end of life, and the
- * pre-soak sensor with its Promote button. The pre-soak card is absent on a phone with one sensor
- * slot, so it never reads as "no pre-soak just now".
+ * facts come the cards the Android status screen always had: calibration, and the pre-soak
+ * sensor with its Promote button. The end-of-life card, and the pre-soak card while a sensor is
+ * soaking, go under the banner instead, so they are seen without scrolling. The pre-soak card is
+ * absent on a phone with one sensor slot, so it never reads as "no pre-soak just now".
  *
  * No frame of its own: the plugin tab gives it the toolbar, and the Android status Activity wraps
  * it in `CgmScaffold`.
@@ -63,9 +64,32 @@ fun DexcomOnePlusStatusOverview(
     val view = remember(current, actions) { DexcomOnePlusStatusState.build(current, viewModel.format, actions) }
     var promoteAsked by remember { mutableStateOf<Boolean?>(null) }
 
+    val stagingCard: @Composable (DexcomOnePlusStagingCard) -> Unit = { staging ->
+        StagingCard(
+            card = staging,
+            formatGlucose = viewModel.format.glucose,
+            formatTime = viewModel.format.time,
+            onPromoteClick = { early -> promoteAsked = early },
+            onCancelStaging = { viewModel.cancelStaging() },
+            onOpenStart = actions.onOpenPresoak,
+        )
+    }
+
     PumpOverviewScreen(
         state = view.overview,
         modifier = modifier,
+        // What needs the person now goes under the banner. At the end of the list it was below the
+        // fold on a phone, under the pinned buttons, and was not found (field report 2026-11-20).
+        headerContent = if (view.endOfLifePrompt || view.stagingOnTop) {
+            {
+                Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
+                    if (view.endOfLifePrompt) EndOfLifeCard(onOpenStart = actions.onOpenPresoak)
+                    if (view.stagingOnTop) view.staging?.let { stagingCard(it) }
+                }
+            }
+        } else {
+            null
+        },
         customContent = {
             Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
                 view.correctInsertionStartMs?.let { startedAt ->
@@ -76,17 +100,7 @@ fun DexcomOnePlusStatusOverview(
                     )
                 }
                 view.calibration?.let { SensorCalibrationCard(it) }
-                if (view.endOfLifePrompt) EndOfLifeCard(onOpenStart = actions.onOpenPresoak)
-                view.staging?.let { staging ->
-                    StagingCard(
-                        card = staging,
-                        formatGlucose = viewModel.format.glucose,
-                        formatTime = viewModel.format.time,
-                        onPromoteClick = { early -> promoteAsked = early },
-                        onCancelStaging = { viewModel.cancelStaging() },
-                        onOpenStart = actions.onOpenPresoak,
-                    )
-                }
+                if (!view.stagingOnTop) view.staging?.let { stagingCard(it) }
                 // Direct-to-watch: what the watch reports, only while the feature is on (the switch
                 // itself is in the settings) and the Wear plugin is on. Absent on iPhone.
                 val watchHandover = viewModel.watchHandover

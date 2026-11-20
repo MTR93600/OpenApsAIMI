@@ -55,7 +55,7 @@ class DexcomOnePlusStartScreenTest {
     private fun text(name: String): String =
         requireNotNull(SourceStringsValues.textOf(name, null)) { "no English text for $name" }
 
-    private fun render(twoSlots: Boolean, host: DexcomOnePlusHost = FakeHost(), initialSlot: SensorSlot = SensorSlot.PRODUCTION) {
+    private fun render(twoSlots: Boolean, host: DexcomOnePlusHost = FakeHost(), initialSlot: SensorSlot? = null) {
         // MainApp does this in production. Without it every TextRef.Named draws as its raw name and
         // the assertions below read "the node is not displayed" without saying why.
         TextRefIdRegistry.register("source") { name -> SourceStringIds.idOf(name) }
@@ -93,6 +93,8 @@ class DexcomOnePlusStartScreenTest {
         render(twoSlots = true, initialSlot = SensorSlot.STAGING)
         compose.onNodeWithText(text("dexcom_oneplus_slot_staging_short")).assertIsSelected().assertIsEnabled()
         compose.onNodeWithText(text("dexcom_oneplus_slot_production_short")).assertIsNotEnabled()
+        // A disabled choice says where the other one is.
+        compose.onNodeWithText(text("dexcom_oneplus_slot_locked_staging")).assertIsDisplayed()
     }
 
     @Test
@@ -100,6 +102,17 @@ class DexcomOnePlusStartScreenTest {
         render(twoSlots = true, initialSlot = SensorSlot.PRODUCTION)
         compose.onNodeWithText(text("dexcom_oneplus_slot_production_short")).assertIsSelected().assertIsEnabled()
         compose.onNodeWithText(text("dexcom_oneplus_slot_staging_short")).assertIsNotEnabled()
+        compose.onNodeWithText(text("dexcom_oneplus_slot_locked_production")).assertIsDisplayed()
+    }
+
+    /** The settings entry asks for no slot: the screen opens on production and both can be chosen. */
+    @Test
+    fun `opened with no slot asked both choices are enabled`() {
+        render(twoSlots = true, initialSlot = null)
+        compose.onNodeWithText(text("dexcom_oneplus_slot_production_short")).assertIsSelected().assertIsEnabled()
+        compose.onNodeWithText(text("dexcom_oneplus_slot_staging_short")).assertIsEnabled()
+        compose.onNodeWithText(text("dexcom_oneplus_slot_locked_production")).assertDoesNotExist()
+        compose.onNodeWithText(text("dexcom_oneplus_slot_locked_staging")).assertDoesNotExist()
     }
 
     @Test

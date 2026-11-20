@@ -37,7 +37,7 @@ import app.aaps.core.ui.compose.stringResourceOrNull
  *
  * Layout order:
  * 1. Status banner (connection/pump state)
- * 2. Queue status (if present)
+ * 2. Queue status (if present), then the optional header content
  * 3. Info rows card (label:value pairs)
  * 4. Custom content slot (pump image, RT display, etc.)
  * 5. Primary action buttons (Refresh, Reset Alarms, etc.)
@@ -45,12 +45,15 @@ import app.aaps.core.ui.compose.stringResourceOrNull
  *
  * @param state The pump overview UI state produced by the per-pump ViewModel.
  * @param modifier Modifier for the root layout.
+ * @param headerContent Optional slot drawn under the status banner, above the info rows: for
+ *   something the user should act on now, which would be missed at the end of a long list.
  * @param customContent Optional composable slot for pump-specific content.
  */
 @Composable
 fun PumpOverviewScreen(
     state: PumpOverviewUiState,
     modifier: Modifier = Modifier,
+    headerContent: (@Composable () -> Unit)? = null,
     customContent: (@Composable () -> Unit)? = null
 ) {
     Column(
@@ -67,6 +70,9 @@ fun PumpOverviewScreen(
         ) {
             // 1. Status banner + queue status (combined card)
             CommunicationStatusCard(state.statusBanner, state.queueStatus)
+
+            // 2. Something the user should act on now, above the info rows so it is seen first.
+            headerContent?.invoke()
 
             // 3. Info rows
             if (state.infoRows.isNotEmpty()) {

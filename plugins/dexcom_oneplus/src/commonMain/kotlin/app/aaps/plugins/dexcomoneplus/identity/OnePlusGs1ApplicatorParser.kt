@@ -24,7 +24,9 @@ object OnePlusGs1ApplicatorParser {
         }
 
         val normalized = normalizeGs(trimmed)
-        val fields = parseFields(normalized) ?: return null
+        val fields = parseFields(normalized)?.takeIf { it.containsKey("240") }
+            ?: parseWithoutSeparators(normalized)
+            ?: return null
         val pinRaw = fields["240"] ?: return null
         val pin = extractPin(pinRaw) ?: return null
         return OnePlusSensorIdentity(
@@ -44,9 +46,33 @@ object OnePlusGs1ApplicatorParser {
 
     internal fun normalizeGs(raw: String): String {
         val withGs = raw
+            .removePrefix(SYMBOLOGY_ID)
             .replace("^]", GS.toString())
             .replace("\\u001d", GS.toString(), ignoreCase = true)
         return withGs.trimStart(GS).trim()
+    }
+
+    /**
+     * Reads a Dexcom applicator code whose separators were lost.
+     *
+     * The serial (`21`) has no fixed length, so a reader that drops the GS character after it makes
+     * the serial run to the end of the text, and the PIN (`240`) is never found. A camera can do
+     * that: some readers give the GS1 Data Matrix text without its separators. A copied text can
+     * lose them too.
+     *
+     * Only the layout printed on Dexcom applicators is accepted: GTIN, a 12 digit serial, then the
+     * fixed-length dates in any order, then the PIN last. Anything else gives null, as before, so a
+     * text that only looks like a code is never read as one. A wrong PIN would still be refused by
+     * the sensor at Connect.
+     */
+    private fun parseWithoutSeparators(normalized: String): Map<String, String>? {
+        val compact = normalized.filterNot { it == GS || it.isWhitespace() }
+        val match = DEXCOM_LAYOUT.matchEntire(compact) ?: return null
+        return mapOf(
+            "01" to match.groupValues[1],
+            "21" to match.groupValues[2],
+            "240" to match.groupValues[3],
+        )
     }
 
     private fun parseFields(s: String): Map<String, String>? {
@@ -101,4 +127,10 @@ object OnePlusGs1ApplicatorParser {
     )
 
     private val VARIABLE_AI = setOf("10", "21", "240", "250")
+
+    /** The GS1 Data Matrix symbology identifier, which some readers put before the text. */
+    private const val SYMBOLOGY_ID = "]d2"
+
+    /** `01` GTIN, `21` 12 digit serial, `11` / `17` dates, `240` PIN at the end. */
+    private val DEXCOM_LAYOUT = Regex("""01(\d{14})21(\d{12})(?:11\d{6}|17\d{6})*240(\d{4})""")
 }

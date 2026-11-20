@@ -88,10 +88,14 @@ fun DexcomOnePlusStartScreen(
     host: DexcomOnePlusHost,
     /**
      * The slot this visit starts, chosen by the button that opened the screen ("Start / new sensor"
-     * or "Start a pre-soak sensor"). The other slot is shown but disabled, so a production sensor
-     * cannot be started from the pre-soak button by accident, nor the other way round.
+     * or "Start a pre-soak sensor"). The other slot is shown but disabled, with a line that says
+     * where to go instead, so a production sensor cannot be started from the pre-soak button by
+     * accident, nor the other way round.
+     *
+     * Null when no button asked for a slot (the entry in the settings): the screen opens on
+     * production and the person may choose either slot.
      */
-    initialSlot: SensorSlot = SensorSlot.PRODUCTION,
+    initialSlot: SensorSlot? = null,
     permissions: OnePlusBlePermissionGate,
     onBack: () -> Unit,
     onEnsureDriver: () -> OnePlusCgmDriver,
@@ -123,7 +127,9 @@ fun DexcomOnePlusStartScreen(
     // plugin + feeds the loop after warm-up). STAGING pre-soaks a second sensor collect-only — it
     // never touches the AAPS active BG source until promoted from the status screen.
     // A phone with one sensor slot has no pre-soak: it always starts production.
-    var slot by remember { mutableStateOf(if (onStagingDriver == null) SensorSlot.PRODUCTION else initialSlot) }
+    var slot by remember { mutableStateOf(if (onStagingDriver == null) SensorSlot.PRODUCTION else initialSlot ?: SensorSlot.PRODUCTION) }
+    // Null: both slots may be chosen. Otherwise the one slot the opening button asked for.
+    val lockedSlot = if (onStagingDriver == null) null else initialSlot
     // EVERY store read below follows the selected slot. Reading the production store while starting a
     // STAGING sensor pre-filled the old sensor's code and MAC and ranked the scan with the old
     // sensor's fingerprint, so a pre-soak silently re-adopted the sensor already in use (field log
@@ -419,6 +425,7 @@ fun DexcomOnePlusStartScreen(
                         slot = slot,
                         onSlotChange = { slot = it; errorText = null },
                         slotChoiceOffered = onStagingDriver != null,
+                        lockedSlot = lockedSlot,
                         competingApps = competingApps,
                         permissions = permissions,
                         applicatorInput = applicatorInput,
@@ -426,6 +433,7 @@ fun DexcomOnePlusStartScreen(
                         errorText = errorText,
                         serialNone = serialNone,
                         storedMac = storedSession?.lastMac,
+                        storedIdentity = storedSession?.identity,
                         applicatorScanner = applicatorScanner,
                         onApplicatorChange = { text ->
                             applicatorInput = text
@@ -479,6 +487,7 @@ fun DexcomOnePlusStartScreen(
                             slot = slot,
                             onSlotChange = { slot = it; errorText = null },
                             slotChoiceOffered = onStagingDriver != null,
+                            lockedSlot = lockedSlot,
                             competingApps = competingApps,
                             permissions = permissions,
                             applicatorInput = applicatorInput,
@@ -486,6 +495,7 @@ fun DexcomOnePlusStartScreen(
                             errorText = errorText,
                             serialNone = serialNone,
                             storedMac = storedSession?.lastMac,
+                            storedIdentity = storedSession?.identity,
                             applicatorScanner = applicatorScanner,
                             onApplicatorChange = { text ->
                                 applicatorInput = text
@@ -582,6 +592,7 @@ private fun ColumnScope.FormPane(
     slot: SensorSlot,
     onSlotChange: (SensorSlot) -> Unit,
     slotChoiceOffered: Boolean,
+    lockedSlot: SensorSlot?,
     competingApps: List<OnePlusCompetingApp>,
     permissions: OnePlusBlePermissionGate,
     applicatorInput: String,
@@ -589,6 +600,7 @@ private fun ColumnScope.FormPane(
     errorText: String?,
     serialNone: String,
     storedMac: String?,
+    storedIdentity: OnePlusSensorIdentity?,
     applicatorScanner: OnePlusApplicatorScanner?,
     onApplicatorChange: (String) -> Unit,
 ) {
@@ -617,7 +629,7 @@ private fun ColumnScope.FormPane(
                 selected = slot == SensorSlot.PRODUCTION,
                 onClick = { onSlotChange(SensorSlot.PRODUCTION) },
                 // Locked on the slot the opening button asked for (see `initialSlot`).
-                enabled = slot == SensorSlot.PRODUCTION,
+                enabled = lockedSlot == null || lockedSlot == SensorSlot.PRODUCTION,
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             ) {
                 Text(stringResource(SourceStrings.dexcom_oneplus_slot_production_short))
@@ -625,11 +637,24 @@ private fun ColumnScope.FormPane(
             SegmentedButton(
                 selected = slot == SensorSlot.STAGING,
                 onClick = { onSlotChange(SensorSlot.STAGING) },
-                enabled = slot == SensorSlot.STAGING,
+                enabled = lockedSlot == null || lockedSlot == SensorSlot.STAGING,
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
             ) {
                 Text(stringResource(SourceStrings.dexcom_oneplus_slot_staging_short))
             }
+        }
+        // A disabled choice with no word about it reads as broken. Say where the other one is.
+        lockedSlot?.let { locked ->
+            Text(
+                text = stringResource(
+                    when (locked) {
+                        SensorSlot.PRODUCTION -> SourceStrings.dexcom_oneplus_slot_locked_production
+                        SensorSlot.STAGING    -> SourceStrings.dexcom_oneplus_slot_locked_staging
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
@@ -668,6 +693,15 @@ private fun ColumnScope.FormPane(
             minLines = 2,
             isError = errorText != null && parsedIdentity == null,
         )
+        // The field starts with the code of the last sensor of this slot, which is right for a
+        // reconnect and wrong for a new sensor. Say so while that code is still on screen.
+        if (DexcomOnePlusStartRules.showsStoredCode(parsedIdentity, storedIdentity)) {
+            Text(
+                text = stringResource(SourceStrings.dexcom_oneplus_code_is_stored),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         applicatorScanner?.let { scanner ->
             OutlinedButton(onClick = { scanning = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(SourceStrings.dexcom_oneplus_applicator_scan))

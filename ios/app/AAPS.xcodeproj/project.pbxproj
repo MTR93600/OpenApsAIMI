@@ -557,7 +557,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AAPS connects over Bluetooth to your glucose sensor and your insulin pump. It needs this to read your glucose and to send insulin commands, including while the app is in the background.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, to read the code on a sensor applicator, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPS uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
@@ -710,7 +710,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AAPS connects over Bluetooth to your glucose sensor and your insulin pump. It needs this to read your glucose and to send insulin commands, including while the app is in the background.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPS uses the camera only to read the set-up QR code shown by your master phone, to read the code on a sensor applicator, and to take a meal photo when you ask Meal Advisor to estimate its carbohydrates.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPS uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPS reads your steps, heart rate, resting heart rate, heart rate variability and sleep from Health. It uses them to tell when you are active, asleep or unwell, and takes that into account when it decides how much insulin to give. AAPS only reads from Health. It never writes to it.";

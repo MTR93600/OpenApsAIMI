@@ -158,4 +158,24 @@ class DexcomOnePlusStartRulesTest {
             ),
         )
     }
+
+    // ------------ showsStoredCode(): the pre-filled code of the last sensor ------------
+
+    @Test
+    fun `the pre-filled code of the last sensor is pointed out`() {
+        val last = OnePlusSensorIdentity(pin = "1234", serial = "ABCD")
+        assertTrue(DexcomOnePlusStartRules.showsStoredCode(last, last))
+        // A typed PIN carries no serial and is still the same code.
+        assertTrue(DexcomOnePlusStartRules.showsStoredCode(OnePlusSensorIdentity(pin = "1234"), last))
+    }
+
+    @Test
+    fun `a new code or an empty field or no stored sensor is not pointed out`() {
+        val last = OnePlusSensorIdentity(pin = "1234", serial = "ABCD")
+        assertFalse(DexcomOnePlusStartRules.showsStoredCode(OnePlusSensorIdentity(pin = "5678", serial = "WXYZ"), last))
+        // Same PIN by chance, but another sensor: the serial tells them apart.
+        assertFalse(DexcomOnePlusStartRules.showsStoredCode(OnePlusSensorIdentity(pin = "1234", serial = "WXYZ"), last))
+        assertFalse(DexcomOnePlusStartRules.showsStoredCode(null, last))
+        assertFalse(DexcomOnePlusStartRules.showsStoredCode(last, null))
+    }
 }
