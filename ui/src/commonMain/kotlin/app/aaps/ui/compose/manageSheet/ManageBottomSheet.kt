@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -40,8 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -57,6 +60,8 @@ import app.aaps.core.ui.compose.LocalClientRole
 import app.aaps.core.ui.compose.LocalConfig
 import app.aaps.core.ui.compose.MasterOfflineBanner
 import app.aaps.core.ui.compose.consumeOverscroll
+import app.aaps.core.ui.compose.glass.GlassCard
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.IcCancelExtendedBolus
 import app.aaps.core.ui.compose.icons.IcTbrCancel
 import app.aaps.core.ui.compose.masterEditingEnabled
@@ -68,6 +73,8 @@ import app.aaps.core.ui.compose.navigation.label
 import app.aaps.core.ui.compose.rememberBringIntoViewOnExpand
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
+import app.aaps.ui.compose.dashboard.isGlassChrome
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,7 +111,7 @@ fun ManageBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         ManageBottomSheetContent(
             isSimpleMode = isSimpleMode,
@@ -635,14 +642,7 @@ private fun ManageGridItem(
     coloredText: Boolean = true,
     enabled: Boolean = true
 ) {
-    ElevatedCard(
-        onClick = {
-            onDismiss()
-            onClick()
-        },
-        enabled = enabled,
-        modifier = modifier
-    ) {
+    val content: @Composable () -> Unit = {
         Column(modifier = Modifier
             .alpha(if (enabled) 1f else 0.38f)
             .padding(12.dp)) {
@@ -665,7 +665,34 @@ private fun ManageGridItem(
             }
         }
     }
+    val onItemClick = {
+        onDismiss()
+        onClick()
+    }
+    if (isGlassChrome()) {
+        // Over a Glass or Essential home: the Glass card (gradient, thin border, no shadow), with the
+        // same click, the same disabled state and the same Button role as the card below.
+        GlassCard(
+            isDark = isGlassDarkMode(),
+            modifier = modifier
+                .clip(GLASS_ITEM_SHAPE)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onItemClick)
+        ) {
+            content()
+        }
+    } else {
+        ElevatedCard(
+            onClick = onItemClick,
+            enabled = enabled,
+            modifier = modifier
+        ) {
+            content()
+        }
+    }
 }
+
+/** Same corners as [GlassCard], so the click ripple stays inside the card. */
+private val GLASS_ITEM_SHAPE = RoundedCornerShape(16.dp)
 
 @Composable
 private fun SmallTonalIcon(icon: ImageVector, color: Color) {

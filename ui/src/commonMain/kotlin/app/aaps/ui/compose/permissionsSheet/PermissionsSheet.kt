@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.aaps.core.interfaces.plugin.PermissionGroup
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +44,7 @@ fun PermissionsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         PermissionsSheetContent(
             items = items,

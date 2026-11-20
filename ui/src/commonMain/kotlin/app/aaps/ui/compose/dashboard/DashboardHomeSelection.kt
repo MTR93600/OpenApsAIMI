@@ -15,6 +15,10 @@ enum class DashboardHomeSelection(val preferenceValue: String) {
     /** One living glucose shape, details on touch, gestures for the manual Boost (`dashboard/essential`). */
     ESSENTIAL("essential");
 
+    /** True for the homes drawn in the Glass style: their bottom bar and their sheets are Glass too. */
+    val usesGlassChrome: Boolean
+        get() = this == GLASS || this == ESSENTIAL
+
     companion object {
         fun resolve(value: String): DashboardHomeSelection =
             entries.firstOrNull { it.preferenceValue == value }

@@ -427,14 +427,17 @@ fun MainScreen(
                             .background(MaterialTheme.colorScheme.surface)
                     )
 
-                    // Navigation bar protection scrim
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .windowInsetsBottomHeight(WindowInsets.navigationBars)
-                            .background(MaterialTheme.colorScheme.surface)
-                    )
+                    // Navigation bar protection scrim. Not under the floating Glass bar: there the content
+                    // runs to the screen edge behind the bar, as on iOS, and a solid strip would show.
+                    if (!useGlassChrome) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                                .background(MaterialTheme.colorScheme.surface)
+                        )
+                    }
 
                     // Top bar overlay
                     AnimatedVisibility(

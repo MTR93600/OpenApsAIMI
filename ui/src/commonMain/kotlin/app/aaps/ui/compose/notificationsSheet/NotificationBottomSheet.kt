@@ -42,6 +42,7 @@ import app.aaps.core.ui.compose.icons.IcPluginVirtualPump
 import app.aaps.core.ui.compose.icons.IcProfile
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +58,7 @@ fun NotificationBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissSheet,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         LazyColumn {
             item {

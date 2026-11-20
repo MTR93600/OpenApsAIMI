@@ -26,6 +26,7 @@ import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.consumeOverscroll
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +41,7 @@ fun LoopActionBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         Column(
             modifier = Modifier

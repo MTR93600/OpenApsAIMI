@@ -48,6 +48,7 @@ import app.aaps.core.ui.compose.preference.PreferenceSheetContent
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 import app.aaps.ui.compose.main.QuickWizardItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +77,7 @@ fun TreatmentBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         if (showSettings && treatmentButtonsDef != null) {
             TreatmentSettingsContent(

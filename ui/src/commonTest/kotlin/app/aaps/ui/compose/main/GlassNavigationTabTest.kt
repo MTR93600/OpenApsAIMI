@@ -6,11 +6,11 @@ import kotlin.test.assertEquals
 class GlassNavigationTabTest {
 
     @Test
-    fun navigationExposesTheFixedSixTabsInDisplayOrder() {
+    fun navigationExposesTheFixedFiveTabsInDisplayOrder() {
+        // Five at most, so the labels stay readable. Profiles is the first entry of the Manage sheet.
         assertEquals(
             listOf(
                 GlassNavigationTab.TREATMENTS,
-                GlassNavigationTab.PROFILES,
                 GlassNavigationTab.BOLUS,
                 GlassNavigationTab.PUMP,
                 GlassNavigationTab.SCENARIOS,
@@ -18,13 +18,13 @@ class GlassNavigationTabTest {
             ),
             GlassNavigationTab.fixedOrder,
         )
-        assertEquals(6, GlassNavigationTab.entries.size)
+        assertEquals(5, GlassNavigationTab.entries.size)
     }
 
     @Test
     fun onlyTheTabsThatChangeTherapyNeedAMasterOrPairedClient() {
         // A client that is not paired cannot deliver a dose, so Bolus is locked like Treatments and
-        // Scenes. Profiles, Pump and Manage stay enabled.
+        // Scenes. Pump and Manage stay enabled.
         assertEquals(
             setOf(GlassNavigationTab.TREATMENTS, GlassNavigationTab.SCENARIOS, GlassNavigationTab.BOLUS),
             MASTER_ONLY_TABS,

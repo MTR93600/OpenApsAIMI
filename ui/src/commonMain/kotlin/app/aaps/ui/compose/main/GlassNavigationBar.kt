@@ -2,8 +2,19 @@
 
 package app.aaps.ui.compose.main
 
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
@@ -11,40 +22,46 @@ import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.aaps.core.interfaces.navigation.ElementType
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.CoreUiStrings
-import app.aaps.core.ui.compose.AapsTheme
+import app.aaps.core.ui.compose.glass.GlassColors
+import app.aaps.core.ui.compose.glass.isGlassDarkMode
 import app.aaps.core.ui.compose.icons.IcAutomation
-import app.aaps.core.ui.compose.icons.IcProfile
 import app.aaps.core.ui.compose.icons.Pump
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 
-/** Fixed six-item navigation, used only by the Glass home skin. */
+/**
+ * Fixed five-item navigation of the Glass and Essential homes.
+ *
+ * Five is the most a phone tab bar should hold (Apple and Material agree), so the labels never have
+ * to shrink to an unreadable size. Profiles is not here: it is the first entry of the Manage sheet.
+ */
 enum class GlassNavigationTab {
-    TREATMENTS, PROFILES, BOLUS, PUMP, SCENARIOS, MANAGEMENT;
+    TREATMENTS, BOLUS, PUMP, SCENARIOS, MANAGEMENT;
 
     companion object {
 
-        val fixedOrder: List<GlassNavigationTab> = listOf(TREATMENTS, PROFILES, BOLUS, PUMP, SCENARIOS, MANAGEMENT)
+        val fixedOrder: List<GlassNavigationTab> = listOf(TREATMENTS, BOLUS, PUMP, SCENARIOS, MANAGEMENT)
     }
 }
 
@@ -56,10 +73,21 @@ enum class GlassNavigationTab {
 internal val MASTER_ONLY_TABS: Set<GlassNavigationTab> =
     setOf(GlassNavigationTab.TREATMENTS, GlassNavigationTab.SCENARIOS, GlassNavigationTab.BOLUS)
 
-// Smaller than the 24 dp default: six or seven items is more than the five Material suggests,
-// so a smaller icon (with labelSmall text) keeps the bar from looking crowded.
-private val NAV_ICON_SIZE = 20.dp
+private val NAV_ICON_SIZE = 22.dp
+private val BAR_HEIGHT = 64.dp
+private val BAR_SHAPE = RoundedCornerShape(32.dp)
 
+/**
+ * The bottom bar of the Glass and Essential homes: a rounded bar that floats above the content, in
+ * the Glass colours, like the floating tab bar of iOS.
+ *
+ * Every item is an action (it opens a sheet or a screen), not a tab that stays selected, so no item
+ * is ever drawn as selected.
+ *
+ * The loop accept button is not one of the items. It is a separate button just above the bar,
+ * shown only while an open-loop suggestion waits: it must be seen, and it must not push the bar to
+ * six items.
+ */
 @Composable
 fun GlassNavigationBar(
     masterOrPairedClient: Boolean,
@@ -73,91 +101,116 @@ fun GlassNavigationBar(
     loopActionAvailable: Boolean = false,
     onLoopActionClick: () -> Unit = {},
 ) {
-    val colors = NavigationBarItemDefaults.colors(
-        selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        disabledIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-        disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-    )
-
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        windowInsets = WindowInsets(0),
-        modifier = modifier,
+    val isDark = isGlassDarkMode()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        GlassNavigationTab.fixedOrder.forEach { tab ->
-            val enabled = masterOrPairedClient || tab !in MASTER_ONLY_TABS
-            val label = stringResource(tab.label())
-            NavigationBarItem(
-                selected = false,
-                enabled = enabled,
-                onClick = {
-                    when (tab) {
-                        GlassNavigationTab.TREATMENTS -> onTreatmentClick()
-                        GlassNavigationTab.SCENARIOS  -> onScenariosClick()
-                        GlassNavigationTab.MANAGEMENT -> onManagementClick()
-                        GlassNavigationTab.PROFILES   -> onNavigate(NavigationRequest.Element(ElementType.PROFILE_MANAGEMENT))
-                        GlassNavigationTab.BOLUS      -> onNavigate(NavigationRequest.Element(ElementType.BOLUS_WIZARD))
-                        // The screen of the active pump plugin (same as the Pump entry of the Manage sheet).
-                        GlassNavigationTab.PUMP       -> onNavigate(NavigationRequest.Element(ElementType.PUMP))
-                    }
-                },
-                icon = {
-                    Icon(
-                        imageVector = tab.icon(),
-                        contentDescription = label,
-                        modifier = Modifier.size(NAV_ICON_SIZE),
-                    )
-                },
-                label = { NavLabel(label) },
-                colors = colors,
-            )
-        }
-        // Loop accept action: shown only when the open loop has a suggestion waiting.
-        if (loopActionAvailable) {
-            NavigationBarItem(
-                selected = false,
-                // The badge is a constant "1": one suggestion is waiting. Spoken so it matches.
-                modifier = Modifier.badgeState(stringResource(UiStrings.a11y_badge_available, 1)),
-                onClick = onLoopActionClick,
-                icon = {
-                    BadgedBox(
-                        badge = {
-                            Badge(containerColor = AapsTheme.generalColors.statusNormal, contentColor = Color.Black) {
-                                Text(text = "1")
-                            }
+        if (loopActionAvailable) LoopAcceptButton(isDark = isDark, onClick = onLoopActionClick)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(BAR_HEIGHT)
+                .shadow(elevation = 8.dp, shape = BAR_SHAPE)
+                .clip(BAR_SHAPE)
+                .background(Brush.verticalGradient(listOf(GlassColors.navBarBgStart(isDark), GlassColors.navBarBgEnd(isDark))))
+                .border(1.dp, GlassColors.borderCard(isDark), BAR_SHAPE)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GlassNavigationTab.fixedOrder.forEach { tab ->
+                GlassNavItem(
+                    label = stringResource(tab.label()),
+                    icon = tab.icon(),
+                    enabled = masterOrPairedClient || tab !in MASTER_ONLY_TABS,
+                    isDark = isDark,
+                    onClick = {
+                        when (tab) {
+                            GlassNavigationTab.TREATMENTS -> onTreatmentClick()
+                            GlassNavigationTab.SCENARIOS  -> onScenariosClick()
+                            GlassNavigationTab.MANAGEMENT -> onManagementClick()
+                            GlassNavigationTab.BOLUS      -> onNavigate(NavigationRequest.Element(ElementType.BOLUS_WIZARD))
+                            // The screen of the active pump plugin (same as the Pump entry of the Manage sheet).
+                            GlassNavigationTab.PUMP       -> onNavigate(NavigationRequest.Element(ElementType.PUMP))
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayCircle,
-                            contentDescription = stringResource(UiStrings.loop_accept_nav_label),
-                            modifier = Modifier.size(NAV_ICON_SIZE)
-                        )
-                    }
-                },
-                label = { NavLabel(stringResource(UiStrings.loop_accept_nav_label)) },
-                colors = colors,
-            )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
 
+/** One item of the bar: icon over a one-line label. At least 48 dp high, the whole cell is the target. */
+@Composable
+private fun GlassNavItem(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    isDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.38f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        // The label below is the accessible name; the icon adds nothing to it.
+        Icon(imageVector = icon, contentDescription = null, tint = GlassColors.textBright(isDark), modifier = Modifier.size(NAV_ICON_SIZE))
+        Spacer(modifier = Modifier.height(4.dp))
+        NavLabel(text = label, color = GlassColors.textMuted(isDark))
+    }
+}
+
+/** The open-loop suggestion waiting to be accepted: a pill above the bar, in the Glass accent colour. */
+@Composable
+private fun LoopAcceptButton(isDark: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier = Modifier
+            .shadow(elevation = 6.dp, shape = shape)
+            .clip(shape)
+            .background(GlassColors.navBarBgStart(isDark))
+            .border(1.dp, GlassColors.emerald, shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.PlayCircle,
+            contentDescription = null,
+            tint = GlassColors.emerald,
+            modifier = Modifier.size(NAV_ICON_SIZE),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(UiStrings.loop_accept_nav_label),
+            style = MaterialTheme.typography.labelLarge,
+            color = GlassColors.textBright(isDark),
+        )
+    }
+}
+
 /**
- * One line, never two. Six or seven items share the width, so a long label ("Traitements" on a
- * 375 pt wide iPhone) used to break in the middle of the word. It now shrinks from the theme's
- * `labelSmall` down to 8 sp, and is cut only when even that does not fit.
+ * One line, never two. With five items each has about 68 pt on a 375 pt wide iPhone, so a long
+ * label ("Traitements") fits at the theme's `labelSmall`; it may still shrink to 10 sp, and is cut
+ * only when even that does not fit.
  */
 @Composable
-private fun NavLabel(text: String) {
+private fun NavLabel(text: String, color: Color) {
     val style = MaterialTheme.typography.labelSmall
     BasicText(
         text = text,
-        style = style.copy(color = LocalContentColor.current),
-        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+        style = style.copy(color = color, textAlign = TextAlign.Center),
+        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -166,7 +219,6 @@ private fun NavLabel(text: String) {
 private fun GlassNavigationTab.icon(): ImageVector =
     when (this) {
         GlassNavigationTab.TREATMENTS -> Icons.Default.Fastfood
-        GlassNavigationTab.PROFILES   -> IcProfile
         GlassNavigationTab.BOLUS      -> Icons.Default.Medication
         GlassNavigationTab.PUMP       -> Pump
         GlassNavigationTab.SCENARIOS  -> IcAutomation
@@ -176,7 +228,6 @@ private fun GlassNavigationTab.icon(): ImageVector =
 private fun GlassNavigationTab.label(): TextRef =
     when (this) {
         GlassNavigationTab.TREATMENTS -> CoreUiStrings.treatments
-        GlassNavigationTab.PROFILES   -> UiStrings.dashboard_glass_nav_profiles
         GlassNavigationTab.BOLUS      -> UiStrings.dashboard_v2_nav_bolus
         GlassNavigationTab.PUMP       -> CoreUiStrings.pump
         GlassNavigationTab.SCENARIOS  -> CoreUiStrings.scenes

@@ -37,6 +37,7 @@ import app.aaps.core.ui.compose.navigation.color
 import app.aaps.core.ui.compose.navigation.label
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.core.ui.compose.stringResourceOrNull
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 import app.aaps.ui.compose.scenes.SceneIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,7 +55,7 @@ fun ScenesBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = glassSheetContainerColor()
     ) {
         Column(
             modifier = Modifier

@@ -322,6 +322,6 @@ fun OverviewScreen(
             }
             DashboardHomeSelection.OVERVIEW -> null
         },
-        useGlassChrome = homeSelection == DashboardHomeSelection.GLASS || homeSelection == DashboardHomeSelection.ESSENTIAL,
+        useGlassChrome = homeSelection.usesGlassChrome,
     )
 }

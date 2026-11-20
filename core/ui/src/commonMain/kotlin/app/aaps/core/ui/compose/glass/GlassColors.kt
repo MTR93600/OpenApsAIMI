@@ -25,4 +25,14 @@ object GlassColors {
     fun borderCard(isDark: Boolean): Color = if (isDark) Color(0x26FFFFFF) else Color(0xB8CBD5E1)
     fun screenBgTop(isDark: Boolean): Color = if (isDark) Color(0xFF070E1B) else Color(0xFFF1F5F9)
     fun screenBgBottom(isDark: Boolean): Color = if (isDark) Color(0xFF0B1424) else Color(0xFFE8EEF8)
+
+    /**
+     * The floating navigation bar. Nearly opaque on purpose: there is no backdrop blur in this app,
+     * so a see-through bar would show the glucose chart through its labels.
+     */
+    fun navBarBgStart(isDark: Boolean): Color = if (isDark) Color(0xF0182234) else Color(0xF5FFFFFF)
+    fun navBarBgEnd(isDark: Boolean): Color = if (isDark) Color(0xF00E1828) else Color(0xF0EEF2FA)
+
+    /** A bottom sheet opened over a Glass home. Opaque: a sheet carries its own content. */
+    fun sheetBg(isDark: Boolean): Color = if (isDark) Color(0xFF0E1828) else Color(0xFFF1F5F9)
 }

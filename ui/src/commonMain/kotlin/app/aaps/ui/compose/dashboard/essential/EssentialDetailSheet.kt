@@ -42,6 +42,7 @@ import app.aaps.ui.UiStrings
 import app.aaps.ui.compose.dashboard.glass.DashboardV2ToolAction
 import app.aaps.ui.compose.dashboard.glass.GlassUiState
 import app.aaps.ui.compose.dashboard.glass.icon
+import app.aaps.ui.compose.dashboard.glassSheetContainerColor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -77,7 +78,7 @@ fun EssentialDetailSheet(
     aimiTools: List<DashboardV2ToolAction> = emptyList(),
     onOpenTool: (DashboardV2ToolAction) -> Unit = {},
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = glassSheetContainerColor()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = AapsTheme.spacing.extraLarge, vertical = AapsTheme.spacing.medium)) {
             // Boost
             Text(stringResource(UiStrings.essential_boost_title), style = MaterialTheme.typography.titleMedium)

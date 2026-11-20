@@ -17,8 +17,12 @@ import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.resources.TextRefIdRegistry
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.keys.StringKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.ui.compose.LocalDateUtil
+import app.aaps.core.ui.compose.LocalPreferences
 import app.aaps.ui.UiStringIds
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -67,6 +71,11 @@ class GlassOverviewContentTest {
     /** The notification sheet shows the time of each notification; the app provides this. */
     private val dateUtil: DateUtil = mock { on { timeString(any<Long>()) } doReturn "14:05" }
     private var notifications by mutableStateOf<List<AapsNotification>>(emptyList())
+    /** The sheets read the chosen home (Glass here) and the dark mode, as in the app. */
+    private val preferences: Preferences = mock {
+        on { observe(StringKey.GeneralDashboardSkin) } doReturn MutableStateFlow("glass")
+        on { observe(StringKey.GeneralDarkMode) } doReturn MutableStateFlow("dark")
+    }
 
     private val urgent = AapsNotification(
         id = NotificationId.entries.first(),
@@ -85,7 +94,7 @@ class GlassOverviewContentTest {
     private fun setContent() {
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalGlassHeroCommands provides commands, LocalDateUtil provides dateUtil) {
+                CompositionLocalProvider(LocalGlassHeroCommands provides commands, LocalDateUtil provides dateUtil, LocalPreferences provides preferences) {
                     GlassOverviewContent(
                         state = GlassUiState(currentBg = "123", deltaText = "Δ +2", loopStatusText = "Closed Loop", stepsText = "4200", hrText = "72"),
                         chartState = GlassChartState(),
