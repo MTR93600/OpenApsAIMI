@@ -247,6 +247,7 @@
     <string name="cgm_nav_close">Close</string>
     <string name="cgm_help_expand">Show more</string>
     <string name="cgm_help_collapse">Show less</string>
+    <string name="cgm_step_counter" comment="%1$d=current step number, %2$d=how many steps in total. Example: Step 2 of 4">Step %1$d of %2$d</string>
     <string name="dexcom_oneplus_slot_production_short">Main sensor</string>
     <string name="dexcom_oneplus_slot_staging_short">Pre-soak</string>
     <string name="dexcom_oneplus_help_how_to_start">How to start</string>

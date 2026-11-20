@@ -387,7 +387,9 @@ class DexcomOnePlusIosHost(
                     },
                     onOpenLog = null,
                     onOpenStart = null,
-                    onOpenStatus = null,
+                    // CoreBluetooth state is not read here yet, so the host default (on) is used:
+                    // the driver's own message is then shown as it is.
+                    bluetoothOn = { bluetoothOn() },
                     formatTime = { epochMs -> dateUtil().timeString(epochMs) },
                 )
             },

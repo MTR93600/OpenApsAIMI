@@ -52,6 +52,7 @@ import app.aaps.plugins.source.compose.DexcomOnePlusComposeContent
 import app.aaps.plugins.source.compose.DexcomOnePlusSensorFacts
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import app.aaps.plugins.source.keys.DexcomOnePlusIntKey
+import app.aaps.plugins.source.keys.DexcomOnePlusIntentKey
 import app.aaps.plugins.source.keys.DexcomOnePlusLongKey
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
