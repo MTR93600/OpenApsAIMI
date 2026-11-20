@@ -345,7 +345,22 @@ enum class NotificationId(
     CGM_ALARM_TEST(URGENT, CGM),
 
     /** The user stopped AAPS on this phone (`AapsStop`). Shown until it is started again. Appended last on purpose. */
-    AAPS_STOPPED(IMPORTANT, SYSTEM);
+    AAPS_STOPPED(IMPORTANT, SYSTEM),
+
+    /**
+     * AIMI caught an error on several loop runs in a row (a "safe hold"): no insulin change was
+     * decided, so the running temp basal just continues. Silent: shown from about 15 min. Taken
+     * away by the next normal run. Appended last on purpose.
+     */
+    AIMI_SAFE_HOLD(IMPORTANT, LOOP),
+
+    /**
+     * The same safe holds have gone on for about 30 min: a whole temp basal period with no loop
+     * control, while the pump may run a high temp during a fall or a near-zero one during a rise.
+     * An acute insulin-delivery problem, so an alarm. Taken away by the next normal run. Appended
+     * last on purpose.
+     */
+    AIMI_SAFE_HOLD_ALARM(URGENT, LOOP);
 
     companion object {
 

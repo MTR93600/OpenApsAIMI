@@ -18,8 +18,13 @@ interface IosHeartRateSource {
  * the Health Connect heart rate (`AIMIHealthConnectSyncServiceMTR.syncHeartRate`).
  *
  * AIMI reads heart rate from that table only (`heartRatesCached`, `HealthContextRepository`,
- * `UnifiedActivityProviderMTR`). Before this class nothing on iOS wrote it, so the engine always
- * used its 80 bpm substitute, even with an Apple Watch on the wrist.
+ * `UnifiedActivityProviderMTR`). Before this class nothing on iOS wrote it, even with an Apple Watch
+ * on the wrist: the 5 and 10 minute averages were "no heart rate" (NaN) and the 60 and 180 minute
+ * ones the 80 bpm substitute.
+ *
+ * With one row every 4 hours, each lasting 5 minutes, the 5 and 10 minute averages are still "no
+ * heart rate" most of the time. Every reader must treat that as "no evidence", never as a value:
+ * a `roundToInt()` on it in the AIMI sport guard cancelled whole loop ticks (fixed 2026-11-20).
  *
  * ### What is copied from Android, on purpose
  *

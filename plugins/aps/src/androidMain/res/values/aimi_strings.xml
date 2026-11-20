@@ -1946,6 +1946,7 @@
 <string name="honeymoon_small_slope">Honeymoon small slope.</string>
 <string name="hypo_risk_notification_text">Hypo risk: rapid drop detected. Check your glucose now.</string>
 <string name="hypo_risk_notification_title">Hypo Risk</string>
+<string name="aimi_safe_hold_notification_text" comment="%1$d=number of loop runs in a row, at least 3. Example: AIMI could not decide on the last 3 loop runs.">AIMI could not decide on the last %1$d loop runs. Meanwhile the loop gives no SMB and sets the profile basal, or a zero temp basal when glucose is low or falling fast. Check your glucose. The details are in the loop result.</string>
 <string name="insulin_effect">Insulin effect: %1$.2f</string>
 <string name="iob_high_reduction">High IOB (%1$.2f U), reduction x0.85; </string>
 <string name="last_bg_value">  • Last glucose : %1$.1f mg/dL\n</string>

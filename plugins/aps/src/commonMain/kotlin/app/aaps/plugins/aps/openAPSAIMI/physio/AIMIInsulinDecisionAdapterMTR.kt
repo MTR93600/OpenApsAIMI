@@ -94,6 +94,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     /**
      * Returns the current physiological snapshot for external use (e.g. PKPD, Auditor)
      */
+    /** The awake resting heart rate, or null when not measured. See [AimiHealthContext.awakeRestingHeartRateBpm]. */
+    fun awakeRestingHeartRateBpm(): Int? = repo.awakeRestingHeartRateBpm()
+
     fun getLatestSnapshot(): HealthContextSnapshot {
         return repo.getLastSnapshot()
     }

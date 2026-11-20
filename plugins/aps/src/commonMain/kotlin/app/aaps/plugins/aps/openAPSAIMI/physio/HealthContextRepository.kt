@@ -362,7 +362,7 @@ class HealthContextRepository @Inject constructor(
      * end a protection. A measurement that **succeeds with too little data** does return null: that is
      * an honest answer, not an error.
      */
-    fun awakeRestingHeartRateBpm(): Int? {
+    override fun awakeRestingHeartRateBpm(): Int? {
         refreshAwakeRestingHeartRateAsync()
         return awakeRestingRef.load()
     }

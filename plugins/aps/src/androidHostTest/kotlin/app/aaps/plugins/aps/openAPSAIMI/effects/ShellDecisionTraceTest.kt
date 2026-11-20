@@ -5132,6 +5132,7 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
+            READ key=BooleanKey.OApsAIMIEnableStepsFromWatch value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
@@ -5415,6 +5416,7 @@ class ShellDecisionTraceTest {
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
+            READ key=BooleanKey.OApsAIMIEnableStepsFromWatch value=false
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00
             READ key=DoubleKey.OApsAIMILastEstimatedCarbTime value=<clock>
             READ key=DoubleKey.OApsAIMILastEstimatedCarbs value=0.00

@@ -156,16 +156,44 @@ internal fun runAutodriveV3MultiVariableBranch(
         mealChannelHint = state.mealChannelHint,
     )
 
-    writes.noteAutodriveGate(engaged = gate.engage, kindName = gate.kind.name, reason = gate.reason)
+    // `AutoDriveState.createSafe` turns any input it cannot use into a made-up state (bg 100, IOB 0,
+    // maxIOB 3, maxSMB 1), and the controller would then dose on it, ignoring the real IOB and the
+    // user's limits (audit 2026-11-20). So V3 is not engaged on such a tick: checked here, before
+    // anything records it as engaged, and the rest of AIMI decides as on any tick without V3.
+    val v3NotANumber = if (gate.engage) {
+        autodriveV3InputsNotANumber(
+            "bg" to ctx.glucoseStatus.glucose,
+            "velocity" to shortAvgDeltaAdj.toDouble(),
+            "iob" to (ctx.iobDataArray.firstOrNull()?.iob ?: 0.0),
+            "cob" to ctx.mealData.mealCOB,
+            "si" to (pkpdRuntime?.fusedIsf ?: state.variableSensitivity.toDouble()),
+            "ra" to estimatedRa.getLastRa(),
+            "maxIob" to state.maxIob,
+            "maxSmb" to state.maxSmb(),
+            "maxSmbHb" to state.maxSmbHb(),
+        )
+    } else {
+        emptyList()
+    }
+    val engage = gate.engage && v3NotANumber.isEmpty()
+    if (v3NotANumber.isNotEmpty()) {
+        consoleLog.add("🚫 AUTODRIVE_V3 not engaged, input not a number: ${v3NotANumber.joinToString()}")
+    }
+    writes.noteAutodriveGate(
+        engaged = engage,
+        kindName = gate.kind.name,
+        reason = if (v3NotANumber.isEmpty()) gate.reason else "v3_input_not_a_number: ${v3NotANumber.joinToString()}",
+    )
     writes.noteRiseConfirmation(riseConfirmation)
 
-    if (!gate.engage) {
+    if (!engage) {
         raObserve.observeRaIfNotAlreadyRun(
-            ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate, "gate_disengaged",
+            ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate,
+            if (v3NotANumber.isEmpty()) "gate_disengaged" else "v3_input_not_a_number",
         )
     }
 
-    if (gate.engage) {
+    if (engage) {
         writes.setAutodriveEngaged()
         debug.debug("🚦 [AUTODRIVE V3] ${gate.reason} - Engaging Control Loop...")
 
@@ -228,6 +256,18 @@ internal fun runAutodriveV3MultiVariableBranch(
         )
         val htrRaFloor = mpcHints.estimatedRaFloorMgdlPerMin.takeIf { it > 0.0 }
         writes.setLastHtrRaFloorMgdlPerMin(htrRaFloor)
+
+        // The inputs were checked before V3 was recorded as engaged (see above). Only the Ra blended
+        // with the HTR hints is new here; if that is not a number, V3 stops before it doses.
+        val notANumber = autodriveV3InputsNotANumber("si" to canonicalSI, "raBlend" to estimatedRaForMpc)
+        if (notANumber.isNotEmpty()) {
+            consoleLog.add("🚫 AUTODRIVE_V3 skipped this tick, input not a number: ${notANumber.joinToString()}")
+            writes.noteAutodriveGate(engaged = false, kindName = gate.kind.name, reason = "v3_input_not_a_number: ${notANumber.joinToString()}")
+            raObserve.observeRaIfNotAlreadyRun(
+                ctx, combinedDelta, shortAvgDeltaAdj, pkpdRuntime, hasRecentMealEstimate, "v3_input_not_a_number",
+            )
+            return AutodriveV3BranchResult(appliedAction = false, skipLegacySmbBlender = false)
+        }
 
         val adState = AutoDriveState.createSafe(
             bg = ctx.glucoseStatus.glucose,
@@ -503,3 +543,12 @@ internal fun runAutodriveV3MultiVariableBranch(
 
 private fun raObservationId(ctx: AimiTickContext): Long =
     ctx.glucoseStatus.date.takeIf { it > 0L } ?: ctx.currentTime
+
+/**
+ * The names of the Autodrive V3 inputs that are not finite numbers, empty when all are usable.
+ *
+ * A NaN or an infinity would fail the checks of `AutoDriveState`, and `createSafe` would then hand
+ * the controller a made-up state instead.
+ */
+internal fun autodriveV3InputsNotANumber(vararg inputs: Pair<String, Double>): List<String> =
+    inputs.filter { (_, value) -> !value.isFinite() }.map { (name, _) -> name }

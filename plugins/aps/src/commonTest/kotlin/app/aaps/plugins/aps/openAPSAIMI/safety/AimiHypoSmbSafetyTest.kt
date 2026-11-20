@@ -14,6 +14,7 @@ import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SmbFloorInput
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SmbIntervalInput
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SmbIntervals
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SpecificAdjustmentInput
+import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SportGuardKind
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.SportSafetyInput
 import app.aaps.plugins.aps.openAPSAIMI.safety.AimiHypoSmbSafety.TrendInput
 import kotlin.math.abs
@@ -183,6 +184,66 @@ class AimiHypoSmbSafetyTest {
                 SportSafetyInput(400, 800, 0, 0, 0, sportTime = false, activityActive = false, 70.0, 70.0, 100f),
             ),
         )
+    }
+
+    /**
+     * Field report 2026-11-20: with no heart rate in the last 30 min both averages are NaN, and the
+     * sport guard threw on `roundToInt()` as soon as one step was counted. The whole loop tick was
+     * then lost (no prediction, no insulin change). It must decide from the steps alone.
+     */
+    @Test
+    fun `a few steps with no heart rate do not throw and are not sport`() {
+        val guard = AimiHypoSmbSafety.sportGuard(
+            SportSafetyInput(1, 1, 1, 1, 1, sportTime = false, activityActive = false, Double.NaN, Double.NaN, 100f),
+        )
+        assertEquals(SportGuardKind.NONE, guard.kind)
+        assertTrue(guard.signals.contains("hr=na hr10=na"), guard.signals)
+    }
+
+    @Test
+    fun `a sport note with no heart rate is still activity now`() {
+        val guard = AimiHypoSmbSafety.sportGuard(
+            SportSafetyInput(0, 0, 0, 0, 0, sportTime = true, activityActive = false, Double.NaN, Double.NaN, 100f),
+        )
+        assertEquals(SportGuardKind.ACTIVITY_NOW, guard.kind)
+    }
+
+    @Test
+    fun `a walk with no heart rate is judged on the steps alone`() {
+        // A burst is activity now; steps earlier in the day are past activity only.
+        assertEquals(
+            SportGuardKind.ACTIVITY_NOW,
+            AimiHypoSmbSafety.sportGuard(
+                SportSafetyInput(400, 800, 900, 1000, 1000, sportTime = false, activityActive = false, Double.NaN, Double.NaN, 150f),
+            ).kind,
+        )
+        assertEquals(
+            SportGuardKind.PAST_ACTIVITY_ONLY,
+            AimiHypoSmbSafety.sportGuard(
+                SportSafetyInput(10, 20, 100, 3500, 3500, sportTime = false, activityActive = false, Double.NaN, Double.NaN, 150f),
+            ).kind,
+        )
+    }
+
+    @Test
+    fun `a missing heart rate never counts as a raised heart rate`() {
+        // High target and enough steps for the heart rate clause: with no heart rate it stays off,
+        // exactly as with a normal heart rate.
+        val noHr = SportSafetyInput(450, 650, 700, 700, 700, sportTime = false, activityActive = false, Double.NaN, Double.NaN, 150f)
+        val calmHr = noHr.copy(averageHr = 70.0, averageHr10 = 70.0)
+        val raisedHr = noHr.copy(averageHr = 120.0, averageHr10 = 70.0)
+        assertEquals(SportGuardKind.NONE, AimiHypoSmbSafety.sportGuard(noHr).kind)
+        assertEquals(SportGuardKind.NONE, AimiHypoSmbSafety.sportGuard(calmHr).kind)
+        assertEquals(SportGuardKind.ACTIVITY_NOW, AimiHypoSmbSafety.sportGuard(raisedHr).kind)
+        // Same answer as before the NaN fix for an infinite value: it is above any finite baseline.
+        assertEquals(SportGuardKind.ACTIVITY_NOW, AimiHypoSmbSafety.sportGuard(noHr.copy(averageHr = Double.POSITIVE_INFINITY, averageHr10 = 70.0)).kind)
+    }
+
+    @Test
+    fun `a log number is whole or na`() {
+        assertEquals("72", AimiHypoSmbSafety.wholeOrNa(71.6))
+        assertEquals("na", AimiHypoSmbSafety.wholeOrNa(Double.NaN))
+        assertEquals("na", AimiHypoSmbSafety.wholeOrNa(Double.POSITIVE_INFINITY))
     }
 
     @Test

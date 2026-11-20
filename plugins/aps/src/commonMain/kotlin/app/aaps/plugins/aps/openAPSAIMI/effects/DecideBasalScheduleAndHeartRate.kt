@@ -275,9 +275,8 @@ internal data class AimiRecentSteps(
         }
 }
 
-internal interface AimiHeartRateIsfCalls {
-    fun iob(): Float
-    fun roundDisplay(value: Double): Int
+/** What [loadActivityVitals] needs: read steps and heart rate, and publish them for this tick. */
+internal interface AimiActivityVitalsLoadCalls {
     fun stepsCached(now: Long): List<SC>
     fun logSteps(samples: List<SC>)
     fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?)
@@ -302,6 +301,11 @@ internal interface AimiHeartRateIsfCalls {
     fun setAverageBpm180(value: Double)
     fun setBaselineReal(value: Boolean)
     fun logHeartRateFailure(error: Exception)
+}
+
+internal interface AimiHeartRateIsfCalls : AimiActivityVitalsLoadCalls {
+    fun iob(): Float
+    fun roundDisplay(value: Double): Int
 
     /**
      * Steps in the last ten minutes, or null when the platform has no step data.
@@ -350,6 +354,49 @@ internal fun decideHeartRateIsf(
 
     consoleError.add("CR:${profile.carb_ratio}")
 
+    val hr10Measured = loadActivityVitals(preferences, calls)
+    val steps10 = calls.recentSteps10()
+    val hr10 = calls.averageBpm10()
+    val hr60 = calls.averageBpm60()
+    val baselineReal = calls.baselineReal()
+    val heartRateTrendMultiplier = HeartRateTrendIsf.multiplier(
+        steps10m = steps10,
+        // This gesture strengthens a dose, so it needs a real 10-minute heart rate. A reading up to
+        // 30 minutes old standing in for it made ISF x0.9 fire on stale data (audit 2026-11-20).
+        // NaN makes the gesture stand down; the other readers keep the value they had.
+        avgBpm10 = if (hr10Measured) hr10 else Double.NaN,
+        avgBpm60 = hr60,
+        baselineIsReal = baselineReal,
+        bgMgdl = bg.toDouble(),
+        deltaMgdl5m = calls.delta().toDouble(),
+    )
+    if (heartRateTrendMultiplier < 1.0) {
+        calls.scaleVariableSensitivity(heartRateTrendMultiplier.toFloat())
+        consoleLog.add(
+            "💓 HR_TREND_ISF x${aimiFmt2(heartRateTrendMultiplier)} (hr10 ${round(hr10).toInt()} / hr60 ${round(hr60).toInt()}, steps10 $steps10)",
+        )
+    }
+
+    return AimiActivityVitals(
+        tick = tick,
+        minDelta = minDelta,
+        minAvgDelta = minAvgDelta,
+    )
+}
+
+/**
+ * Reads the steps and the heart rate of this tick and publishes them through [calls]: the step
+ * totals, the 5/10/60/180 minute heart rate averages and whether the 60 minute baseline is real.
+ *
+ * It only reads and publishes, so it can run more than once in a tick: early, into a copy kept for
+ * the sport guard of the post-hypo paths (Autodrive V3, drift terminator), and again in the
+ * schedule for everything else. The heart rate ISF gesture is not here; it stays in
+ * [decideHeartRateIsf], once.
+ *
+ * @return true when a heart rate row really falls in the last 10 minutes. Without one the
+ *   "10-minute" average is a copy of the newest reading of the last 30 minutes.
+ */
+internal fun loadActivityVitals(preferences: Preferences, calls: AimiActivityVitalsLoadCalls): Boolean {
     val now = aimiWallClockMs()
     val timeMillis5 = now - 5 * 60 * 1000
     val timeMillis10 = now - 10 * 60 * 1000
@@ -396,6 +443,7 @@ internal fun decideHeartRateIsf(
         steps180 = steps.steps180,
     )
 
+    var hr10Measured = false
     try {
         val allHeartRates = calls.heartRatesCached(now)
         calls.logHeartRates(allHeartRates)
@@ -409,6 +457,11 @@ internal fun decideHeartRateIsf(
         }
 
         val hr5List = getRateForWindow(5 * 60 * 1000)
+        // NaN means "no heart rate in the last 30 min" (no watch, or Health Connect / HealthKit,
+        // which write one row every 4 h). The 10-minute value copies it. Every reader must treat
+        // NaN as "no evidence": comparisons with it are false, and anything that rounds or formats
+        // it must check isFinite() first (AimiHypoSmbSafety.wholeOrNa). A roundToInt() on it in the
+        // sport guard cancelled whole loop ticks until 2026-11-20.
         calls.setAverageBpm(
             if (hr5List.isNotEmpty()) {
                 hr5List.map { it.beatsPerMinute.toInt() }.average()
@@ -420,6 +473,7 @@ internal fun decideHeartRateIsf(
         )
 
         val hr10List = getRateForWindow(10 * 60 * 1000)
+        hr10Measured = hr10List.isNotEmpty()
         calls.setAverageBpm10(
             if (hr10List.isNotEmpty()) hr10List.map { it.beatsPerMinute.toInt() }.average() else calls.averageBpm(),
         )
@@ -445,28 +499,5 @@ internal fun decideHeartRateIsf(
         calls.setAverageBpm180(80.0)
         calls.setBaselineReal(false)
     }
-    val steps10 = calls.recentSteps10()
-    val hr10 = calls.averageBpm10()
-    val hr60 = calls.averageBpm60()
-    val baselineReal = calls.baselineReal()
-    val heartRateTrendMultiplier = HeartRateTrendIsf.multiplier(
-        steps10m = steps10,
-        avgBpm10 = hr10,
-        avgBpm60 = hr60,
-        baselineIsReal = baselineReal,
-        bgMgdl = bg.toDouble(),
-        deltaMgdl5m = calls.delta().toDouble(),
-    )
-    if (heartRateTrendMultiplier < 1.0) {
-        calls.scaleVariableSensitivity(heartRateTrendMultiplier.toFloat())
-        consoleLog.add(
-            "💓 HR_TREND_ISF x${aimiFmt2(heartRateTrendMultiplier)} (hr10 ${round(hr10).toInt()} / hr60 ${round(hr60).toInt()}, steps10 $steps10)",
-        )
-    }
-
-    return AimiActivityVitals(
-        tick = tick,
-        minDelta = minDelta,
-        minAvgDelta = minAvgDelta,
-    )
+    return hr10Measured
 }

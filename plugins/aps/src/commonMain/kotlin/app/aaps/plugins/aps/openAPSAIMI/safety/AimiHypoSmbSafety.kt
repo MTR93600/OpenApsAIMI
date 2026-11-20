@@ -249,6 +249,15 @@ internal object AimiHypoSmbSafety {
     fun sportSafety(input: SportSafetyInput): Boolean = sportGuard(input).kind != SportGuardKind.NONE
 
     /**
+     * A whole number for a log line, or "na" when there is no value.
+     *
+     * `roundToInt()` throws on NaN. Heart rate is NaN whenever there was no reading in the last
+     * 30 min, so a plain `roundToInt()` in [sportGuard] cancelled the whole loop tick (field report
+     * 2026-11-20). A log line must never be able to do that.
+     */
+    internal fun wholeOrNa(value: Double): String = if (value.isFinite()) value.roundToInt().toString() else "na"
+
+    /**
      * The sport guard, with what fired it. The rule is the one [sportSafety] always had; it only also says
      * whether the activity is going on now or is only in the 60 and 180 minute step totals.
      *
@@ -262,14 +271,19 @@ internal object AimiHypoSmbSafety {
         val recentBurst = input.recentSteps5 >= 400 && input.recentSteps10 >= 800
         val activeLast30 = input.recentSteps30 >= 1200
         val activeEarlier = input.recentSteps60 >= 3000 || input.recentSteps180 >= 4500
+        // No heart rate in the last 30 min is published as NaN (see decideHeartRateIsf). It means
+        // "no evidence" here: the heart rate clause is off and only the step and manual rules
+        // decide. Written out on purpose: a NaN comparison is false too, but nothing said so.
+        // The result is exactly the old `baselineHr > 0 && ...` for every input, +Infinity included.
+        val heartRateKnown = !input.averageHr.isNaN() && input.averageHr > 0.0
         val baselineHr = if (input.averageHr10 > 0.0) input.averageHr10 else input.averageHr
-        val elevatedHeartRate = baselineHr > 0 && input.averageHr > baselineHr * 1.15
+        val elevatedHeartRate = heartRateKnown && input.averageHr > baselineHr * 1.15
         val shortActivityWithHr = (input.recentSteps5 >= 400 || input.recentSteps10 >= 600) && elevatedHeartRate
         val highTarget = input.targetBg >= 140
         val now = manualSport || recentBurst || activeLast30 || (highTarget && shortActivityWithHr)
         val signals = "manual=$manualSport burst=$recentBurst steps5=${input.recentSteps5} steps10=${input.recentSteps10} " +
             "steps30=${input.recentSteps30} steps60=${input.recentSteps60} steps180=${input.recentSteps180} " +
-            "hr=${input.averageHr.roundToInt()} hr10=${input.averageHr10.roundToInt()} target=${input.targetBg.roundToInt()}"
+            "hr=${wholeOrNa(input.averageHr)} hr10=${wholeOrNa(input.averageHr10)} target=${wholeOrNa(input.targetBg.toDouble())}"
         val kind = when {
             now           -> SportGuardKind.ACTIVITY_NOW
             activeEarlier -> SportGuardKind.PAST_ACTIVITY_ONLY

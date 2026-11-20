@@ -41,5 +41,11 @@ data class AimiTickContext(
     val flatBGsDetected: Boolean,
     val dynIsfMode: Boolean,
     val uiInteraction: UiInteraction,
-    val extraDebug: String
+    val extraDebug: String,
+    /**
+     * `profile.current_basal` when the tick started. The tick changes that field in place
+     * (gestational autopilot, thyroid, early PK/PD), so a safe hold must not read it after an error
+     * as "the profile basal". Null for callers that build a context without it.
+     */
+    val basalAtTickStart: Double? = null,
 )

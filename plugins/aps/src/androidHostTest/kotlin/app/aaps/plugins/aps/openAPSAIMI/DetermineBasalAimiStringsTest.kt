@@ -225,6 +225,7 @@ class DetermineBasalAimiStringsTest {
             InterfacesStrings.format_insulin_units to 1,
             ApsStrings.heart_rate to 1,
             ApsStrings.hypo_risk_notification_text to 0,
+            ApsStrings.aimi_safe_hold_notification_text to 1,
             ApsStrings.insulin_effect to 1,
             ApsStrings.iob_high_reduction to 1,
             ApsStrings.last_bg_value to 1,

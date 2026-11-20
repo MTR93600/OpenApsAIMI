@@ -41,8 +41,11 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.activity.ActivityContext
 import app.aaps.plugins.aps.openAPSAIMI.activity.EffortActivityBelief
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiActivityVitalsLoadCalls
+import app.aaps.plugins.aps.openAPSAIMI.effects.addConsoleError
 import app.aaps.plugins.aps.openAPSAIMI.effects.basalGovLine
 import app.aaps.plugins.aps.openAPSAIMI.effects.learnerHealthLines
+import app.aaps.plugins.aps.openAPSAIMI.effects.loadActivityVitals
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideEffortSuppressesUndeclaredMeal
 import app.aaps.plugins.aps.openAPSAIMI.effects.OptionalSignal
 import app.aaps.plugins.aps.openAPSAIMI.effects.decideRefreshEffortActivityBelief
@@ -94,6 +97,7 @@ import app.aaps.plugins.aps.openAPSAIMI.effects.AutodriveV3TickState
 import app.aaps.plugins.aps.openAPSAIMI.effects.RbtLiveCommitResult
 import app.aaps.plugins.aps.openAPSAIMI.effects.runAutodriveV3MultiVariableBranch as decideAutodriveV3
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cAdaptiveFactor
+import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cHrReading
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cHrSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cLookbacks
 import app.aaps.plugins.aps.openAPSAIMI.effects.AimiT3cTickTail
@@ -402,6 +406,7 @@ import app.aaps.plugins.aps.openAPSAIMI.pkpd.PkpdLearningDiagnostics
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.ProfileInsulin
 import app.aaps.plugins.aps.openAPSAIMI.pkpd.TapSitePeakShift
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiSafeHoldStreak
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiIntelligenceSnapshotBuilder
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.InsulinKineticsView
 import app.aaps.plugins.aps.openAPSAIMI.orchestration.AimiAdaptationStatusBuilder
@@ -625,6 +630,7 @@ import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.round as mathRound
 import kotlin.math.roundToInt
+import kotlin.coroutines.cancellation.CancellationException
 
 
 
@@ -924,6 +930,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     private val effectiveProfileCache = AimiSingleFlightCache<EffectiveProfile?>(null)
     private val trajectoryHistoryCache = AimiSingleFlightCache<List<PhaseSpaceState>>(emptyList())
     private val determineIoScope = CoroutineScope(SupervisorJob() + aapsIoDispatcher)
+
+    /** Safe holds in a row, so a long run of them is told to the person (see [AimiSafeHoldStreak]). */
+    private val safeHoldStreak = AimiSafeHoldStreak()
 
     /** Latest CGM noise from the current determine_basal invocation (for basal governance context). */
     /**
@@ -1625,6 +1634,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // sur les deux qui appellent explicitement le stage. On repart d'un état non exporté à chaque tick.
         work.aimiDecisionExportedThisTick = false
         work.pendingDecisionCtxForExport = null
+        postHypoSportVitals = null
     }
 
     private fun decisionContextForTrigger(
@@ -4300,69 +4310,129 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         iobData: IobTotal,
         bg: Double,
     ): AimiPostBasalBootstrapActivityVitals {
+        // From here the fields hold this tick's vitals, so the post-hypo copy is not needed any more.
+        postHypoSportVitals = null
         val vitals = decideHeartRateIsf(
             glucoseStatus, profile, iobData, bg, preferences, work.consoleLog, work.consoleError,
-            calls = object : AimiHeartRateIsfCalls {
-                override fun iob() = work.iob
-                override fun roundDisplay(value: Double) = round(value)
-                override fun stepsCached(now: Long) = stepsCountsCached(now)
-                override fun logSteps(samples: List<SC>) {
-                    if (samples.isNotEmpty()) {
-                        val lastSteps = samples.maxByOrNull { it.timestamp }
-                        aapsLogger.debug(LTag.APS, "Steps Data: Found ${samples.size} records. Last: ${lastSteps?.steps5min} steps @ ${Instant.fromEpochMilliseconds(lastSteps?.timestamp ?: 0)}")
-                    } else {
-                        aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
-                    }
-                }
-                override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
-                    recentSteps5Minutes = steps5
-                    recentSteps10Minutes = steps10
-                    recentSteps15Minutes = steps15
-                    recentSteps30Minutes = steps30
-                    recentSteps60Minutes = steps60
-                    recentSteps180Minutes = steps180
-                }
-                override fun declaredMealWindowActive() = this@DetermineBasalaimiSMB2.declaredMealWindowActive()
-                override fun phoneSteps5() = StepService.getRecentStepCount5Min()
-                override fun phoneSteps10() = StepService.getRecentStepCount10Min()
-                override fun phoneSteps15() = StepService.getRecentStepCount15Min()
-                override fun phoneSteps30() = StepService.getRecentStepCount30Min()
-                override fun phoneSteps60() = StepService.getRecentStepCount60Min()
-                override fun phoneSteps180() = StepService.getRecentStepCount180Min()
-                override fun heartRatesCached(now: Long) = this@DetermineBasalaimiSMB2.heartRatesCached(now)
-                override fun logHeartRates(samples: List<HR>) {
-                    if (samples.isNotEmpty()) {
-                        val lastHR = samples.maxByOrNull { it.timestamp }
-                        aapsLogger.debug(LTag.APS, "HR Data: Found ${samples.size} records. Last: ${lastHR?.beatsPerMinute} @ ${Instant.fromEpochMilliseconds(lastHR?.timestamp ?: 0)}")
-                    } else {
-                        aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
-                    }
-                }
-                override fun setAverageBpm(value: Double) { averageBeatsPerMinute = value }
-                override fun averageBpm() = averageBeatsPerMinute
-                override fun setAverageBpm10(value: Double) { averageBeatsPerMinute10 = value }
-                override fun setAverageBpm60(value: Double) { averageBeatsPerMinute60 = value }
-                override fun setAverageBpm180(value: Double) { averageBeatsPerMinute180 = value }
-                override fun setBaselineReal(value: Boolean) { heartRateBaselineIsReal = value }
-                override fun logHeartRateFailure(error: Exception) {
-                    aapsLogger.error(LTag.APS, "Error processing Heart Rate data", error)
-                    work.consoleLog.add(
-                        "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
-                    )
-                }
-                // No `?: 0` here, unlike the schedule's copy above: the heart-rate gesture must
-                // see the unknown rather than read it as stillness.
-                override fun recentSteps10() = recentSteps10Minutes
-                override fun averageBpm10() = averageBeatsPerMinute10
-                override fun averageBpm60() = averageBeatsPerMinute60
-                override fun baselineReal() = heartRateBaselineIsReal
-                override fun delta() = this@DetermineBasalaimiSMB2.delta
-                override fun scaleVariableSensitivity(factor: Float) {
-                    variableSensitivity *= factor
-                }
-            },
+            calls = heartRateIsfCalls(),
         )
         return AimiPostBasalBootstrapActivityVitals(vitals.tick, vitals.minDelta, vitals.minAvgDelta)
+    }
+
+    /**
+     * The steps and heart rate ports of this tick, shared by [runPostBasalBootstrapIobTickStepsAndHeartRate]
+     * and [refreshActivityVitalsBeforePostHypo].
+     */
+    private fun heartRateIsfCalls(): AimiHeartRateIsfCalls = object : AimiHeartRateIsfCalls {
+        override fun iob() = work.iob
+        override fun roundDisplay(value: Double) = round(value)
+        override fun stepsCached(now: Long) = stepsCountsCached(now)
+        override fun logSteps(samples: List<SC>) {
+            if (samples.isNotEmpty()) {
+                val lastSteps = samples.maxByOrNull { it.timestamp }
+                aapsLogger.debug(LTag.APS, "Steps Data: Found ${samples.size} records. Last: ${lastSteps?.steps5min} steps @ ${Instant.fromEpochMilliseconds(lastSteps?.timestamp ?: 0)}")
+            } else {
+                aapsLogger.debug(LTag.APS, "Steps Data: No records found in last 210 mins")
+            }
+        }
+        override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
+            recentSteps5Minutes = steps5
+            recentSteps10Minutes = steps10
+            recentSteps15Minutes = steps15
+            recentSteps30Minutes = steps30
+            recentSteps60Minutes = steps60
+            recentSteps180Minutes = steps180
+        }
+        override fun declaredMealWindowActive() = this@DetermineBasalaimiSMB2.declaredMealWindowActive()
+        override fun phoneSteps5() = StepService.getRecentStepCount5Min()
+        override fun phoneSteps10() = StepService.getRecentStepCount10Min()
+        override fun phoneSteps15() = StepService.getRecentStepCount15Min()
+        override fun phoneSteps30() = StepService.getRecentStepCount30Min()
+        override fun phoneSteps60() = StepService.getRecentStepCount60Min()
+        override fun phoneSteps180() = StepService.getRecentStepCount180Min()
+        override fun heartRatesCached(now: Long) = this@DetermineBasalaimiSMB2.heartRatesCached(now)
+        override fun logHeartRates(samples: List<HR>) {
+            if (samples.isNotEmpty()) {
+                val lastHR = samples.maxByOrNull { it.timestamp }
+                aapsLogger.debug(LTag.APS, "HR Data: Found ${samples.size} records. Last: ${lastHR?.beatsPerMinute} @ ${Instant.fromEpochMilliseconds(lastHR?.timestamp ?: 0)}")
+            } else {
+                aapsLogger.debug(LTag.APS, "HR Data: No records found in last 200 mins")
+            }
+        }
+        override fun setAverageBpm(value: Double) { averageBeatsPerMinute = value }
+        override fun averageBpm() = averageBeatsPerMinute
+        override fun setAverageBpm10(value: Double) { averageBeatsPerMinute10 = value }
+        override fun setAverageBpm60(value: Double) { averageBeatsPerMinute60 = value }
+        override fun setAverageBpm180(value: Double) { averageBeatsPerMinute180 = value }
+        override fun setBaselineReal(value: Boolean) { heartRateBaselineIsReal = value }
+        override fun logHeartRateFailure(error: Exception) {
+            aapsLogger.error(LTag.APS, "Error processing Heart Rate data", error)
+            work.consoleLog.add(
+                "HR windows failed (${error::class.simpleName}): ${error.message.orEmpty()} — averages 80, baseline not real",
+            )
+        }
+        // No `?: 0` here, unlike the schedule's copy above: the heart-rate gesture must
+        // see the unknown rather than read it as stillness.
+        override fun recentSteps10() = recentSteps10Minutes
+        override fun averageBpm10() = averageBeatsPerMinute10
+        override fun averageBpm60() = averageBeatsPerMinute60
+        override fun baselineReal() = heartRateBaselineIsReal
+        override fun delta() = this@DetermineBasalaimiSMB2.delta
+        override fun scaleVariableSensitivity(factor: Float) {
+            variableSensitivity *= factor
+        }
+    }
+
+    /** Steps and heart rate read for the sport guard of the post-hypo paths only. */
+    private class PostHypoSportVitals(
+        var steps5: Int? = null,
+        var steps10: Int? = null,
+        var steps30: Int? = null,
+        var steps60: Int? = null,
+        var steps180: Int? = null,
+        var averageHr: Double = Double.NaN,
+        var averageHr10: Double = Double.NaN,
+    )
+
+    /**
+     * Steps and heart rate for the sport guard of the post-hypo paths (Autodrive V3, drift
+     * terminator), or null outside them. Reset at the start of every tick and again when the schedule
+     * reads the vitals for the rest of the tick.
+     */
+    private var postHypoSportVitals: PostHypoSportVitals? = null
+
+    /**
+     * Reads the steps and heart rate again before the post-hypo paths, for their sport guard only.
+     *
+     * Until now that guard read the fields the schedule had set on the previous tick, five minutes
+     * old: an activity that had just started could let an SMB through (audit 2026-11-20). The values
+     * stay local to the guard: the SMB interval, the schedule targets and every other reader keep the
+     * values they had, so nothing else changes. What is fresh: phone steps are read live; watch steps
+     * and heart rate come from the rows of the last cache refresh (at most one tick old), filtered
+     * against the time of this tick. A blocking database read on the decision thread was not wanted.
+     */
+    private fun refreshActivityVitalsBeforePostHypo() {
+        val vitals = PostHypoSportVitals()
+        val base = heartRateIsfCalls()
+        loadActivityVitals(
+            preferences,
+            object : AimiActivityVitalsLoadCalls by base {
+                override fun setRecentSteps(steps5: Int?, steps10: Int?, steps15: Int?, steps30: Int?, steps60: Int?, steps180: Int?) {
+                    vitals.steps5 = steps5
+                    vitals.steps10 = steps10
+                    vitals.steps30 = steps30
+                    vitals.steps60 = steps60
+                    vitals.steps180 = steps180
+                }
+                override fun setAverageBpm(value: Double) { vitals.averageHr = value }
+                override fun averageBpm() = vitals.averageHr
+                override fun setAverageBpm10(value: Double) { vitals.averageHr10 = value }
+                override fun setAverageBpm60(value: Double) = Unit
+                override fun setAverageBpm180(value: Double) = Unit
+                override fun setBaselineReal(value: Boolean) = Unit
+            },
+        )
+        postHypoSportVitals = vitals
     }
 
     /** Hour snapshot + pregnancy pref captured after `work.aimilimit` adjust (historical position) for downstream [BasalDecisionEngine.Input]. */
@@ -12004,20 +12074,25 @@ class DetermineBasalaimiSMB2 @Inject constructor(
     }
 
 
-    private fun sportGuardThisTick(): AimiHypoSmbSafety.SportGuard = AimiHypoSmbSafety.sportGuard(
-        AimiHypoSmbSafety.SportSafetyInput(
-            recentSteps5 = recentSteps5Minutes ?: 0,
-            recentSteps10 = recentSteps10Minutes ?: 0,
-            recentSteps30 = recentSteps30Minutes ?: 0,
-            recentSteps60 = recentSteps60Minutes ?: 0,
-            recentSteps180 = recentSteps180Minutes ?: 0,
-            sportTime = work.sportTime,
-            activityActive = work.aimiContextActivityActive,
-            averageHr = averageBeatsPerMinute,
-            averageHr10 = averageBeatsPerMinute10,
-            targetBg = targetBg,
-        ),
-    )
+    private fun sportGuardThisTick(): AimiHypoSmbSafety.SportGuard {
+        // On the post-hypo paths the schedule has not read this tick's vitals yet: use the copy read
+        // just before them (see refreshActivityVitalsBeforePostHypo), not the previous tick's fields.
+        val early = postHypoSportVitals
+        return AimiHypoSmbSafety.sportGuard(
+            AimiHypoSmbSafety.SportSafetyInput(
+                recentSteps5 = (if (early != null) early.steps5 else recentSteps5Minutes) ?: 0,
+                recentSteps10 = (if (early != null) early.steps10 else recentSteps10Minutes) ?: 0,
+                recentSteps30 = (if (early != null) early.steps30 else recentSteps30Minutes) ?: 0,
+                recentSteps60 = (if (early != null) early.steps60 else recentSteps60Minutes) ?: 0,
+                recentSteps180 = (if (early != null) early.steps180 else recentSteps180Minutes) ?: 0,
+                sportTime = work.sportTime,
+                activityActive = work.aimiContextActivityActive,
+                averageHr = early?.averageHr ?: averageBeatsPerMinute,
+                averageHr10 = early?.averageHr10 ?: averageBeatsPerMinute10,
+                targetBg = targetBg,
+            ),
+        )
+    }
     private fun calculateSMBInterval(): Int {
         val out = AimiHypoSmbSafety.smbInterval(
             AimiHypoSmbSafety.SmbIntervalInput(
@@ -13425,14 +13500,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val result = try {
             val inner = runDetermineBasalTickInner(ctx)
             innerResult = inner
-            observeRaIfNotAlreadyRun(
-                ctx = ctx,
-                combinedDelta = work.raNetCombinedDelta,
-                shortAvgDeltaAdj = work.raNetShortAvgDeltaAdj,
-                pkpdRuntime = cachedPkpdRuntime,
-                hasRecentMealEstimate = false,
-                reason = "tick_net",
-            )
+            // Observation only, after the dose is decided: a failure here must not turn the decided
+            // dose into a safe hold. It is written to the console errors instead.
+            try {
+                observeRaIfNotAlreadyRun(
+                    ctx = ctx,
+                    combinedDelta = work.raNetCombinedDelta,
+                    shortAvgDeltaAdj = work.raNetShortAvgDeltaAdj,
+                    pkpdRuntime = cachedPkpdRuntime,
+                    hasRecentMealEstimate = false,
+                    reason = "tick_net",
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                inner.addConsoleError("AIMI Ra observation failed, decision kept: ${e::class.simpleName}: ${e.message?.take(200).orEmpty()}")
+            }
             inner
         } finally {
             // One training row per tick, written after the dose is decided rather than in the middle
@@ -13838,6 +13921,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val threshold = signaled.threshold
         val hasRecentBolus45m = signaled.hasRecentBolus45m
 
+        refreshActivityVitalsBeforePostHypo()
         val postHypo = when (
             val outcome = decideDetermineBasalTickPostHypo(
                 ctx = ctx,
@@ -14584,13 +14668,20 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                     )
 
                 override fun export(finalResult: RT) {
-                    runAimiSnapshotMedicalJsonAndHormonitorExportStage(
-                        ctx = ctx,
-                        profile = profile,
-                        decisionCtx = decisionCtx,
-                        finalResult = finalResult,
-                        pkpdRuntime = pkpdRuntime,
-                    )
+                    try {
+                        runAimiSnapshotMedicalJsonAndHormonitorExportStage(
+                            ctx = ctx,
+                            profile = profile,
+                            decisionCtx = decisionCtx,
+                            finalResult = finalResult,
+                            pkpdRuntime = pkpdRuntime,
+                        )
+                    } finally {
+                        // Set even when the stage failed: its first half records samples (sensitivity,
+                        // insulin origin, auditor tick) that have no duplicate check, so the fallback
+                        // export at the end of the tick must not run it a second time.
+                        work.aimiDecisionExportedThisTick = true
+                    }
                 }
             },
         )
@@ -14652,15 +14743,46 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             dynIsfMode = dynIsfMode,
             uiInteraction = uiInteraction,
             extraDebug = extraDebug,
+            basalAtTickStart = profile.current_basal,
         )
         return AimiLoopTelemetry.traceDetermineBasalTick(
             preferences = preferences,
             wallClockMs = currentTime,
             onLockTimeout = { AimiLoopTickRecovery.skippedPriorTickStillRunning(ctx) },
             recoverFromError = { error ->
-                AimiLoopTickRecovery.safeResultAfterUnhandledError(ctx, error, work.consoleLog, work.consoleError)
+                val held = AimiLoopTickRecovery.safeResultAfterUnhandledError(ctx, error, work.consoleLog, work.consoleError)
+                // This runs inside the telemetry catch block, so nothing here may throw. A cancelled
+                // tick is not a failure of AIMI and does not count.
+                if (error !is CancellationException) {
+                    try {
+                        val text = rh.gs(ApsStrings.aimi_safe_hold_notification_text, safeHoldStreak.count + 1)
+                        when (safeHoldStreak.onHold()) {
+                            AimiSafeHoldStreak.Alert.NONE   -> Unit
+                            AimiSafeHoldStreak.Alert.NOTICE -> notificationManager.post(
+                                id = NotificationId.AIMI_SAFE_HOLD,
+                                text = text,
+                                validMinutes = AimiSafeHoldStreak.NOTICE_VALID_MINUTES,
+                            )
+                            AimiSafeHoldStreak.Alert.ALARM  -> {
+                                notificationManager.post(id = NotificationId.AIMI_SAFE_HOLD_ALARM, text = text)
+                                safeHoldStreak.markAlarmPosted()
+                            }
+                        }
+                    } catch (_: Throwable) {
+                        // The safe result above is already built; a failed notification must not lose it.
+                    }
+                }
+                held
             },
             onTickEnd = { tickId, startedWallMs, endedWallMs ->
+                try {
+                    if (safeHoldStreak.onNormalTick()) {
+                        notificationManager.dismiss(NotificationId.AIMI_SAFE_HOLD)
+                        notificationManager.dismiss(NotificationId.AIMI_SAFE_HOLD_ALARM)
+                    }
+                } catch (_: Throwable) {
+                    // Never break determine_basal on a notification.
+                }
                 try {
                     hormonitorStudyExporter?.recordLoopTickEnd(
                         tickId = tickId,
@@ -15311,7 +15433,14 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 physioFeatures = currentBasalPhysioFeatures(),
             )
         },
-        hrSnapshot = AimiT3cHrSnapshot { physioAdapter.getLatestSnapshot() },
+        hrSnapshot = AimiT3cHrSnapshot {
+            val snapshot = physioAdapter.getLatestSnapshot()
+            AimiT3cHrReading(
+                hrNow = snapshot.hrNow,
+                awakeRestingBpm = physioAdapter.awakeRestingHeartRateBpm(),
+                legacyRestingBpm = snapshot.rhrResting,
+            )
+        },
         lookbacks = object : AimiT3cLookbacks {
             override fun postHypoRecoveryActive(): Boolean =
                 this@DetermineBasalaimiSMB2.postHypoRecoveryActive()

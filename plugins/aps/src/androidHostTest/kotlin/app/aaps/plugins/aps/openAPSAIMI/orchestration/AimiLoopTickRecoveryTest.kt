@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * Pins the contract of [AimiLoopTickRecovery]: every AIMI determine_basal tick returns exactly one
@@ -107,7 +108,9 @@ class AimiLoopTickRecoveryTest {
     }
 
     /**
-     * This is what protects the patient. A recovery [RT] must command nothing at all.
+     * This is what protects the patient. A lock skip [RT] must command nothing at all: another tick
+     * is running and decides. (A tick that threw commands the temp basal of [AimiSafeHoldBasal]
+     * since 2026-11-20, see the tests below and `AimiSafeHoldBasalTest`; never a bolus.)
      *
      * `rate` and `duration` both null and `units` null is the only shape that keeps the downstream
      * result inert. In `DetermineBasalResult.with` (`:implementation`):
@@ -134,9 +137,12 @@ class AimiLoopTickRecoveryTest {
         assertNull(rt.units)
     }
 
-    /** Same guarantee as the lock skip test above, on the unhandled error path. */
+    /**
+     * On the unhandled error path the sample glucose is hours old and no temp runs, so the hold rule
+     * keeps everything as it is, and there is never a bolus.
+     */
     @Test
-    fun `unhandled error recovery commands no temp basal and no bolus`() {
+    fun `unhandled error recovery with old glucose and no temp commands nothing`() {
         val rt = AimiLoopTickRecovery.safeResultAfterUnhandledError(
             ctx = sampleCtx(),
             error = IllegalStateException("test boom"),
@@ -145,6 +151,56 @@ class AimiLoopTickRecoveryTest {
         )
         assertNull(rt.rate)
         assertNull(rt.duration)
+        assertNull(rt.units)
+    }
+
+    private fun freshCtx(bg: Double, rate: Double, remaining: Int): AimiTickContext {
+        val profile = mock<OapsProfileAimi>()
+        whenever(profile.current_basal).thenReturn(0.8)
+        whenever(profile.min_bg).thenReturn(100.0)
+        val now = 1_700_000_000_000L
+        return sampleCtx().copy(
+            glucoseStatus = GlucoseStatusAIMI(glucose = bg, delta = 4.0, shortAvgDelta = 3.0, longAvgDelta = 0.0, date = now - 60_000L),
+            currentTemp = CurrentTemp(duration = remaining, rate = rate, minutesrunning = 10),
+            profile = profile,
+            currentTime = now,
+        )
+    }
+
+    /** The field report: 0.05 U/h during a rise. The hold now sets the profile basal, still no bolus. */
+    @Test
+    fun `a hold during a rise sets the profile basal and no bolus`() {
+        val rt = AimiLoopTickRecovery.safeResultAfterUnhandledError(
+            ctx = freshCtx(bg = 184.0, rate = 0.05, remaining = 20),
+            error = IllegalArgumentException("Cannot round NaN value."),
+            consoleLog = mutableListOf(),
+            consoleError = mutableListOf(),
+        )
+        assertEquals(0.8, rt.rate ?: -1.0, 1e-9)
+        assertEquals(30, rt.duration)
+        assertNull(rt.units)
+        assertTrue(rt.reason.toString().contains("profile basal"))
+    }
+
+    /** The tick raised current_basal (gestational autopilot x1.8) before it threw: the hold uses the start value. */
+    @Test
+    fun `a hold uses the basal of the tick start and not a value the tick raised`() {
+        val ctx = freshCtx(bg = 184.0, rate = 0.05, remaining = 20).copy(basalAtTickStart = 0.8)
+        whenever(ctx.profile.current_basal).thenReturn(1.44)
+        val rt = AimiLoopTickRecovery.safeResultAfterUnhandledError(ctx, IllegalStateException("boom"), mutableListOf(), mutableListOf())
+        assertEquals(0.8, rt.rate ?: -1.0, 1e-9)
+    }
+
+    @Test
+    fun `a hold at a low glucose sets a zero temp`() {
+        val rt = AimiLoopTickRecovery.safeResultAfterUnhandledError(
+            ctx = freshCtx(bg = 65.0, rate = 2.0, remaining = 20),
+            error = IllegalStateException("boom"),
+            consoleLog = mutableListOf(),
+            consoleError = mutableListOf(),
+        )
+        assertEquals(0.0, rt.rate ?: -1.0, 1e-9)
+        assertEquals(30, rt.duration)
         assertNull(rt.units)
     }
 

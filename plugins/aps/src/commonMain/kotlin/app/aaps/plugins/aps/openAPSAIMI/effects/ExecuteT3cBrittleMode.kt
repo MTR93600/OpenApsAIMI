@@ -18,7 +18,6 @@ import app.aaps.plugins.aps.openAPSAIMI.basal.T3cAutodriveBasalBridge
 import app.aaps.plugins.aps.openAPSAIMI.basal.T3cTrajectoryContext
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalRiskLevel
 import app.aaps.plugins.aps.openAPSAIMI.patient.PhysiologicalTreeSnapshot
-import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -34,9 +33,36 @@ internal interface AimiT3cAdaptiveFactor {
     ): Double
 }
 
-/** Wearable snapshot, read only when CFRD mode is on. May throw; the caller records the failure. */
+/**
+ * The heart rate the CFRD boost compares, read only when CFRD mode is on. May throw; the caller
+ * records the failure.
+ */
 internal fun interface AimiT3cHrSnapshot {
-    fun latest(): HealthContextSnapshot
+    fun latest(): AimiT3cHrReading
+}
+
+/**
+ * The current heart rate, and the resting heart rates it is compared with.
+ *
+ * @param awakeRestingBpm the AWAKE resting rate, as for the stress ISF floor, or null when not
+ *   measured. The old baseline, `HealthContextSnapshot.rhrResting`, is the lowest sleeping value
+ *   and a made-up 60 when nothing was measured: against 60 a normal waking heart rate of 70-85 read
+ *   as "inflammation" and added up to 35 % aggressiveness (audit 2026-11-20).
+ * @param legacyRestingBpm that old baseline, kept so the boost can only go down, see [cfrdBoostOf].
+ */
+internal data class AimiT3cHrReading(val hrNow: Int, val awakeRestingBpm: Int?, val legacyRestingBpm: Int)
+
+/**
+ * The CFRD heart rate boost of [reading]: 0 when the awake resting rate is not measured, otherwise
+ * the smaller of the boosts against the awake and the old baseline. An awake resting rate can be
+ * below the old made-up 60 (a fit person), and the boost must never be larger than it was.
+ */
+internal fun cfrdBoostOf(reading: AimiT3cHrReading): Double {
+    val awake = reading.awakeRestingBpm ?: return 0.0
+    return minOf(
+        cfrdHrInflammationBoostOf(reading.hrNow, awake),
+        cfrdHrInflammationBoostOf(reading.hrNow, reading.legacyRestingBpm),
+    )
 }
 
 /** The two lookbacks the T3C head reads, at the lines the reference reads them. */
@@ -124,7 +150,7 @@ internal fun decideT3cBrittleMode(
                 "🫁 T3c CFRD: hr snapshot failed ($type) — boost 0.00"
             },
         ) { hrSnapshot.latest() }.valueOrNull()
-        if (snapshot == null) 0.0 else cfrdHrInflammationBoostOf(snapshot.hrNow, snapshot.rhrResting)
+        if (snapshot == null) 0.0 else cfrdBoostOf(snapshot)
     } else 0.0
 
     if (cfrdMode) {

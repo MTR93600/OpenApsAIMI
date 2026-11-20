@@ -118,6 +118,43 @@ class DecideHeartRateIsfFromTherapyReadsTest {
         assertTrue(result.variableSensitivity <= 50.0f)
     }
 
+    /**
+     * The newest reading is 20 minutes old: there is no heart rate in the last 10 minutes. It used
+     * to stand in for the 10-minute mean (120 against an hour mean of 90) and strengthen ISF 50 to
+     * 45 on stale data. The gesture now needs a real 10-minute reading.
+     */
+    @Test
+    fun aReadingOlderThanTenMinutesDoesNotStrengthen() {
+        val now = aimiWallClockMs()
+        val store = MemoryAimiTherapyReads(
+            heartRates = listOf(
+                hr(now - 50 * 60_000L, 80.0),
+                hr(now - 45 * 60_000L, 80.0),
+                hr(now - 40 * 60_000L, 80.0),
+                hr(now - 20 * 60_000L, 120.0),
+            ),
+            steps = listOf(steps(now - 2 * 60_000L, steps10 = 0)),
+        )
+        val log = mutableListOf<String>()
+        val result = decideHeartRateIsfFromTherapyReads(
+            reads = store,
+            nowMs = now,
+            stepsFromWatch = true,
+            startingSensitivity = 50.0f,
+            delta = 2.0f,
+            glucoseMgdl = 140.0,
+            bgMgdl = 160.0,
+            iob = 1.0,
+            bolusFromMs = 0L,
+            bolusAscending = true,
+            profile = profile(),
+            preferences = StepsWatchPreferences(enabled = true),
+            consoleLog = log,
+        )
+        assertEquals(50.0f, result.variableSensitivity, 0.001f)
+        assertEquals(null, result.logLine)
+    }
+
     @Test
     fun aHeartRateReadFailureIsLoggedAndDoesNotStrengthen() {
         val store = object : AimiTherapyReads by MemoryAimiTherapyReads() {

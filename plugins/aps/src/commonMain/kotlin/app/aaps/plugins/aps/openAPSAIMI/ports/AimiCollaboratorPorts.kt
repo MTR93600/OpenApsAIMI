@@ -217,6 +217,12 @@ interface AimiHealthContext {
     fun fetchSnapshotForAutodriveGater(): HealthContextSnapshot
 
     fun getLastSnapshot(): HealthContextSnapshot
+
+    /**
+     * The awake resting heart rate of the last days, or null when it was not measured. Null means
+     * "stand down", never a number to replace. Default null, so a source without it changes nothing.
+     */
+    fun awakeRestingHeartRateBpm(): Int? = null
 }
 
 /**
