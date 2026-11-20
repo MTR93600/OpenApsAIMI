@@ -15,35 +15,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import app.aaps.core.interfaces.source.StagingState
-import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.AapsSpacing
-import app.aaps.core.ui.compose.dialogs.DatePickerModal
-import app.aaps.core.ui.compose.dialogs.TimePickerModal
 import app.aaps.core.ui.compose.pump.PumpOverviewScreen
 import app.aaps.core.ui.compose.stringResource
-import app.aaps.plugins.source.DexcomOnePlusSensorStartCorrection
 import app.aaps.plugins.source.SourceStrings
-import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Instant
 
 /**
  * The ONE+ / G7 status screen body, shared by Android and iPhone.
  *
  * It is the shared pump overview: a banner with the phase, the facts of the sensor that feeds the
  * loop, and the buttons to start a sensor, follow the warm-up and read the driver log. Below the
- * facts come the cards the Android status screen always had: calibration, and the pre-soak
- * sensor with its Promote button. The end-of-life card, and the pre-soak card while a sensor is
- * soaking, go under the banner instead, so they are seen without scrolling. The pre-soak card is
- * absent on a phone with one sensor slot, so it never reads as "no pre-soak just now".
+ * facts come the cards: direct to watch, calibration, and an empty pre-soak slot with its start
+ * button. The end-of-life card, and the pre-soak card while a sensor is soaking, go under the
+ * banner instead, so they are seen without scrolling. The pre-soak card is absent on a phone with
+ * one sensor slot, so it never reads as "no pre-soak just now".
  *
  * No frame of its own: the plugin tab gives it the toolbar, and the Android status Activity wraps
  * it in `CgmScaffold`.
@@ -84,7 +72,7 @@ fun DexcomOnePlusStatusOverview(
             {
                 Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
                     if (view.endOfLifePrompt) EndOfLifeCard(onOpenStart = actions.onOpenPresoak)
-                    if (view.stagingOnTop) view.staging?.let { stagingCard(it) }
+                    if (view.stagingOnTop) stagingCard(view.staging)
                 }
             }
         } else {
@@ -92,17 +80,9 @@ fun DexcomOnePlusStatusOverview(
         },
         customContent = {
             Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
-                view.correctInsertionStartMs?.let { startedAt ->
-                    CorrectInsertionDateAction(
-                        currentStartMs = startedAt,
-                        formatTime = viewModel.format.time,
-                        onCorrectSensorStart = { viewModel.correctSensorStart(it) },
-                    )
-                }
-                view.calibration?.let { SensorCalibrationCard(it) }
-                if (!view.stagingOnTop) view.staging?.let { stagingCard(it) }
                 // Direct-to-watch: what the watch reports, only while the feature is on (the switch
-                // itself is in the settings) and the Wear plugin is on. Absent on iPhone.
+                // itself is in the settings) and the Wear plugin is on. First of the cards: it is
+                // about the sensor in use, like the facts above it.
                 val watchHandover = viewModel.watchHandover
                 val watchDirectOn by viewModel.watchDirectEnabled.collectAsState()
                 if (watchDirectOn && watchHandover.isOffered) {
@@ -111,6 +91,13 @@ fun DexcomOnePlusStatusOverview(
                         // Read again on every status tick, so a new pairing shows at once.
                         available = remember(current) { watchHandover.isAvailable() },
                         report = watchReport,
+                    )
+                }
+                view.calibration?.let { SensorCalibrationCard(it) }
+                // An empty slot only offers to start a pre-soak; a soaking sensor is at the top.
+                if (view.stagingOffered && !view.stagingOnTop) {
+                    stagingCard(
+                        view.staging,
                     )
                 }
                 promoteResult?.let { message ->
@@ -177,79 +164,6 @@ private fun EndOfLifeCard(onOpenStart: () -> Unit) {
         OutlinedButton(onClick = onOpenStart) {
             Text(stringResource(SourceStrings.dexcom_oneplus_start_presoak))
         }
-    }
-}
-
-/**
- * "The sensor went in earlier than the app thinks."
- *
- * Always offered while a sensor runs (no setting). The picked day comes from
- * the date picker as UTC midnight; the time is the phone's local time, as on the old Android
- * screen.
- */
-@Composable
-private fun CorrectInsertionDateAction(
-    currentStartMs: Long,
-    formatTime: (Long) -> String,
-    onCorrectSensorStart: suspend (Long) -> DexcomOnePlusSensorStartCorrection.Verdict,
-) {
-    val scope = rememberCoroutineScope()
-    var showDatePicker by remember { mutableStateOf(false) }
-    var pickedDateMs by remember { mutableStateOf<Long?>(null) }
-    var refusal by remember { mutableStateOf<DexcomOnePlusSensorStartCorrection.Verdict?>(null) }
-
-    OutlinedButton(onClick = { showDatePicker = true }) {
-        Text(stringResource(SourceStrings.dexcom_oneplus_correct_insertion_date))
-    }
-
-    if (showDatePicker) {
-        DatePickerModal(
-            initialDateMillis = currentStartMs,
-            onDateSelected = { pickedDateMs = it },
-            onDismiss = { showDatePicker = false },
-        )
-    }
-    pickedDateMs?.let { dayMs ->
-        val zone = TimeZone.currentSystemDefault()
-        val current = remember(currentStartMs) { Instant.fromEpochMilliseconds(currentStartMs).toLocalDateTime(zone) }
-        TimePickerModal(
-            initialHour = current.hour,
-            initialMinute = current.minute,
-            onTimeSelected = { hour, minute ->
-                val day = Instant.fromEpochMilliseconds(dayMs).toLocalDateTime(TimeZone.UTC).date
-                val chosenMs = LocalDateTime(day, LocalTime(hour, minute)).toInstant(zone).toEpochMilliseconds()
-                scope.launch {
-                    val verdict = onCorrectSensorStart(chosenMs)
-                    if (verdict != DexcomOnePlusSensorStartCorrection.Verdict.Accepted) refusal = verdict
-                }
-            },
-            onDismiss = { pickedDateMs = null },
-        )
-    }
-    refusal?.let { verdict ->
-        AlertDialog(
-            onDismissRequest = { refusal = null },
-            title = { Text(stringResource(SourceStrings.dexcom_oneplus_correct_insertion_date)) },
-            text = {
-                Text(
-                    stringResource(
-                        when (verdict) {
-                            DexcomOnePlusSensorStartCorrection.Verdict.InFuture ->
-                                SourceStrings.dexcom_oneplus_insertion_date_future
-                            DexcomOnePlusSensorStartCorrection.Verdict.TooOld   ->
-                                SourceStrings.dexcom_oneplus_insertion_date_too_old
-                            DexcomOnePlusSensorStartCorrection.Verdict.Accepted,
-                            DexcomOnePlusSensorStartCorrection.Verdict.NoSession,
-                                                                                -> SourceStrings.dexcom_oneplus_insertion_date_no_session
-                        },
-                        formatTime(currentStartMs),
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { refusal = null }) { Text(stringResource(CoreUiStrings.ok)) }
-            },
-        )
     }
 }
 

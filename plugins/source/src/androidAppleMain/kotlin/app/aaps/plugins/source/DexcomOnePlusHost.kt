@@ -1,7 +1,6 @@
 package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.rx.bus.RxBus
-import app.aaps.core.keys.interfaces.PreferenceItem
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDriver
@@ -170,10 +169,20 @@ interface DexcomOnePlusHost {
     val installedApps: OnePlusInstalledApps?
 
     /**
-     * The entries that open this plugin's own screens, for the settings screen.
+     * False when the phone's Bluetooth is switched off.
      *
-     * Empty on a host that has no such screens, so the settings screen simply does not offer them
-     * rather than offering a button that does nothing.
+     * The driver cannot tell a radio that is off from a sensor that is silent, so after some minutes
+     * it suspects a wrong sensor. The screens ask here first and say "Bluetooth is off" then.
+     * True by default: a host that cannot tell must not hide the driver's own message.
+     */
+    fun bluetoothOn(): Boolean = true
+
+    /**
+     * The entries that open this plugin's own screens from the settings tree.
+     *
+     * Empty on Android, where Start and Warm-up are buttons of the Status tab and open their own
+     * Activity. The iPhone keeps them: its setup screens live in the settings tree, and
+     * [openScreen] reaches them through these entries.
      *
      * @param plugin the plugin these screens act on. It is passed in rather than injected because
      *   the plugin builds the host, so a host that asked for the plugin would be a loop.

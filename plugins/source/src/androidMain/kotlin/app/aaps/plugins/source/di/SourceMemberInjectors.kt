@@ -1,6 +1,7 @@
 package app.aaps.plugins.source.di
 
 import app.aaps.core.interfaces.di.FeatureMemberInjectors
+import app.aaps.plugins.source.DexcomOnePlusSessionService
 import app.aaps.plugins.source.activities.CgmDriverLogActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
@@ -18,10 +19,12 @@ import dev.zacsweers.metro.MembersInjector
 import dev.zacsweers.metro.Provides
 
 /**
- * Member injectors for the Dexcom ONE+ / G7, Libre 3 and Eversense calibration screens.
+ * Member injectors for the Dexcom ONE+ / G7, Libre 3 and Eversense calibration screens, and the
+ * ONE+ / G7 session service.
  *
- * Android constructs an activity, so it cannot take its dependencies in a constructor.
- * [app.aaps.core.ui.compose.MetroAppCompatActivity] fills the fields from this map.
+ * Android constructs an activity or a service, so it cannot take its dependencies in a constructor.
+ * [app.aaps.core.ui.compose.MetroAppCompatActivity] and
+ * [app.aaps.core.objects.workflow.MetroService] fill the fields from this map.
  */
 @ContributesTo(AppScope::class)
 @BindingContainer
@@ -89,5 +92,13 @@ object SourceMemberInjectors {
     @ClassKey(CgmDriverLogActivity::class)
     fun bindCgmDriverLogActivity(
         injector: MembersInjector<CgmDriverLogActivity>
+    ): MembersInjector<*> = injector
+
+    @Provides
+    @FeatureMemberInjectors
+    @IntoMap
+    @ClassKey(DexcomOnePlusSessionService::class)
+    fun bindDexcomOnePlusSessionService(
+        injector: MembersInjector<DexcomOnePlusSessionService>
     ): MembersInjector<*> = injector
 }
