@@ -35,7 +35,7 @@ fun BS.toDb(): Bolus =
         isBasalInsulin = this.isBasalInsulin,
         insulinConfiguration = this.iCfg.toDb(),
         interfaceIDs_backing = this.ids.toDb()
-    )
+    ).also { it.iCfgFromNightscout = iCfgFromNightscout }
 
 fun Bolus.Type.fromDb(): BS.Type =
     when (this) {

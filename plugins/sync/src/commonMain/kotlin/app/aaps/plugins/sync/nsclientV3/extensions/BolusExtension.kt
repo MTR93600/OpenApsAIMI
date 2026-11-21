@@ -11,7 +11,8 @@ import app.aaps.core.nssdk.localmodel.treatment.NSICfg
 
 /** [insulinFallback] stamps records uploaded without one — see `NsIncomingDataProcessor.fallbackICfg`. */
 fun NSBolus.toBolus(insulinFallback: ICfg): BS {
-    val iCfg =
+    val fromDocument = iCfg != null
+    val resolved =
         iCfg?.let {
             ICfg(insulinLabel = it.insulinLabel, insulinEndTime = it.insulinEndTime, insulinPeakTime = it.insulinPeakTime, concentration = it.concentration)
         } ?: insulinFallback
@@ -24,8 +25,8 @@ fun NSBolus.toBolus(insulinFallback: ICfg): BS {
         notes = notes,
         isBasalInsulin = isBasalInsulin,
         ids = IDs(nightscoutId = identifier, pumpId = pumpId, pumpType = PumpType.fromString(pumpType), pumpSerial = pumpSerial, endId = endId),
-        iCfg = iCfg
-    )
+        iCfg = resolved
+    ).also { it.iCfgFromNightscout = fromDocument }
 }
 
 fun NSBolus.BolusType?.toBolusType(): BS.Type =

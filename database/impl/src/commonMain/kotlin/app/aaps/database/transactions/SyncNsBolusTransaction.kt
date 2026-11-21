@@ -7,7 +7,7 @@ import app.aaps.database.entities.Bolus
  */
 class SyncNsBolusTransaction(
     private val boluses: List<Bolus>,
-    private val acceptCorrections: Boolean = false
+    val acceptCorrections: Boolean = false
 ) : Transaction<SyncNsBolusTransaction.TransactionResult>() {
 
     override suspend fun run(): TransactionResult {
@@ -26,18 +26,24 @@ class SyncNsBolusTransaction(
                     database.bolusDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
-                if (current.amount != bolus.amount) {
-                    current.amount = bolus.amount
-                    database.bolusDao.updateExistingEntry(current)
-                    result.updated.add(current)
-                }
-                // Same rule as a temp basal: the Nightscout document is applied as it is. The start
-                // time is not a field this copies. The caller passes acceptCorrections only for a follower.
-                if (acceptCorrections && (current.type != bolus.type || current.insulinConfiguration != bolus.insulinConfiguration)) {
-                    current.type = bolus.type
-                    current.insulinConfiguration = bolus.insulinConfiguration
-                    database.bolusDao.updateExistingEntry(current)
-                    if (current !in result.updated) result.updated.add(current)
+                if (!acceptCorrections) {
+                    if (current.amount != bolus.amount) {
+                        current.amount = bolus.amount
+                        database.bolusDao.updateExistingEntry(current)
+                        result.updated.add(current)
+                    }
+                } else {
+                    val amountChanged = current.amount != bolus.amount
+                    val typeChanged = current.type != bolus.type
+                    // iCfgFromNightscout is false when toBolus filled the curve from the client fallback.
+                    val iCfgChanged = bolus.iCfgFromNightscout && current.insulinConfiguration != bolus.insulinConfiguration
+                    if (amountChanged) current.amount = bolus.amount
+                    if (typeChanged) current.type = bolus.type
+                    if (iCfgChanged) current.insulinConfiguration = bolus.insulinConfiguration
+                    if (amountChanged || typeChanged || iCfgChanged) {
+                        database.bolusDao.updateExistingEntry(current)
+                        result.updated.add(current)
+                    }
                 }
                 continue
             }

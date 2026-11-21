@@ -3,6 +3,7 @@ package app.aaps.database.entities
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import app.aaps.database.entities.embedments.InsulinConfiguration
@@ -43,6 +44,10 @@ data class Bolus(
     @Embedded
     var insulinConfiguration: InsulinConfiguration
 ) : TraceableDBEntry, DBEntryWithTime {
+
+    /** True when the Nightscout document carried an insulin curve. Not stored. */
+    @Ignore
+    var iCfgFromNightscout: Boolean = false
 
     enum class Type {
         NORMAL,

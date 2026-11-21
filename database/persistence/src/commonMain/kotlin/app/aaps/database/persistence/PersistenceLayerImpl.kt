@@ -468,7 +468,7 @@ class PersistenceLayerImpl(
                 transactionResult.updatedNsId.add(it.fromDb())
             }
             result.updated.forEach {
-                aapsLogger.debug(LTag.DATABASE, "Updated amount of bolus $it")
+                aapsLogger.debug(LTag.DATABASE, "Updated bolus $it")
                 transactionResult.updated.add(it.fromDb())
             }
             log(ueValues)

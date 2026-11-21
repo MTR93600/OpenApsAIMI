@@ -450,7 +450,7 @@ class SyncNsBolusTransactionTest {
         )
         val incoming = createBolus(
             id = 0, nsId = nsId, amount = 6.0, timestamp = 9_000L,
-            type = Bolus.Type.SMB, iCfg = incomingCfg
+            type = Bolus.Type.SMB, iCfg = incomingCfg, iCfgFromNightscout = true
         )
         whenever(bolusDao.getByNSId(nsId)).thenReturn(existing)
 
@@ -463,7 +463,32 @@ class SyncNsBolusTransactionTest {
         assertThat(existing.insulinConfiguration).isEqualTo(incomingCfg)
         assertThat(existing.timestamp).isEqualTo(1_000L)
         assertThat(result.updated).containsExactly(existing)
-        verify(bolusDao, times(2)).updateExistingEntry(existing)
+        verify(bolusDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun bolus_client_switchOn_missingIcfgNotApplied() = runTest {
+        val nsId = "ns-123"
+        val keptCfg = InsulinConfiguration("rapid", 18_000_000L, 3_600_000L, 1.0)
+        val existing = createBolus(
+            id = 1, nsId = nsId, amount = 5.0, timestamp = 1_000L,
+            type = Bolus.Type.NORMAL, iCfg = keptCfg
+        )
+        val incoming = createBolus(
+            id = 0, nsId = nsId, amount = 5.0, timestamp = 1_000L,
+            type = Bolus.Type.SMB,
+            iCfg = InsulinConfiguration("fallback", 5_400_000L, 900_000L, 1.0),
+            iCfgFromNightscout = false
+        )
+        whenever(bolusDao.getByNSId(nsId)).thenReturn(existing)
+
+        val transaction = SyncNsBolusTransaction(listOf(incoming), acceptCorrections = true)
+        transaction.database = database
+        transaction.run()
+
+        assertThat(existing.type).isEqualTo(Bolus.Type.SMB)
+        assertThat(existing.insulinConfiguration).isEqualTo(keptCfg)
+        verify(bolusDao).updateExistingEntry(existing)
     }
 
     @Test
@@ -494,7 +519,8 @@ class SyncNsBolusTransactionTest {
         pumpId: Long? = null,
         pumpType: InterfaceIDs.PumpType? = null,
         pumpSerial: String? = null,
-        iCfg: InsulinConfiguration = InsulinConfiguration("some", 600000L, 60000L, 1.0)
+        iCfg: InsulinConfiguration = InsulinConfiguration("some", 600000L, 60000L, 1.0),
+        iCfgFromNightscout: Boolean = false
     ): Bolus = Bolus(
         timestamp = timestamp,
         amount = amount,
@@ -507,5 +533,8 @@ class SyncNsBolusTransactionTest {
             pumpSerial = pumpSerial
         ),
         insulinConfiguration = iCfg
-    ).also { it.id = id }
+    ).also {
+        it.id = id
+        it.iCfgFromNightscout = iCfgFromNightscout
+    }
 }

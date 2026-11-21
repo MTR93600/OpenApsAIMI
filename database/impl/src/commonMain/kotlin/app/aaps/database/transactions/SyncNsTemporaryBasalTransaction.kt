@@ -10,7 +10,7 @@ import kotlin.math.abs
 class SyncNsTemporaryBasalTransaction(
     private val temporaryBasals: List<TemporaryBasal>,
     private val nsClientMode: Boolean,
-    private val acceptCorrections: Boolean = false
+    val acceptCorrections: Boolean = false
 ) : Transaction<SyncNsTemporaryBasalTransaction.TransactionResult>() {
 
     override suspend fun run(): TransactionResult {
@@ -34,15 +34,21 @@ class SyncNsTemporaryBasalTransaction(
                         result.invalidated.add(current)
                     }
                     if (nsClientMode && acceptCorrections) {
+                        // A longer duration must not run over the next valid temp basal.
+                        val nextStart = database.temporaryBasalDao
+                            .getTemporaryBasalStartingFromTimeToTime(current.timestamp + 1, current.timestamp + temporaryBasal.duration)
+                            .minOfOrNull { it.timestamp }
+                        val duration = if (nextStart == null) temporaryBasal.duration
+                        else minOf(temporaryBasal.duration, nextStart - current.timestamp)
                         if (current.rate != temporaryBasal.rate ||
                             current.isAbsolute != temporaryBasal.isAbsolute ||
                             current.type != temporaryBasal.type ||
-                            current.duration != temporaryBasal.duration
+                            current.duration != duration
                         ) {
                             current.rate = temporaryBasal.rate
                             current.isAbsolute = temporaryBasal.isAbsolute
                             current.type = temporaryBasal.type
-                            current.duration = temporaryBasal.duration
+                            current.duration = duration
                             database.temporaryBasalDao.updateExistingEntry(current)
                             result.updated.add(current)
                         }

@@ -6,6 +6,7 @@ import app.aaps.database.entities.TemporaryBasal
 import app.aaps.database.entities.embedments.InterfaceIDs
 import app.aaps.database.entities.interfaces.end
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -25,6 +26,9 @@ class SyncNsTemporaryBasalTransactionTest {
         temporaryBasalDao = mock()
         database = mock()
         whenever(database.temporaryBasalDao).thenReturn(temporaryBasalDao)
+        runBlocking {
+            whenever(temporaryBasalDao.getTemporaryBasalStartingFromTimeToTime(any(), any())).thenReturn(emptyList())
+        }
     }
 
     @Test
@@ -441,6 +445,26 @@ class SyncNsTemporaryBasalTransactionTest {
         assertThat(existing.isValid).isFalse()
         assertThat(result.invalidated).containsExactly(existing)
         verify(temporaryBasalDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun client_switchOn_longerDurationClampedToNextTbr() = runTest {
+        val kept = createTemporaryBasal(id = 1, nsId = "ns-a", timestamp = 1_000L, duration = 5_000L, rate = 1.0)
+        val next = createTemporaryBasal(id = 2, nsId = "ns-b", timestamp = 6_000L, duration = 60_000L, rate = 0.5)
+        val incoming = createTemporaryBasal(id = 0, nsId = "ns-a", timestamp = 1_000L, duration = 120_000L, rate = 1.0)
+        whenever(temporaryBasalDao.findByNSId("ns-a")).thenReturn(kept)
+        whenever(temporaryBasalDao.getTemporaryBasalStartingFromTimeToTime(1_001L, 121_000L)).thenReturn(listOf(next))
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(kept.duration).isEqualTo(5_000L)
+        assertThat(kept.end).isEqualTo(next.timestamp)
+        assertThat(next.timestamp).isEqualTo(6_000L)
+        assertThat(next.duration).isEqualTo(60_000L)
+        assertThat(result.updated).isEmpty()
+        verify(temporaryBasalDao, never()).updateExistingEntry(any())
     }
 
     private fun createTemporaryBasal(
