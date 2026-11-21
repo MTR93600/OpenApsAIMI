@@ -45,7 +45,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.objects.extensions.isInProgress
-import app.aaps.core.objects.extensions.round
+import app.aaps.core.objects.extensions.profileDisplayedIob
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.pump.tickerFlow
 import app.aaps.core.ui.extensions.toStringFull
@@ -272,9 +272,8 @@ class AimiDashboardViewModel(
             UiStrings.dashboard_glass_delta,
             deltaMgdl?.let { profileUtil.fromMgdlToSignedStringInUnits(it) } ?: rh.gs(CoreUiStrings.value_unavailable_short),
         )
-        val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
-        val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-        val totalIob = bolusIob.iob + basalIob.basaliob
+        val localIob = iobCobCalculator.profileDisplayedIob()
+        val totalIob = ApsResultSource.displayedIob(config, processedDeviceStatusData, now, localIob)
         val iobText = if (totalIob >= 0) rh.gs(InterfacesStrings.format_insulin_units, totalIob)
         else rh.gs(CoreUiStrings.format_insulin_units_signed, totalIob)
         val dash = rh.gs(CoreUiStrings.value_unavailable_short)

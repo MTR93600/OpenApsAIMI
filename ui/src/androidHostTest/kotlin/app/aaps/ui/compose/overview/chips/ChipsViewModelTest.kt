@@ -44,6 +44,7 @@ internal class ChipsViewModelTest {
     @Mock private lateinit var rh: ResourceHelper
     @Mock private lateinit var decimalFormatter: DecimalFormatter
     @Mock private lateinit var dateUtil: DateUtil
+    @Mock private lateinit var processedDeviceStatusData: ProcessedDeviceStatusData
     @Mock private lateinit var aapsLogger: AAPSLogger
     @Mock private lateinit var preferences: Preferences
     @Mock private lateinit var rxBus: RxBus
@@ -63,7 +64,7 @@ internal class ChipsViewModelTest {
         whenever(pluginStatusBadgeSource.badge).thenReturn(MutableStateFlow(PluginStatusBadge(PluginStatusLevel.IDLE)))
         sut = ChipsViewModel(
             cache, iobCobCalculator, loop, config, persistenceLayer, sensitivityOverview, rh, decimalFormatter,
-            dateUtil, aapsLogger, preferences, rxBus, pluginStatusBadgeSource
+            dateUtil, processedDeviceStatusData, aapsLogger, preferences, rxBus, pluginStatusBadgeSource
         )
     }
 

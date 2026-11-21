@@ -1,6 +1,7 @@
 package app.aaps.core.objects.extensions
 
 import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.Round
 import kotlinx.serialization.json.JsonObject
@@ -19,6 +20,17 @@ operator fun IobTotal.plus(other: IobTotal): IobTotal {
     extendedBolusInsulin += other.extendedBolusInsulin
     return this
 }
+
+/** Bolus IOB plus basal IOB, each rounded the way the overview chips round them. */
+fun displayedIobUnits(bolusIob: IobTotal, basalIob: IobTotal): Double {
+    val bolus = bolusIob.round()
+    val basal = basalIob.round()
+    return bolus.iob + basal.basaliob
+}
+
+/** The IOB the overview chips show right now. */
+suspend fun IobCobCalculator.profileDisplayedIob(): Double =
+    displayedIobUnits(calculateIobFromBolus(), calculateIobFromTempBasalsIncludingConvertedExtended())
 
 fun IobTotal.round(): IobTotal {
     iob = Round.roundTo(iob, 0.001)

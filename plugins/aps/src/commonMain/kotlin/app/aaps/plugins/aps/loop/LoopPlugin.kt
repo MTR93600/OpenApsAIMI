@@ -30,6 +30,7 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.logging.UserEntryLogger
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationManager
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.plugin.PluginDescription
@@ -66,6 +67,7 @@ import app.aaps.core.objects.extensions.convertedToAbsolute
 import app.aaps.core.objects.extensions.convertedToPercent
 import app.aaps.core.objects.extensions.jsonObject
 import app.aaps.core.objects.extensions.plannedRemainingMinutes
+import app.aaps.core.objects.extensions.profileDisplayedIob
 import app.aaps.core.objects.extensions.with
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.icons.IcLoopClosed
@@ -1093,8 +1095,15 @@ class LoopPlugin(
                     put("timestamp", dateUtil.toISOString(lastRun.lastAPSRun))
                     put("isfMgdlForCarbs", isfMgdlForCarbs)
                 }
-                iob = lastRun.request?.iob?.jsonObject(dateUtil)?.with {
+                val apsIob = lastRun.request?.iob
+                val displayedIob = if (apsIob != null && preferences.get(BooleanKey.ApsPublishDisplayedIob)) {
+                    activePlugin.activeIobCobCalculator.profileDisplayedIob().takeIf { it.isFinite() }
+                } else {
+                    null
+                }
+                iob = apsIob?.jsonObject(dateUtil)?.with {
                     put("time", dateUtil.toISOString(lastRun.lastAPSRun))
+                    displayedIob?.let { put(ProcessedDeviceStatusData.DISPLAYED_IOB_KEY, it) }
                 }
                 // Snapshot the mutable field once: the APS loop (invoke()) can null/reassign
                 // lastRun.tbrSetByPump concurrently, so re-dereferencing it with !! below raced and
@@ -1144,7 +1153,8 @@ class LoopPlugin(
         key = "loop_settings",
         title = CoreUiStrings.loop,
         items = listOf(
-            IntKey.LoopOpenModeMinChange
+            IntKey.LoopOpenModeMinChange,
+            BooleanKey.ApsPublishDisplayedIob,
         ),
         icon = pluginDescription.icon
     )

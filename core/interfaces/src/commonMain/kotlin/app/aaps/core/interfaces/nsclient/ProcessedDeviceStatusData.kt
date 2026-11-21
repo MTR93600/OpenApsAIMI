@@ -5,6 +5,12 @@ import app.aaps.core.interfaces.aps.RT
 
 interface ProcessedDeviceStatusData {
 
+    companion object {
+
+        /** JSON name of the extra number inside `openaps.iob`. */
+        const val DISPLAYED_IOB_KEY = "displayed"
+    }
+
     enum class Levels(val level: Int) {
 
         URGENT(2),
@@ -60,6 +66,12 @@ interface ProcessedDeviceStatusData {
 
         /** `openaps.iob.iob` of the same document as [suggested]. */
         var iob: Double? = null
+
+        /**
+         * `openaps.iob.displayed` of the same document as [suggested].
+         * The IOB the master screen shows. Null when that document did not send it.
+         */
+        var displayedIob: Double? = null
     }
 
     var openAPSData: OpenAPSData
