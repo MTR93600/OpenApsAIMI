@@ -57,11 +57,17 @@ internal object NsKtorClient {
         }
     }
 
-    fun stack(baseUrl: String, refreshToken: String, logging: Boolean, logger: (String) -> Unit): Stack {
+    fun stack(
+        baseUrl: String,
+        refreshToken: String,
+        logging: Boolean,
+        logger: (String) -> Unit,
+        onDecodeWarning: (String) -> Unit
+    ): Stack {
         val main = build(logging, logger)
         val refresh = build(logging, logger)
         NsAuth.install(main, refresh, baseUrl, refreshToken)
-        return Stack(NightscoutApi(main, baseUrl), main, refresh)
+        return Stack(NightscoutApi(main, baseUrl, onDecodeWarning), main, refresh)
     }
 
     fun build(logging: Boolean, logger: (String) -> Unit): HttpClient = nsHttpClient(logging, logger) {
