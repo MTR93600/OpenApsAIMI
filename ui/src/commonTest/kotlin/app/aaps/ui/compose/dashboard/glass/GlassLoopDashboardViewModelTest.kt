@@ -48,6 +48,46 @@ class GlassLoopDashboardViewModelTest {
     )
 
     @Test
+    fun client_iobAndTargetFromMaster() {
+        val aimi = AimiGlassDashboardData(
+            keyFactors = AimiGlassDashboardData.KeyFactors(
+                targetBgMgdl = null,
+                maxIobUnits = null,
+                maxSmbUnits = 1.2,
+                isfMgdlPerUnit = null,
+                stableBgMinutes = 10.0,
+            ),
+        ).withMasterFactors(targetBg = 80.0, variableSens = 42.0)
+        val state = buildGlassLoopDashboardState(
+            input(lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.4, iobUnits = 1.7), aimi = aimi),
+            format,
+        )
+
+        assertEquals(80.0, aimi.keyFactors?.targetBgMgdl)
+        assertEquals(42.0, aimi.keyFactors?.isfMgdlPerUnit)
+        assertEquals(null, aimi.keyFactors?.maxIobUnits)
+        assertEquals(1.2, aimi.keyFactors?.maxSmbUnits)
+        assertEquals("format_insulin_units(1.7)", state.iobText)
+        assertEquals("bg80.0", state.targetBgText)
+    }
+
+    @Test
+    fun client_iobFallsBackToOpenapsIob() {
+        val state = buildGlassLoopDashboardState(
+            input(
+                lastRun = GlassLoopDashboardInput.LastRun(
+                    dateMs = 1_000_000L,
+                    smbUnits = 0.0,
+                    iobUnits = clientIobUnits(rtIob = null, openApsIob = 0.8),
+                ),
+            ),
+            format,
+        )
+
+        assertEquals("format_insulin_units(0.8)", state.iobText)
+    }
+
+    @Test
     fun `a null lastAPSResult produces a state with defaulted text and no crash`() {
         val state = buildGlassLoopDashboardState(input(), format)
 

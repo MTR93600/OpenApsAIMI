@@ -5,18 +5,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
@@ -25,10 +30,12 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +53,7 @@ import kotlin.time.Instant
  * [onAimiData]); the generic values (last loop run, glucose status, units, build version) are read
  * here through the core interfaces. The texts are built by [buildGlassLoopDashboardState].
  */
+@OptIn(FlowPreview::class)
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
@@ -58,6 +66,8 @@ class GlassLoopDashboardViewModel(
     private val rh: TextResolver,
     private val dateUtil: DateUtil,
     private val config: Config,
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
+    private val rxBus: RxBus,
     private val aapsLogger: AAPSLogger,
 ) : ViewModel() {
 
@@ -65,6 +75,18 @@ class GlassLoopDashboardViewModel(
     val uiState: StateFlow<GlassLoopDashboardState> = _uiState.asStateFlow()
 
     private var refreshJob: Job? = null
+    private var latestAimi: AimiGlassDashboardData? = null
+
+    init {
+        // The AIMI feed is local and stays empty of the master's target on a client. A device status is the signal.
+        if (config.AAPSCLIENT) {
+            viewModelScope.launch {
+                rxBus.toFlow(EventNsClientStatusUpdated::class).debounce(300).collect {
+                    latestAimi?.let { rebuild(it) }
+                }
+            }
+        }
+    }
 
     private val format = object : GlassLoopDashboardFormat {
         override fun text(ref: TextRef, vararg args: Any?): String = rh.gs(ref, *args)
@@ -78,6 +100,11 @@ class GlassLoopDashboardViewModel(
 
     /** Rebuilds the screen from a new AIMI snapshot. The feed sends one at least every minute. */
     fun onAimiData(data: AimiGlassDashboardData) {
+        latestAimi = data
+        rebuild(data)
+    }
+
+    private fun rebuild(data: AimiGlassDashboardData) {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             try {
@@ -94,20 +121,35 @@ class GlassLoopDashboardViewModel(
     private fun readInput(data: AimiGlassDashboardData): GlassLoopDashboardInput {
         val now = dateUtil.now()
         val local = Instant.fromEpochMilliseconds(now).toLocalDateTime(TimeZone.currentSystemDefault())
-        val result = activePlugin.activeAPS?.lastAPSResult
         val glucoseStatus = glucoseStatusProvider.glucoseStatusData
+        // AIMI's key-factor provider reads lastAPSResult, which a client never has.
+        val client = config.AAPSCLIENT
+        val result = if (client) {
+            ApsResultSource.displayed(config, processedDeviceStatusData, now) { null }
+        } else {
+            activePlugin.activeAPS?.lastAPSResult
+        }
+        val aimi = if (client && result != null) data.withMasterFactors(result.targetBG, result.variableSens) else data
         return GlassLoopDashboardInput(
             hourOfDay = local.hour,
             isWeekend = local.dayOfWeek == DayOfWeek.SATURDAY || local.dayOfWeek == DayOfWeek.SUNDAY,
             buildVersion = config.VERSION_NAME,
             glucoseUnit = profileFunction.getUnits(),
             lastRun = result?.let {
-                GlassLoopDashboardInput.LastRun(
-                    dateMs = it.date,
-                    smbUnits = it.smb,
-                    // `iob` comes from IobTotal.combine(): its `iob` already holds the basal part.
-                    iobUnits = it.iob?.iob,
-                )
+                if (client) {
+                    GlassLoopDashboardInput.LastRun(
+                        dateMs = processedDeviceStatusData.openApsTimestamp,
+                        smbUnits = it.smb,
+                        iobUnits = clientIobUnits((it.rawData() as? RT)?.IOB, processedDeviceStatusData.openAPSData.iob),
+                    )
+                } else {
+                    GlassLoopDashboardInput.LastRun(
+                        dateMs = it.date,
+                        smbUnits = it.smb,
+                        // `iob` comes from IobTotal.combine(): its `iob` already holds the basal part.
+                        iobUnits = it.iob?.iob,
+                    )
+                }
             },
             glucose = glucoseStatus?.let {
                 GlassLoopDashboardInput.Glucose(
@@ -117,7 +159,7 @@ class GlassLoopDashboardViewModel(
                     longAvgDeltaMgdl = it.longAvgDelta,
                 )
             },
-            aimi = data,
+            aimi = aimi,
         )
     }
 }
@@ -152,6 +194,27 @@ internal data class GlassLoopDashboardInput(
 }
 
 private const val NO_VALUE = "--"
+
+/** Client IOB: `RT.IOB`, or `openaps.iob.iob` when an early return left it out. */
+internal fun clientIobUnits(rtIob: Double?, openApsIob: Double?): Double? =
+    rtIob ?: openApsIob?.takeIf { it.isFinite() }
+
+/** Puts the master's target and ISF on the key factors. The other factors stay as the feed sent them. */
+internal fun AimiGlassDashboardData.withMasterFactors(targetBg: Double, variableSens: Double?): AimiGlassDashboardData {
+    val factors = keyFactors ?: AimiGlassDashboardData.KeyFactors(
+        targetBgMgdl = null,
+        maxIobUnits = null,
+        maxSmbUnits = null,
+        isfMgdlPerUnit = null,
+        stableBgMinutes = null,
+    )
+    return copy(
+        keyFactors = factors.copy(
+            targetBgMgdl = targetBg.takeIf { it.isFinite() && it > 0.0 },
+            isfMgdlPerUnit = variableSens?.takeIf { it.isFinite() },
+        ),
+    )
+}
 
 /**
  * Builds the loop dashboard texts with the same strings and decimals as DEV. A value that is missing

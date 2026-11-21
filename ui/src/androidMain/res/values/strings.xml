@@ -16,7 +16,7 @@
     <string name="dashboard_glass_loop_delta_5m_label" comment="e.g. -1.20 5m delta">5m delta</string>
     <string name="dashboard_glass_loop_delta_avg_label">DELTA (SHORT / LONG)</string>
     <string name="dashboard_glass_loop_delta_avg_hint">5m / 15m avg</string>
-    <string name="dashboard_glass_loop_iob_label">IOB</string>
+    <string name="dashboard_glass_loop_iob_label">IOB APS</string>
     <string name="dashboard_glass_loop_iob_hint">Active Insulin</string>
     <string name="dashboard_glass_loop_target_label">TARGET</string>
     <string name="dashboard_glass_loop_tdd_label">TDD 7 Days</string>

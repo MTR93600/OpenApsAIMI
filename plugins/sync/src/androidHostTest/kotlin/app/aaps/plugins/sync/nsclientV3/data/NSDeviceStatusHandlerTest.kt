@@ -325,6 +325,43 @@ internal class NSDeviceStatusHandlerTest {
         assertThat(openAPSData.clockSuggested).isEqualTo(7_000L)
     }
 
+    /** A newer suggested that cannot be decoded keeps the previous result and does not refresh its clock. */
+    @Test
+    fun unreadableNewerSuggested_keepsOldRt_marksUndecoded() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1)))
+        val kept = openAPSData.suggested
+
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2, readable = false)))
+
+        assertThat(openAPSData.suggested).isSameInstanceAs(kept)
+        assertThat(openAPSData.clockSuggested).isEqualTo(6_000L)
+        assertThat(openAPSData.clockSuggestedDecoded).isEqualTo(5_000L)
+    }
+
+    @Test
+    fun readableNewerSuggested_updatesDecodedClock() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1)))
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2)))
+
+        assertThat(openAPSData.suggested?.timestamp).isEqualTo(6_000L)
+        assertThat(openAPSData.clockSuggested).isEqualTo(6_000L)
+        assertThat(openAPSData.clockSuggestedDecoded).isEqualTo(6_000L)
+    }
+
+    /** An older document that cannot be decoded does not make the current result look unread. */
+    @Test
+    fun olderUnreadable_doesNotMarkUndecoded() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2)))
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1, readable = false)))
+
+        assertThat(openAPSData.suggested).isNotNull()
+        assertThat(openAPSData.clockSuggested).isEqualTo(6_000L)
+        assertThat(openAPSData.clockSuggestedDecoded).isEqualTo(6_000L)
+    }
+
     /** The one warning of the batch. */
     private fun oneWarning(): String {
         val message = argumentCaptor<String>()

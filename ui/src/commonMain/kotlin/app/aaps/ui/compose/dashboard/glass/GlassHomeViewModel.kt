@@ -14,21 +14,26 @@ import app.aaps.core.data.model.TT
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.dashboard.AimiGlassDashboardData
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.pump.tickerFlow
@@ -39,11 +44,13 @@ import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -63,7 +70,7 @@ import kotlin.math.roundToInt
  * On `dev_OAPSAIMI` these came from `OverviewViewModel.updateStatus`. The rules are the same; only the
  * values the overview flows already have (glucose, IOB, status lights, charts) are read elsewhere.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
@@ -74,6 +81,9 @@ class GlassHomeViewModel(
     private val profileUtil: ProfileUtil,
     private val processedTbrEbData: ProcessedTbrEbData,
     private val loop: Loop,
+    private val config: Config,
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
+    private val rxBus: RxBus,
     private val dateUtil: DateUtil,
     private val rh: TextResolver,
     private val decimalFormatter: DecimalFormatter,
@@ -110,21 +120,26 @@ class GlassHomeViewModel(
             .launchIn(viewModelScope)
     }
 
-    private fun refreshTriggers(): Flow<Unit> = merge(
+    private fun refreshTriggers(): Flow<Unit> {
         // Emits at once, then every minute: steps, heart rate and the loop target move with time.
-        tickerFlow(60_000L),
-        persistenceLayer.observeChanges(GV::class).map { },
-        persistenceLayer.observeChanges(TT::class).map { },
-        persistenceLayer.observeChanges(TB::class).map { },
-        persistenceLayer.observeChanges(RM::class).map { },
-        persistenceLayer.observeChanges(HR::class).map { },
-        persistenceLayer.observeChanges(SC::class).map { },
-        // Site and sensor age of the pump line.
-        persistenceLayer.observeChanges(TE::class).map { },
-        activePlugin.activePump.reservoirLevel.map { },
-        persistenceLayer.databaseClearedFlow.map { },
-        healthStoreStepsToday.map { },
-    )
+        val base = merge(
+            tickerFlow(60_000L),
+            persistenceLayer.observeChanges(GV::class).map { },
+            persistenceLayer.observeChanges(TT::class).map { },
+            persistenceLayer.observeChanges(TB::class).map { },
+            persistenceLayer.observeChanges(RM::class).map { },
+            persistenceLayer.observeChanges(HR::class).map { },
+            persistenceLayer.observeChanges(SC::class).map { },
+            // Site and sensor age of the pump line.
+            persistenceLayer.observeChanges(TE::class).map { },
+            activePlugin.activePump.reservoirLevel.map { },
+            persistenceLayer.databaseClearedFlow.map { },
+            healthStoreStepsToday.map { },
+        )
+        // A client's loop never runs. The master's target arrives as a device status, with no database row.
+        if (!config.AAPSCLIENT) return base
+        return merge(base, rxBus.toFlow(EventNsClientStatusUpdated::class).debounce(300).map { })
+    }
 
     private var refreshJob: Job? = null
 
@@ -151,7 +166,7 @@ class GlassHomeViewModel(
             temporaryHigh = activeTemporaryTarget?.highTarget,
             profileLow = profile?.getTargetLowMgdl(now),
             profileHigh = profile?.getTargetHighMgdl(now),
-            aimiTargetBg = loop.lastRun?.request?.targetBG,
+            aimiTargetBg = ApsResultSource.targetMgdl(config, processedDeviceStatusData, now) { loop.lastRun?.request?.targetBG },
         )
         val targetText = targetRange?.let { range ->
             profileUtil.toTargetRangeString(low = range.low, high = range.high, sourceUnits = GlucoseUnit.MGDL)

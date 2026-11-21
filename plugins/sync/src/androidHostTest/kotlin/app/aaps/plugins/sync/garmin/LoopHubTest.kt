@@ -20,8 +20,11 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.AutosensDataStore
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
+import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.bolus.MasterActionExecutor
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
@@ -74,6 +77,8 @@ class LoopHubTest : TestBase() {
     @Mock lateinit var constraints: ConstraintsChecker
     @Mock lateinit var iobCobCalculator: IobCobCalculator
     @Mock lateinit var loop: Loop
+    @Mock lateinit var config: Config
+    @Mock lateinit var processedDeviceStatusData: ProcessedDeviceStatusData
     @Mock lateinit var profileFunction: ProfileFunction
     @Mock lateinit var profileUtil: ProfileUtil
     @Mock lateinit var persistenceLayer: PersistenceLayer
@@ -94,7 +99,7 @@ class LoopHubTest : TestBase() {
             if (u == GlucoseUnit.MGDL) v else (18.0 * v)
         }
         loopHub = LoopHubImpl(
-            aapsLogger, commandQueue, constraints, iobCobCalculator, loop,
+            aapsLogger, commandQueue, constraints, iobCobCalculator, loop, config, processedDeviceStatusData,
             profileFunction, profileUtil, persistenceLayer, preferences, processedTbrEbData,
             masterActionExecutor, userEntryLogger, testScope
         )
@@ -531,5 +536,44 @@ class LoopHubTest : TestBase() {
         assertEquals(TT.Reason.WEAR, tt.firstValue.reason)
         assertEquals(30L * 60_000L, tt.firstValue.duration)
         assertEquals(clock.millis(), tt.firstValue.timestamp)
+    }
+
+    @Test
+    fun master_currentTargetUnchanged() = runTest {
+        whenever(config.APS).thenReturn(true)
+        whenever(config.AAPSCLIENT).thenReturn(false)
+        val result = mock<APSResult>()
+        whenever(result.targetBG).thenReturn(85.0)
+        whenever(loop.lastRun).thenReturn(Loop.LastRun().apply { constraintsProcessed = result })
+        assertEquals(85.0, loopHub.currentTargetMgdl)
+        verify(loop).lastRun
+    }
+
+    @Test
+    fun client_currentTargetFromMaster() = runTest {
+        val previousNow = loopHub.nowMs
+        val now = 1_700_000_000_000L
+        loopHub.nowMs = { now }
+        try {
+            whenever(config.APS).thenReturn(false)
+            whenever(config.AAPSCLIENT).thenReturn(true)
+            val ts = now - 120_000L
+            val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+                clockSuggested = ts
+                clockSuggestedDecoded = ts
+            }
+            whenever(processedDeviceStatusData.openAPSData).thenReturn(open)
+            whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(ts)
+            val master = mock<APSResult>()
+            whenever(master.targetBG).thenReturn(80.0)
+            whenever(processedDeviceStatusData.getAPSResult()).thenReturn(master)
+            val local = mock<APSResult>()
+            whenever(local.targetBG).thenReturn(120.0)
+            whenever(loop.lastRun).thenReturn(Loop.LastRun().apply { constraintsProcessed = local })
+            assertEquals(80.0, loopHub.currentTargetMgdl)
+            verify(loop, times(0)).lastRun
+        } finally {
+            loopHub.nowMs = previousNow
+        }
     }
 }
