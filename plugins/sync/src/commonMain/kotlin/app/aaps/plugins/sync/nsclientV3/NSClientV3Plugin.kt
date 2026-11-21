@@ -1357,6 +1357,9 @@ class NSClientV3Plugin(
                 key = "ns_client_advanced",
                 title = CoreUiStrings.advanced_settings_title,
                 items = listOf(
+                    // The synchronization screen hides itself on a client, which is the only mode
+                    // where this switch is shown.
+                    BooleanKey.NsClientAcceptTreatmentCorrections,
                     BooleanKey.NsClientLogAppStart,
                     BooleanKey.NsClientCreateAnnouncementsFromErrors,
                     BooleanKey.NsClientCreateAnnouncementsFromCarbsReq,
