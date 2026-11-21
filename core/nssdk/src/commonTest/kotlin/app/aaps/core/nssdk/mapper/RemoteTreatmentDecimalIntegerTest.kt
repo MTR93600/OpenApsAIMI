@@ -1,5 +1,6 @@
 package app.aaps.core.nssdk.mapper
 
+import app.aaps.core.nssdk.localmodel.treatment.NSEffectiveProfileSwitch
 import app.aaps.core.nssdk.localmodel.treatment.NSTemporaryBasal
 import app.aaps.core.nssdk.nsSdkJson
 import app.aaps.core.nssdk.remotemodel.RemoteTreatment
@@ -97,5 +98,39 @@ class RemoteTreatmentDecimalIntegerTest {
         assertEquals(50, parsed.splitNow)
         assertEquals(50, parsed.splitExt)
         assertEquals(99L, parsed.endId)
+    }
+
+    /**
+     * Profile Switch and an effective profile switch use the same integer fields. An integral decimal
+     * must be read, a fraction must still fail the document, and a plain integer must come back unchanged.
+     */
+    @Test
+    fun effectiveProfileSwitchReadsIntegralDecimalsAndKeepsPlainIntegers() {
+        val parsed = parse(
+            """{"eventType":"Note","date":1785992179555,"profileJson":"{}","originalProfileName":"Default","originalCustomizedName":"Default","percentage":100.0,"timeshift":0.0,"originalPercentage":100.0,"originalTimeshift":0.0,"originalDuration":0.0,"originalEnd":1785992179555.0}"""
+        )
+
+        assertEquals(100, parsed.percentage)
+        assertEquals(0L, parsed.timeshift)
+        assertEquals(100, parsed.originalPercentage)
+        assertEquals(0L, parsed.originalTimeshift)
+        assertEquals(0L, parsed.originalDuration)
+        assertEquals(1785992179555L, parsed.originalEnd)
+        val eps = parsed.toTreatment()
+        assertTrue(eps is NSEffectiveProfileSwitch)
+        assertEquals(100, eps.originalPercentage)
+        assertEquals(0L, eps.originalTimeshift)
+        assertEquals(0L, eps.originalDuration)
+        assertEquals(1785992179555L, eps.originalEnd)
+
+        assertFailsWith<SerializationException> { parse("""{"percentage":100.5}""") }
+
+        val valid = """{"percentage":100,"timeshift":0,"originalPercentage":100,"originalTimeshift":0,"originalDuration":0,"originalEnd":1785992179555}"""
+        val encoded = nsSdkJson.encodeToString(RemoteTreatment.serializer(), parse(valid))
+        assertEquals(encoded, nsSdkJson.encodeToString(RemoteTreatment.serializer(), parse(encoded)))
+        assertTrue("\"percentage\":100" in encoded)
+        assertTrue("\"timeshift\":0" in encoded)
+        assertTrue("100.0" !in encoded)
+        assertTrue("0.0" !in encoded)
     }
 }
