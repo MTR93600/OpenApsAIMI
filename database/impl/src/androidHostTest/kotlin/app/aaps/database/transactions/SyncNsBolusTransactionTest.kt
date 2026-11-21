@@ -411,6 +411,79 @@ class SyncNsBolusTransactionTest {
         verify(bolusDao).updateExistingEntry(existing)
     }
 
+    @Test
+    fun bolus_switchOff_onlyAmountAndInvalidation() = runTest {
+        val nsId = "ns-123"
+        val keptCfg = InsulinConfiguration("rapid", 18_000_000L, 3_600_000L, 1.0)
+        val existing = createBolus(
+            id = 1, nsId = nsId, amount = 5.0, timestamp = 1_000L,
+            type = Bolus.Type.NORMAL, isValid = true, iCfg = keptCfg
+        )
+        val incoming = createBolus(
+            id = 0, nsId = nsId, amount = 7.5, timestamp = 9_000L,
+            type = Bolus.Type.SMB, isValid = false,
+            iCfg = InsulinConfiguration("afrezza", 5_400_000L, 900_000L, 2.0)
+        )
+        whenever(bolusDao.getByNSId(nsId)).thenReturn(existing)
+
+        val transaction = SyncNsBolusTransaction(listOf(incoming), acceptCorrections = false)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.amount).isEqualTo(7.5)
+        assertThat(existing.isValid).isFalse()
+        assertThat(existing.type).isEqualTo(Bolus.Type.NORMAL)
+        assertThat(existing.insulinConfiguration).isEqualTo(keptCfg)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.invalidated).containsExactly(existing)
+        assertThat(result.updated).containsExactly(existing)
+        verify(bolusDao, times(2)).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun bolus_client_switchOn_typeAndIcfgApplied() = runTest {
+        val nsId = "ns-123"
+        val incomingCfg = InsulinConfiguration("afrezza", 5_400_000L, 900_000L, 2.0)
+        val existing = createBolus(
+            id = 1, nsId = nsId, amount = 5.0, timestamp = 1_000L,
+            type = Bolus.Type.NORMAL, iCfg = InsulinConfiguration("rapid", 18_000_000L, 3_600_000L, 1.0)
+        )
+        val incoming = createBolus(
+            id = 0, nsId = nsId, amount = 6.0, timestamp = 9_000L,
+            type = Bolus.Type.SMB, iCfg = incomingCfg
+        )
+        whenever(bolusDao.getByNSId(nsId)).thenReturn(existing)
+
+        val transaction = SyncNsBolusTransaction(listOf(incoming), acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.amount).isEqualTo(6.0)
+        assertThat(existing.type).isEqualTo(Bolus.Type.SMB)
+        assertThat(existing.insulinConfiguration).isEqualTo(incomingCfg)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.updated).containsExactly(existing)
+        verify(bolusDao, times(2)).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun bolus_client_switchOn_invalidationStillApplied() = runTest {
+        val nsId = "ns-123"
+        val existing = createBolus(id = 1, nsId = nsId, amount = 5.0, timestamp = 1_000L, isValid = true)
+        val incoming = createBolus(id = 0, nsId = nsId, amount = 5.0, timestamp = 1_000L, isValid = false)
+        whenever(bolusDao.getByNSId(nsId)).thenReturn(existing)
+
+        val transaction = SyncNsBolusTransaction(listOf(incoming), acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.isValid).isFalse()
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.invalidated).containsExactly(existing)
+        assertThat(result.updated).isEmpty()
+        verify(bolusDao).updateExistingEntry(existing)
+    }
+
     private fun createBolus(
         id: Long,
         nsId: String?,
@@ -420,7 +493,8 @@ class SyncNsBolusTransactionTest {
         isValid: Boolean = true,
         pumpId: Long? = null,
         pumpType: InterfaceIDs.PumpType? = null,
-        pumpSerial: String? = null
+        pumpSerial: String? = null,
+        iCfg: InsulinConfiguration = InsulinConfiguration("some", 600000L, 60000L, 1.0)
     ): Bolus = Bolus(
         timestamp = timestamp,
         amount = amount,
@@ -432,6 +506,6 @@ class SyncNsBolusTransactionTest {
             pumpType = pumpType,
             pumpSerial = pumpSerial
         ),
-        insulinConfiguration = InsulinConfiguration("some", 600000L, 60000L, 1.0)
+        insulinConfiguration = iCfg
     ).also { it.id = id }
 }

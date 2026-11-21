@@ -319,21 +319,148 @@ class SyncNsTemporaryBasalTransactionTest {
         verify(temporaryBasalDao).updateExistingEntry(existing)
     }
 
+    @Test
+    fun client_switchOff_rateChangeIgnored() = runTest {
+        val existing = createTemporaryBasal(
+            id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L,
+            rate = 1.0, isAbsolute = true, type = TemporaryBasal.Type.NORMAL
+        )
+        val incoming = createTemporaryBasal(
+            id = 0, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L,
+            rate = 2.5, isAbsolute = false, type = TemporaryBasal.Type.PUMP_SUSPEND
+        )
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = false)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.rate).isEqualTo(1.0)
+        assertThat(existing.isAbsolute).isTrue()
+        assertThat(existing.type).isEqualTo(TemporaryBasal.Type.NORMAL)
+        assertThat(existing.duration).isEqualTo(60_000L)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.updated).isEmpty()
+        assertThat(result.updatedDuration).isEmpty()
+        verify(temporaryBasalDao, never()).updateExistingEntry(any())
+    }
+
+    @Test
+    fun client_switchOn_rateChangeApplied() = runTest {
+        val existing = createTemporaryBasal(
+            id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L,
+            rate = 1.0, isAbsolute = true, type = TemporaryBasal.Type.NORMAL
+        )
+        val incoming = createTemporaryBasal(
+            id = 0, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L,
+            rate = 2.5, isAbsolute = false, type = TemporaryBasal.Type.PUMP_SUSPEND
+        )
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.rate).isEqualTo(2.5)
+        assertThat(existing.isAbsolute).isFalse()
+        assertThat(existing.type).isEqualTo(TemporaryBasal.Type.PUMP_SUSPEND)
+        assertThat(existing.duration).isEqualTo(60_000L)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.updated).containsExactly(existing)
+        verify(temporaryBasalDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun client_switchOn_longerDurationApplied() = runTest {
+        val existing = createTemporaryBasal(id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L)
+        val incoming = createTemporaryBasal(id = 0, nsId = "ns-123", timestamp = 1_000L, duration = 120_000L)
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.duration).isEqualTo(120_000L)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.updated).containsExactly(existing)
+        assertThat(result.updatedDuration).isEmpty()
+        verify(temporaryBasalDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun client_switchOn_timestampNotMoved() = runTest {
+        val existing = createTemporaryBasal(id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L, rate = 1.0)
+        val incoming = createTemporaryBasal(id = 0, nsId = "ns-123", timestamp = 9_000L, duration = 60_000L, rate = 2.0)
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = true)
+        transaction.database = database
+        transaction.run()
+
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(existing.rate).isEqualTo(2.0)
+        verify(temporaryBasalDao).updateExistingEntry(existing)
+    }
+
+    @Test
+    fun master_switchOn_noChange() = runTest {
+        val existing = createTemporaryBasal(
+            id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L,
+            rate = 1.0, isAbsolute = true, type = TemporaryBasal.Type.NORMAL
+        )
+        val incoming = createTemporaryBasal(
+            id = 0, nsId = "ns-123", timestamp = 9_000L, duration = 120_000L,
+            rate = 2.5, isAbsolute = false, type = TemporaryBasal.Type.PUMP_SUSPEND
+        )
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = false, acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.rate).isEqualTo(1.0)
+        assertThat(existing.isAbsolute).isTrue()
+        assertThat(existing.type).isEqualTo(TemporaryBasal.Type.NORMAL)
+        assertThat(existing.duration).isEqualTo(60_000L)
+        assertThat(existing.timestamp).isEqualTo(1_000L)
+        assertThat(result.updated).isEmpty()
+        assertThat(result.updatedDuration).isEmpty()
+        verify(temporaryBasalDao, never()).updateExistingEntry(any())
+    }
+
+    @Test
+    fun client_switchOn_invalidationStillApplied() = runTest {
+        val existing = createTemporaryBasal(id = 1, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L, isValid = true)
+        val incoming = createTemporaryBasal(id = 0, nsId = "ns-123", timestamp = 1_000L, duration = 60_000L, isValid = false)
+        whenever(temporaryBasalDao.findByNSId("ns-123")).thenReturn(existing)
+
+        val transaction = SyncNsTemporaryBasalTransaction(listOf(incoming), nsClientMode = true, acceptCorrections = true)
+        transaction.database = database
+        val result = transaction.run()
+
+        assertThat(existing.isValid).isFalse()
+        assertThat(result.invalidated).containsExactly(existing)
+        verify(temporaryBasalDao).updateExistingEntry(existing)
+    }
+
     private fun createTemporaryBasal(
         id: Long,
         nsId: String?,
         timestamp: Long = System.currentTimeMillis(),
         duration: Long,
+        rate: Double = 1.5,
+        isAbsolute: Boolean = true,
+        type: TemporaryBasal.Type = TemporaryBasal.Type.NORMAL,
         isValid: Boolean = true,
         pumpId: Long? = null,
         pumpType: InterfaceIDs.PumpType? = null,
         pumpSerial: String? = null
     ): TemporaryBasal = TemporaryBasal(
         timestamp = timestamp,
-        rate = 1.5,
+        rate = rate,
         duration = duration,
-        type = TemporaryBasal.Type.NORMAL,
-        isAbsolute = true,
+        type = type,
+        isAbsolute = isAbsolute,
         isValid = isValid,
         interfaceIDs_backing = InterfaceIDs(
             nightscoutId = nsId,

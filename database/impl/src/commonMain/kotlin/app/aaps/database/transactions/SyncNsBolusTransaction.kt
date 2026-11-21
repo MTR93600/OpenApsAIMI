@@ -5,7 +5,10 @@ import app.aaps.database.entities.Bolus
 /**
  * Sync the Bolus from NS
  */
-class SyncNsBolusTransaction(private val boluses: List<Bolus>) : Transaction<SyncNsBolusTransaction.TransactionResult>() {
+class SyncNsBolusTransaction(
+    private val boluses: List<Bolus>,
+    private val acceptCorrections: Boolean = false
+) : Transaction<SyncNsBolusTransaction.TransactionResult>() {
 
     override suspend fun run(): TransactionResult {
         val result = TransactionResult()
@@ -27,6 +30,14 @@ class SyncNsBolusTransaction(private val boluses: List<Bolus>) : Transaction<Syn
                     current.amount = bolus.amount
                     database.bolusDao.updateExistingEntry(current)
                     result.updated.add(current)
+                }
+                // Same rule as a temp basal: the Nightscout document is applied as it is. The start
+                // time is not a field this copies. The caller passes acceptCorrections only for a follower.
+                if (acceptCorrections && (current.type != bolus.type || current.insulinConfiguration != bolus.insulinConfiguration)) {
+                    current.type = bolus.type
+                    current.insulinConfiguration = bolus.insulinConfiguration
+                    database.bolusDao.updateExistingEntry(current)
+                    if (current !in result.updated) result.updated.add(current)
                 }
                 continue
             }
