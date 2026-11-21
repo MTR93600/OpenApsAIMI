@@ -269,7 +269,12 @@ class NSDeviceStatusHandler(
                 }
                 // check if this is new data
                 if (clock > processedDeviceStatusData.openAPSData.clockSuggested) {
-                    suggested?.let { rt -> processedDeviceStatusData.openAPSData.suggested = rt }
+                    // A document that cannot be decoded must not refresh the stored result's clock.
+                    // clockSuggested still moves, so the loop-age display and the old-loop alarm follow the master.
+                    if (suggested != null) {
+                        processedDeviceStatusData.openAPSData.suggested = suggested
+                        processedDeviceStatusData.openAPSData.clockSuggestedDecoded = clock
+                    }
                     processedDeviceStatusData.openAPSData.clockSuggested = clock
                 }
                 // Stored also when older than the newest one, see storeApsResults

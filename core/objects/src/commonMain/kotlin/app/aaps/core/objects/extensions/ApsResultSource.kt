@@ -10,6 +10,7 @@ import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
  * On a phone that loops, the caller passes the value it already showed. That value is returned as it is.
  * On a client the loop is forced off, so `loop.lastRun` is empty: the master's `openaps.suggested` is used
  * instead, and only while it is younger than [CLIENT_MAX_AGE_MS]. A timestamp in the future is not shown.
+ * If a newer `suggested` arrived but could not be decoded, the previous result is not shown either.
  */
 object ApsResultSource {
 
@@ -27,8 +28,10 @@ object ApsResultSource {
         local: () -> APSResult?,
     ): APSResult? = when {
         config.AAPSCLIENT -> {
+            val open = deviceStatus.openAPSData
             val ts = deviceStatus.openApsTimestamp
-            if (ts <= 0L || nowMs - ts !in 0..CLIENT_MAX_AGE_MS) null else deviceStatus.getAPSResult()
+            val unreadable = open.clockSuggested > open.clockSuggestedDecoded
+            if (unreadable || ts <= 0L || nowMs - ts !in 0..CLIENT_MAX_AGE_MS) null else deviceStatus.getAPSResult()
         }
 
         else              -> local()

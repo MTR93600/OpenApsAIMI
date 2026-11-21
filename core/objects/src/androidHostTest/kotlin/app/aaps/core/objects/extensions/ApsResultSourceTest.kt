@@ -109,13 +109,36 @@ class ApsResultSourceTest {
         verify(deviceStatus, never()).getAPSResult()
     }
 
+    @Test
+    fun client_lastSuggestedUnreadable_returnsNull() {
+        client()
+        val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+            clockSuggested = now - 60_000L
+            clockSuggestedDecoded = now - 10 * 60_000L
+        }
+        whenever(deviceStatus.openAPSData).thenReturn(open)
+        whenever(deviceStatus.openApsTimestamp).thenReturn(open.clockSuggested)
+        val master = apsResult(80.0)
+        whenever(deviceStatus.getAPSResult()).thenReturn(master)
+
+        assertThat(ApsResultSource.displayed(config, deviceStatus, now) { null }).isNull()
+        assertThat(ApsResultSource.targetMgdl(config, deviceStatus, now) { 90.0 }).isNull()
+        verify(deviceStatus, never()).getAPSResult()
+    }
+
     private fun client() {
         whenever(config.APS).thenReturn(false)
         whenever(config.AAPSCLIENT).thenReturn(true)
+        whenever(deviceStatus.openAPSData).thenReturn(ProcessedDeviceStatusData.OpenAPSData())
     }
 
     private fun fresh(target: Double, ageMs: Long): APSResult {
         val ts = now - ageMs
+        val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+            clockSuggested = ts
+            clockSuggestedDecoded = ts
+        }
+        whenever(deviceStatus.openAPSData).thenReturn(open)
         whenever(deviceStatus.openApsTimestamp).thenReturn(ts)
         val result = apsResult(target)
         whenever(deviceStatus.getAPSResult()).thenReturn(result)

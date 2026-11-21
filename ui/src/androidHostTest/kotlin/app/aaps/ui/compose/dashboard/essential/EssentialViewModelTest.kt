@@ -121,7 +121,13 @@ internal class EssentialViewModelTest {
     }
 
     private fun fresh(target: Double, ageMs: Long) {
-        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(now - ageMs)
+        val ts = now - ageMs
+        val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+            clockSuggested = ts
+            clockSuggestedDecoded = ts
+        }
+        whenever(processedDeviceStatusData.openAPSData).thenReturn(open)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(ts)
         val result = mock<APSResult>()
         whenever(result.targetBG).thenReturn(target)
         whenever(processedDeviceStatusData.getAPSResult()).thenReturn(result)

@@ -111,7 +111,13 @@ internal class GlassHomeViewModelTest {
     @Test
     fun client_targetPillShowsMasterTarget() {
         whenever(config.AAPSCLIENT).thenReturn(true)
-        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(now - 60_000L)
+        val ts = now - 60_000L
+        val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+            clockSuggested = ts
+            clockSuggestedDecoded = ts
+        }
+        whenever(processedDeviceStatusData.openAPSData).thenReturn(open)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(ts)
         val master = mock<APSResult>()
         whenever(master.targetBG).thenReturn(80.0)
         whenever(processedDeviceStatusData.getAPSResult()).thenReturn(master)

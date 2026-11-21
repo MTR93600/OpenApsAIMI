@@ -558,6 +558,11 @@ class LoopHubTest : TestBase() {
             whenever(config.APS).thenReturn(false)
             whenever(config.AAPSCLIENT).thenReturn(true)
             val ts = now - 120_000L
+            val open = ProcessedDeviceStatusData.OpenAPSData().apply {
+                clockSuggested = ts
+                clockSuggestedDecoded = ts
+            }
+            whenever(processedDeviceStatusData.openAPSData).thenReturn(open)
             whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(ts)
             val master = mock<APSResult>()
             whenever(master.targetBG).thenReturn(80.0)
