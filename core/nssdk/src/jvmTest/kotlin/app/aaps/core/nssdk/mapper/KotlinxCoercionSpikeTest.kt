@@ -126,4 +126,23 @@ class KotlinxCoercionSpikeTest {
 
         assertThat(parsed.insulin).isNull()
     }
+
+    /**
+     * The gap the two maps above do not cover. Lenient kotlinx still refuses an integral decimal in
+     * a `Long` (`30.0`). Gson accepted that value. The maps stay as they are; this is a separate case.
+     */
+    @Test
+    fun `integer written as decimal into Long - documented gap`() {
+        val lenient = Json { ignoreUnknownKeys = true; explicitNulls = false; isLenient = true; coerceInputValues = true }
+
+        val decoded = runCatching { lenient.decodeFromString(LongField.serializer(), """{"duration":30.0}""") }
+
+        assertThat(decoded.isSuccess).isFalse()
+    }
+
+    /** Not [Mirror]: adding `duration` there would change the class the maps decode. */
+    @Serializable
+    private data class LongField(
+        @SerialName("duration") val duration: Long? = null
+    )
 }
