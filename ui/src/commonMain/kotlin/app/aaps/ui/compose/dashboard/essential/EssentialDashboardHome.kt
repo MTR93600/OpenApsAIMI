@@ -147,9 +147,9 @@ fun EssentialDashboardHome(
     val boostPercent by essentialViewModel.boostPercent.collectAsStateWithLifecycle()
     val deviceStatusTick by essentialViewModel.deviceStatusTick.collectAsStateWithLifecycle()
     // The target the loop really uses, which the profile target does not show (AIMI's own rise target, the
-    // Boost cap at 80). Read again at each minute tick, and when a client receives a device status.
-    val loopTargetMgdl = remember(nowMs, deviceStatusTick) { essentialViewModel.loopTargetMgdl(nowMs) }
-    val loopTargetText = loopTargetMgdl?.let { profileUtil.fromMgdlToStringWithUnits(it) }
+    // Boost cap at 80). Read on every composition, and again when a client receives a device status.
+    val loopTargetText = essentialViewModel.loopTargetMgdl(nowMs).also { deviceStatusTick }
+        ?.let { profileUtil.fromMgdlToStringWithUnits(it) }
 
     var rangeHours by remember { mutableIntStateOf(ESSENTIAL_RANGES.first()) }
     var pullProgress by remember { mutableFloatStateOf(0f) }

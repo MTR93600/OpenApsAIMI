@@ -128,6 +128,19 @@ class AimiDashboardRulesTest {
     }
 
     @Test
+    fun client_autosensNotFake100() {
+        assertNull(AimiDashboardRules.autosensRatio(isClient = true, requestRatio = null, sensitivityRatio = null))
+        assertEquals(0.9, AimiDashboardRules.autosensRatio(isClient = true, requestRatio = null, sensitivityRatio = 0.9))
+        assertNull(AimiDashboardRules.autosensRatio(isClient = true, requestRatio = 1.0, sensitivityRatio = Double.NaN))
+    }
+
+    @Test
+    fun master_autosensUsesTheRequestRatio() {
+        assertEquals(1.0, AimiDashboardRules.autosensRatio(isClient = false, requestRatio = null, sensitivityRatio = 0.4))
+        assertEquals(0.8, AimiDashboardRules.autosensRatio(isClient = false, requestRatio = 0.8, sensitivityRatio = 0.4))
+    }
+
+    @Test
     fun noAdaptationStatusGivesAnEmptyState() {
         assertFalse(AimiAdaptationStatusPresenter.present(null, 0L, 0L).hasStatus)
     }

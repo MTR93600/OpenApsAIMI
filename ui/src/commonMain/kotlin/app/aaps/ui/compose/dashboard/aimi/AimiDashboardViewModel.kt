@@ -14,7 +14,6 @@ import app.aaps.core.data.model.TT
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.APSResult
-import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
@@ -248,7 +247,7 @@ class AimiDashboardViewModel(
             adaptationContentDescription = rh.gs(UiStrings.dashboard_aimi_adaptation_a11y, adaptationSummary),
             adaptationHasAttention = adaptation.attentionCount > 0,
             pulseTitle = pulseTitle(
-                AimiDashboardRules.pulseAtMs(config.AAPSCLIENT, loop.lastRun?.lastAPSRun, processedDeviceStatusData.openApsTimestamp),
+                if (config.AAPSCLIENT) processedDeviceStatusData.openApsTimestamp.takeIf { it > 0L } else loop.lastRun?.lastAPSRun,
                 now,
             ),
             pulseSummary = pulseSummary(request),
@@ -273,23 +272,14 @@ class AimiDashboardViewModel(
             UiStrings.dashboard_glass_delta,
             deltaMgdl?.let { profileUtil.fromMgdlToSignedStringInUnits(it) } ?: rh.gs(CoreUiStrings.value_unavailable_short),
         )
-        val totalIob = AimiDashboardRules.heroIobUnits(
-            iobCobCalculator.calculateIobFromBolus(),
-            iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended(),
-        )
+        val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
+        val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
+        val totalIob = bolusIob.iob + basalIob.basaliob
         val iobText = if (totalIob >= 0) rh.gs(InterfacesStrings.format_insulin_units, totalIob)
         else rh.gs(CoreUiStrings.format_insulin_units_signed, totalIob)
         val dash = rh.gs(CoreUiStrings.value_unavailable_short)
         val autosensRatio = AimiDashboardRules.autosensRatio(config.AAPSCLIENT, request?.autosensResult?.ratio, rt?.sensitivityRatio)
         val autosensPercent = autosensRatio?.let { decimalFormatter.to0Decimal(it * 100.0) } ?: dash
-        val numbers = AimiDashboardRules.adjustmentNumbers(
-            hasRequest = request != null,
-            targetBg = request?.targetBG ?: 0.0,
-            smb = request?.smb ?: 0.0,
-            rate = request?.rate ?: -1.0,
-            peakMinutes = request?.oapsProfileAimi?.peakTime,
-            diaHours = request?.oapsProfileAimi?.dia,
-        )
 
         return AimiAdjustmentDetails(
             glycemiaLine = rh.gs(
@@ -308,12 +298,12 @@ class AimiDashboardViewModel(
             pumpSiteText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE)?.let { now - it.timestamp }),
             pumpSensorText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.let { now - it.timestamp }),
             adjustments = activeAdjustments(now),
-            peakText = numbers.peakMinutes?.let { rh.gs(UiStrings.dashboard_adjustment_minutes, decimalFormatter.to0Decimal(it)) } ?: dash,
-            diaText = numbers.diaHours?.let { rh.gs(UiStrings.dashboard_adjustment_hours, decimalFormatter.to1Decimal(it)) } ?: dash,
+            peakText = request?.oapsProfileAimi?.peakTime?.let { rh.gs(UiStrings.dashboard_adjustment_minutes, decimalFormatter.to0Decimal(it)) } ?: dash,
+            diaText = request?.oapsProfileAimi?.dia?.let { rh.gs(UiStrings.dashboard_adjustment_hours, decimalFormatter.to1Decimal(it)) } ?: dash,
             // The target AIMI ended up using (RT.targetBG), not the profile target it started from. 0 means not set.
-            targetText = numbers.targetMgdl?.let { profileUtil.fromMgdlToStringInUnits(it) } ?: dash,
-            smbText = numbers.smbUnits?.let { rh.gs(UiStrings.dashboard_adjustment_units, decimalFormatter.to2Decimal(it)) } ?: dash,
-            basalText = numbers.basalUh?.let { rh.gs(UiStrings.dashboard_rate_uh, decimalFormatter.to2Decimal(it)) } ?: dash,
+            targetText = request?.targetBG?.takeIf { it > 0.0 }?.let { profileUtil.fromMgdlToStringInUnits(it) } ?: dash,
+            smbText = request?.let { rh.gs(UiStrings.dashboard_adjustment_units, decimalFormatter.to2Decimal(it.smb)) } ?: dash,
+            basalText = request?.rate?.takeIf { it >= 0.0 }?.let { rh.gs(UiStrings.dashboard_rate_uh, decimalFormatter.to2Decimal(it)) } ?: dash,
             reason = request?.reason?.let { AimiDashboardRules.plainText(it) }?.takeIf { it.isNotBlank() },
             trajectoryTitle = AimiDashboardRules.trajectoryLabel(rt?.trajectoryType)?.let { rh.gs(it) } ?: rt?.trajectoryType,
             trajectoryMetrics = rt?.takeIf { it.trajectoryType != null }?.let { r ->
@@ -512,53 +502,9 @@ data class AimiDashboardTir(
 /** Pure rules behind [AimiDashboardViewModel], kept apart so they can be tested without a database. */
 internal object AimiDashboardRules {
 
-    /** The same sum as the IOB chip: each part rounded to 0.001 U before adding. */
-    fun heroIobUnits(bolus: IobTotal, basal: IobTotal): Double {
-        val bolusIob = bolus.round()
-        val basalIob = basal.round()
-        return bolusIob.iob + basalIob.basaliob
-    }
-
-    /**
-     * Autosens shown next to IOB. On the master a missing ratio is 100%, which is what the screen showed.
-     * On a client `autosensResult` is empty, so the master's `sensitivityRatio` is shown when it is a real number.
-     */
+    /** Client ratio is `RT.sensitivityRatio`, which can differ from autosens while a temp target changes sensitivity. */
     fun autosensRatio(isClient: Boolean, requestRatio: Double?, sensitivityRatio: Double?): Double? =
         if (isClient) sensitivityRatio?.takeIf { it.isFinite() } else requestRatio ?: 1.0
-
-    /** When the pulse says the loop last ran. On the master this is `loop.lastRun.lastAPSRun`, unchanged. */
-    fun pulseAtMs(isClient: Boolean, localLastApsRun: Long?, openApsTimestamp: Long): Long? =
-        if (isClient) openApsTimestamp.takeIf { it > 0L } else localLastApsRun
-
-    /**
-     * The five adjustment numbers. Peak and DIA come only from `oapsProfileAimi`, which a device status
-     * does not carry, so on a client they stay null and the screen shows a dash.
-     */
-    fun adjustmentNumbers(
-        hasRequest: Boolean,
-        targetBg: Double,
-        smb: Double,
-        rate: Double,
-        peakMinutes: Double?,
-        diaHours: Double?,
-    ): AdjustmentNumbers {
-        if (!hasRequest) return AdjustmentNumbers(null, null, null, null, null)
-        return AdjustmentNumbers(
-            targetMgdl = targetBg.takeIf { it > 0.0 },
-            smbUnits = smb,
-            basalUh = rate.takeIf { it >= 0.0 },
-            peakMinutes = peakMinutes,
-            diaHours = diaHours,
-        )
-    }
-
-    data class AdjustmentNumbers(
-        val targetMgdl: Double?,
-        val smbUnits: Double?,
-        val basalUh: Double?,
-        val peakMinutes: Double?,
-        val diaHours: Double?,
-    )
 
     private const val SAFETY_CRITICAL_BG = 70.0
     private const val SAFETY_LIMITED_BG = 90.0

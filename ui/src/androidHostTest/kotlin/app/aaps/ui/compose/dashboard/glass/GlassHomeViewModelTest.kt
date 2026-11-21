@@ -26,14 +26,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -128,7 +132,7 @@ internal class GlassHomeViewModelTest {
 
         val vm = shown()
 
-        assertThat(awaitTarget(vm)).isEqualTo("80")
+        assertThat(runBlocking { awaitTarget(vm) }).isEqualTo("80")
         verify(loop, never()).lastRun
         verify(processedDeviceStatusData).getAPSResult()
     }
@@ -145,7 +149,7 @@ internal class GlassHomeViewModelTest {
 
         val vm = shown()
 
-        assertThat(awaitTarget(vm)).isEqualTo("85")
+        assertThat(runBlocking { awaitTarget(vm) }).isEqualTo("85")
         verify(loop).lastRun
         verify(processedDeviceStatusData, never()).getAPSResult()
     }
@@ -174,14 +178,11 @@ internal class GlassHomeViewModelTest {
         return vm
     }
 
-    private fun awaitTarget(vm: GlassHomeViewModel): String? {
-        val deadline = System.nanoTime() + 3_000_000_000L
-        while (System.nanoTime() < deadline) {
-            vm.status.value.targetText?.let { return it }
-            failure.get()?.let { throw it }
-            Thread.sleep(20)
-        }
+    /** Waits for the refresh, which runs on the IO dispatcher, to publish a target. */
+    private suspend fun awaitTarget(vm: GlassHomeViewModel): String = try {
+        withTimeout(5_000) { vm.status.mapNotNull { it.targetText }.first() }
+    } catch (e: TimeoutCancellationException) {
         failure.get()?.let { throw it }
-        return vm.status.value.targetText
+        throw e
     }
 }

@@ -122,33 +122,50 @@ class GlassLoopDashboardViewModel(
         val now = dateUtil.now()
         val local = Instant.fromEpochMilliseconds(now).toLocalDateTime(TimeZone.currentSystemDefault())
         val glucoseStatus = glucoseStatusProvider.glucoseStatusData
-        // AIMI's key-factor provider runs only while that plugin is started, and it reads lastAPSResult,
-        // which a client never has. The device status is read here so the table does not depend on that.
-        val client = if (config.AAPSCLIENT) {
-            val result = ApsResultSource.displayed(config, processedDeviceStatusData, now) { null }
-            clientGlassLoopReading(
-                hasResult = result != null,
-                openApsTimestamp = processedDeviceStatusData.openApsTimestamp,
-                targetBg = result?.targetBG ?: 0.0,
-                smb = result?.smb ?: 0.0,
-                iob = (result?.rawData() as? RT)?.IOB,
-                variableSens = result?.variableSens,
-                aimi = data,
+        // AIMI's key-factor provider reads lastAPSResult, which a client never has.
+        val client = config.AAPSCLIENT
+        val result = if (client) {
+            ApsResultSource.displayed(config, processedDeviceStatusData, now) { null }
+        } else {
+            activePlugin.activeAPS?.lastAPSResult
+        }
+        val aimi = if (client && result != null) {
+            val factors = data.keyFactors ?: AimiGlassDashboardData.KeyFactors(
+                targetBgMgdl = null,
+                maxIobUnits = null,
+                maxSmbUnits = null,
+                isfMgdlPerUnit = null,
+                stableBgMinutes = null,
             )
-        } else null
-        val result = if (config.AAPSCLIENT) null else activePlugin.activeAPS?.lastAPSResult
+            data.copy(
+                keyFactors = factors.copy(
+                    targetBgMgdl = result.targetBG.takeIf { it.isFinite() && it > 0.0 },
+                    isfMgdlPerUnit = result.variableSens?.takeIf { it.isFinite() },
+                ),
+            )
+        } else {
+            data
+        }
         return GlassLoopDashboardInput(
             hourOfDay = local.hour,
             isWeekend = local.dayOfWeek == DayOfWeek.SATURDAY || local.dayOfWeek == DayOfWeek.SUNDAY,
             buildVersion = config.VERSION_NAME,
             glucoseUnit = profileFunction.getUnits(),
-            lastRun = if (config.AAPSCLIENT) client?.lastRun else result?.let {
-                GlassLoopDashboardInput.LastRun(
-                    dateMs = it.date,
-                    smbUnits = it.smb,
-                    // `iob` comes from IobTotal.combine(): its `iob` already holds the basal part.
-                    iobUnits = it.iob?.iob,
-                )
+            lastRun = result?.let {
+                if (client) {
+                    GlassLoopDashboardInput.LastRun(
+                        dateMs = processedDeviceStatusData.openApsTimestamp,
+                        smbUnits = it.smb,
+                        iobUnits = (it.rawData() as? RT)?.IOB,
+                    )
+                } else {
+                    GlassLoopDashboardInput.LastRun(
+                        dateMs = it.date,
+                        smbUnits = it.smb,
+                        // `iob` comes from IobTotal.combine(): its `iob` already holds the basal part.
+                        iobUnits = it.iob?.iob,
+                    )
+                }
             },
             glucose = glucoseStatus?.let {
                 GlassLoopDashboardInput.Glucose(
@@ -158,54 +175,10 @@ class GlassLoopDashboardViewModel(
                     longAvgDeltaMgdl = it.longAvgDelta,
                 )
             },
-            aimi = client?.aimi ?: data,
+            aimi = aimi,
         )
     }
 }
-
-/**
- * What a client shows for the last loop run and the key factors.
- *
- * `maxIob` stays whatever the feed already had: the AIMI profile is not in the device status.
- * `RT.IOB` is the APS IOB the master uploaded. It is missing on some early exits of the AIMI tick,
- * and the cell then stays "--".
- */
-internal fun clientGlassLoopReading(
-    hasResult: Boolean,
-    openApsTimestamp: Long,
-    targetBg: Double,
-    smb: Double,
-    iob: Double?,
-    variableSens: Double?,
-    aimi: AimiGlassDashboardData,
-): ClientGlassLoopReading {
-    if (!hasResult) return ClientGlassLoopReading(lastRun = null, aimi = aimi)
-    val factors = aimi.keyFactors ?: AimiGlassDashboardData.KeyFactors(
-        targetBgMgdl = null,
-        maxIobUnits = null,
-        maxSmbUnits = null,
-        isfMgdlPerUnit = null,
-        stableBgMinutes = null,
-    )
-    return ClientGlassLoopReading(
-        lastRun = GlassLoopDashboardInput.LastRun(
-            dateMs = openApsTimestamp,
-            smbUnits = smb,
-            iobUnits = iob,
-        ),
-        aimi = aimi.copy(
-            keyFactors = factors.copy(
-                targetBgMgdl = targetBg.takeIf { it.isFinite() && it > 0.0 },
-                isfMgdlPerUnit = variableSens?.takeIf { it.isFinite() },
-            ),
-        ),
-    )
-}
-
-internal data class ClientGlassLoopReading(
-    val lastRun: GlassLoopDashboardInput.LastRun?,
-    val aimi: AimiGlassDashboardData,
-)
 
 /** What [buildGlassLoopDashboardState] needs to format its texts. The VM uses the app formatters. */
 internal interface GlassLoopDashboardFormat {
@@ -278,11 +251,6 @@ internal fun buildGlassLoopDashboardState(input: GlassLoopDashboardInput, format
         longAvgDeltaText = glucose?.let { format.signedGlucose(it.longAvgDeltaMgdl) } ?: NO_VALUE,
         longAvgDeltaIsPositive = (glucose?.longAvgDeltaMgdl ?: 0.0) >= 0.0,
         iobText = lastRun?.iobUnits?.let(::insulin) ?: NO_VALUE,
-        iobLabel = format.text(UiStrings.dashboard_glass_loop_iob_label),
-        iobHint = format.text(
-            UiStrings.dashboard_glass_loop_iob_hint,
-            lastRun?.dateMs?.takeIf { it > 0L }?.let(format::time) ?: NO_VALUE,
-        ),
         targetBgText = keyFactors?.targetBgMgdl?.let(format::glucose) ?: NO_VALUE,
         maxIobProfileText = keyFactors?.maxIobUnits?.let(::insulin) ?: NO_VALUE,
         maxSmbProfileText = keyFactors?.maxSmbUnits?.let(::insulin) ?: NO_VALUE,

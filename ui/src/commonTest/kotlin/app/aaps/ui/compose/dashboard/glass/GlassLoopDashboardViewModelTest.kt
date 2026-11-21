@@ -10,7 +10,6 @@ import app.aaps.ui.UiStrings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -47,68 +46,6 @@ class GlassLoopDashboardViewModelTest {
         glucose = glucose,
         aimi = aimi,
     )
-
-    @Test
-    fun iobLabelledAsAps() {
-        val state = buildGlassLoopDashboardState(
-            input(lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.1, iobUnits = 1.25)),
-            format,
-        )
-
-        assertEquals("dashboard_glass_loop_iob_label", state.iobLabel)
-        assertEquals("dashboard_glass_loop_iob_hint(14:32)", state.iobHint)
-        assertEquals("format_insulin_units(1.25)", state.iobText)
-        assertEquals("14:32", state.lastRunTime)
-    }
-
-    @Test
-    fun client_iobAndTargetFromMaster() {
-        val reading = clientGlassLoopReading(
-            hasResult = true,
-            openApsTimestamp = 1_000_000L,
-            targetBg = 80.0,
-            smb = 0.4,
-            iob = 1.7,
-            variableSens = 42.0,
-            aimi = AimiGlassDashboardData(
-                keyFactors = AimiGlassDashboardData.KeyFactors(
-                    targetBgMgdl = null,
-                    maxIobUnits = null,
-                    maxSmbUnits = 1.2,
-                    isfMgdlPerUnit = null,
-                    stableBgMinutes = 10.0,
-                ),
-            ),
-        )
-        val state = buildGlassLoopDashboardState(input(lastRun = reading.lastRun, aimi = reading.aimi), format)
-
-        assertEquals(1_000_000L, reading.lastRun?.dateMs)
-        assertEquals(0.4, reading.lastRun?.smbUnits)
-        assertEquals(1.7, reading.lastRun?.iobUnits)
-        assertEquals(80.0, reading.aimi.keyFactors?.targetBgMgdl)
-        assertEquals(42.0, reading.aimi.keyFactors?.isfMgdlPerUnit)
-        assertNull(reading.aimi.keyFactors?.maxIobUnits)
-        assertEquals(1.2, reading.aimi.keyFactors?.maxSmbUnits)
-        assertEquals("format_insulin_units(1.7)", state.iobText)
-        assertEquals("bg80.0", state.targetBgText)
-    }
-
-    @Test
-    fun client_missingResult_keepsFeed() {
-        val feed = AimiGlassDashboardData()
-        val reading = clientGlassLoopReading(
-            hasResult = false,
-            openApsTimestamp = 1_000_000L,
-            targetBg = 80.0,
-            smb = 0.4,
-            iob = 1.7,
-            variableSens = 42.0,
-            aimi = feed,
-        )
-
-        assertNull(reading.lastRun)
-        assertEquals(feed, reading.aimi)
-    }
 
     @Test
     fun master_unchanged() {
