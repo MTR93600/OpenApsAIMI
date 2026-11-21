@@ -3,6 +3,7 @@ package app.aaps.core.nssdk.networking
 import app.aaps.core.nssdk.localmodel.authorization.NSAuthRole
 import app.aaps.core.nssdk.localmodel.authorization.NSAuthSubject
 import app.aaps.core.nssdk.remotemodel.LastModified
+import app.aaps.core.nssdk.remotemodel.LenientRemoteTreatmentListSerializer
 import app.aaps.core.nssdk.remotemodel.NSResponse
 import app.aaps.core.nssdk.remotemodel.RemoteCreateUpdateResponse
 import app.aaps.core.nssdk.remotemodel.RemoteDeviceStatus
@@ -49,7 +50,8 @@ import kotlinx.serialization.json.JsonObject
 internal class NightscoutApi(
     private val client: HttpClient,
     /** Fully formed, e.g. `https://host/api/` - see `NsUrl.toBaseUrl`. */
-    private val baseUrl: String
+    private val baseUrl: String,
+    onDecodeWarning: (String) -> Unit = {}
 ) {
 
     // ---------------------------------------------------------------- plumbing
@@ -143,7 +145,8 @@ internal class NightscoutApi(
 
     // ---------------------------------------------------------------- treatments
 
-    private val treatmentListSerializer = NSResponse.serializer(ListSerializer(RemoteTreatment.serializer()))
+    private val treatmentListSerializer =
+        NSResponse.serializer(LenientRemoteTreatmentListSerializer(onDecodeWarning))
 
     suspend fun getTreatmentsNewerThan(createdAt: String, limit: Int) = call(HttpMethod.Get, treatmentListSerializer) {
         nsUrl("v3", "treatments") {

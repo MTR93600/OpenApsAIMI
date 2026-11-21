@@ -62,14 +62,16 @@ class NSAndroidClientImpl(
     accessToken: String,
     logging: Boolean,
     logger: (String) -> Unit,
-    private val dispatcher: CoroutineDispatcher = nsIoDispatcher
+    private val dispatcher: CoroutineDispatcher = nsIoDispatcher,
+    onDecodeWarning: (String) -> Unit = {}
 ) : NSAndroidClient {
 
     private val stack = NsKtorClient.stack(
         baseUrl = NsUrl.toBaseUrl(baseUrl),
         refreshToken = accessToken,
         logging = logging,
-        logger = logger
+        logger = logger,
+        onDecodeWarning = onDecodeWarning
     )
 
     internal val api = stack.api

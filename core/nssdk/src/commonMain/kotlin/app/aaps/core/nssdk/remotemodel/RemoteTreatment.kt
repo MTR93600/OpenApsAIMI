@@ -30,6 +30,7 @@ internal data class RemoteTreatment(
     val timestamp: Long? = null,          // integer($int64) or string required timestamp when the record or event occurred, you can choose from three input formats Unix  epoch in milliseconds (1525383610088), Unix epoch in seconds (1525383610), ISO 8601 with optional timezone ('2018-05-03T21:40:10.088Z' or '2018-05-03T23:40:10.088+02:00')
     @SerialName("created_at") val created_at: String? = null,       // integer($int64) or string timestamp on previous version of api, in my examples, a lot of treatments don't have date, only created_at, some of them with string others with long...
     @SerialName("utcOffset")
+    @Serializable(with = WholeLongSerializer::class)
     var utcOffset: Long? = null,          // integer Local UTC offset (timezone) of the event in minutes. This field can be set either directly by the client (in the incoming document) or it is automatically parsed from the date field.
     @SerialName("app") var app: String? = null,                   // Application or system in which the record was entered by human or device for the first time.
     @SerialName("device") val device: String? = null,              // string The device from which the data originated (including serial number of the device, if it is relevant and safe).
@@ -48,16 +49,16 @@ internal data class RemoteTreatment(
     @SerialName("glucoseType") val glucoseType: String? = null,    // string example: "Sensor", "Finger", "Manual"
     @SerialName("units") val units: String? = null,                // string The units for the glucose value, mg/dl or mmol/l. It is strongly recommended to fill in this field.
     @SerialName("carbs") val carbs: Double? = null,                // number... Amount of carbs given.
-    @SerialName("protein") val protein: Int? = null,               // number... Amount of protein given.
-    @SerialName("fat") val fat: Int? = null,                       // number... Amount of fat given.
+    @SerialName("protein") @Serializable(with = WholeIntSerializer::class) val protein: Int? = null, // number... Amount of protein given.
+    @SerialName("fat") @Serializable(with = WholeIntSerializer::class) val fat: Int? = null,       // number... Amount of fat given.
     @SerialName("insulin") val insulin: Double? = null,            // number... Amount of insulin, if any.
     /** Duration in minutes */
-    @SerialName("duration") val duration: Long? = null,             // number... Duration in minutes.
+    @SerialName("duration") @Serializable(with = WholeLongSerializer::class) val duration: Long? = null, // number... Duration in minutes.
     /** Duration in milliseconds */
-    @SerialName("durationInMilliseconds") val durationInMilliseconds: Long? = null, // number... Duration in milliseconds.
-    @SerialName("preBolus") val preBolus: Int? = null,             // number... How many minutes the bolus was given before the meal started.
-    @SerialName("splitNow") val splitNow: Int? = null,             // number... Immediate part of combo bolus (in percent).
-    @SerialName("splitExt") val splitExt: Int? = null,             // number... Extended part of combo bolus (in percent).
+    @SerialName("durationInMilliseconds") @Serializable(with = WholeLongSerializer::class) val durationInMilliseconds: Long? = null, // number... Duration in milliseconds.
+    @SerialName("preBolus") @Serializable(with = WholeIntSerializer::class) val preBolus: Int? = null, // number... How many minutes the bolus was given before the meal started.
+    @SerialName("splitNow") @Serializable(with = WholeIntSerializer::class) val splitNow: Int? = null, // number... Immediate part of combo bolus (in percent).
+    @SerialName("splitExt") @Serializable(with = WholeIntSerializer::class) val splitExt: Int? = null, // number... Extended part of combo bolus (in percent).
     @SerialName("percent") val percent: Double? = null,            // number... Eventual basal change in percent.
     @SerialName("absolute") val absolute: Double? = null,          // number... Eventual basal change in absolute value (insulin units per hour).
     @SerialName("targetTop") val targetTop: Double? = null,        // number... Top limit of temporary target.
@@ -72,8 +73,8 @@ internal data class RemoteTreatment(
     @SerialName("notes") val notes: String? = null,                // string Description/notes of treatment.
     @SerialName("enteredBy") val enteredBy: String? = null,        // string Who entered the treatment.
 
-    @SerialName("endId") val endId: Long? = null,                  // long id of record which ended this
-    @SerialName("pumpId") val pumpId: Long? = null,                // long or "Meal Bolus", "Correction Bolus", "Combo Bolus" ex  4102 not sure if long or int
+    @SerialName("endId") @Serializable(with = WholeLongSerializer::class) val endId: Long? = null, // long id of record which ended this
+    @SerialName("pumpId") @Serializable(with = WholeLongSerializer::class) val pumpId: Long? = null, // long or "Meal Bolus", "Correction Bolus", "Combo Bolus" ex  4102 not sure if long or int
     @SerialName("pumpType") val pumpType: String? = null,          // string "Meal Bolus", "Correction Bolus", "Combo Bolus" ex "ACCU_CHEK_INSIGHT_BLUETOOTH",
     @SerialName("pumpSerial") val pumpSerial: String? = null,      // string "Meal Bolus", "Correction Bolus", "Combo Bolus" "33013206",
 

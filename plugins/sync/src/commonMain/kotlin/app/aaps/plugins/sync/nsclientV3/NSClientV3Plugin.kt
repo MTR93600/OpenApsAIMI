@@ -697,7 +697,8 @@ class NSClientV3Plugin(
                 baseUrl = nsClientBaseUrl(url),
                 accessToken = accessToken,
                 logging = l.findByName(LTag.NSCLIENT.tag).enabled && (config.isEngineeringMode() || config.isDev()),
-                logger = { msg -> aapsLogger.debug(LTag.HTTP, msg) }
+                logger = { msg -> aapsLogger.debug(LTag.HTTP, msg) },
+                onDecodeWarning = { msg -> aapsLogger.warn(LTag.NSCLIENT, msg) }
             )
             clientUrl = url
             clientAccessToken = accessToken
