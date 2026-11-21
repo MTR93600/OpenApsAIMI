@@ -278,6 +278,11 @@ internal fun buildGlassLoopDashboardState(input: GlassLoopDashboardInput, format
         longAvgDeltaText = glucose?.let { format.signedGlucose(it.longAvgDeltaMgdl) } ?: NO_VALUE,
         longAvgDeltaIsPositive = (glucose?.longAvgDeltaMgdl ?: 0.0) >= 0.0,
         iobText = lastRun?.iobUnits?.let(::insulin) ?: NO_VALUE,
+        iobLabel = format.text(UiStrings.dashboard_glass_loop_iob_label),
+        iobHint = format.text(
+            UiStrings.dashboard_glass_loop_iob_hint,
+            lastRun?.dateMs?.takeIf { it > 0L }?.let(format::time) ?: NO_VALUE,
+        ),
         targetBgText = keyFactors?.targetBgMgdl?.let(format::glucose) ?: NO_VALUE,
         maxIobProfileText = keyFactors?.maxIobUnits?.let(::insulin) ?: NO_VALUE,
         maxSmbProfileText = keyFactors?.maxSmbUnits?.let(::insulin) ?: NO_VALUE,

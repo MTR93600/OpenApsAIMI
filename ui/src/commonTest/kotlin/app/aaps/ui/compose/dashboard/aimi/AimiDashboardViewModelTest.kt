@@ -1,10 +1,27 @@
 package app.aaps.ui.compose.dashboard.aimi
 
+import app.aaps.core.interfaces.aps.IobTotal
+import app.aaps.core.objects.extensions.round
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class AimiDashboardViewModelTest {
+
+    @Test
+    fun heroIobRoundedLikeChip() {
+        val bolus = IobTotal(time = 0).apply { iob = 1.23456 }
+        val basal = IobTotal(time = 0).apply { basaliob = 0.23456 }
+        val chip = IobTotal(time = 0).apply { iob = 1.23456 }.round().iob +
+            IobTotal(time = 0).apply { basaliob = 0.23456 }.round().basaliob
+
+        val hero = AimiDashboardRules.heroIobUnits(bolus, basal)
+
+        assertEquals(chip, hero)
+        assertTrue(abs(hero - (1.23456 + 0.23456)) > 1e-6)
+    }
 
     @Test
     fun client_detailsShowMasterTargetSmbBasal() {

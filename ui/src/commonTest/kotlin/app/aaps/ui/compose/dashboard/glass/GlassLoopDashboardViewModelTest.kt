@@ -49,6 +49,19 @@ class GlassLoopDashboardViewModelTest {
     )
 
     @Test
+    fun iobLabelledAsAps() {
+        val state = buildGlassLoopDashboardState(
+            input(lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.1, iobUnits = 1.25)),
+            format,
+        )
+
+        assertEquals("dashboard_glass_loop_iob_label", state.iobLabel)
+        assertEquals("dashboard_glass_loop_iob_hint(14:32)", state.iobHint)
+        assertEquals("format_insulin_units(1.25)", state.iobText)
+        assertEquals("14:32", state.lastRunTime)
+    }
+
+    @Test
     fun client_iobAndTargetFromMaster() {
         val reading = clientGlassLoopReading(
             hasResult = true,

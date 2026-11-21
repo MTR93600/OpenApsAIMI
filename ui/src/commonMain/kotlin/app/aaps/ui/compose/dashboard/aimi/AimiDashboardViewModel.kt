@@ -14,6 +14,7 @@ import app.aaps.core.data.model.TT
 import app.aaps.core.data.model.TrendArrow
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.APSResult
+import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
@@ -45,6 +46,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.objects.extensions.isInProgress
+import app.aaps.core.objects.extensions.round
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.pump.tickerFlow
 import app.aaps.core.ui.extensions.toStringFull
@@ -271,9 +273,10 @@ class AimiDashboardViewModel(
             UiStrings.dashboard_glass_delta,
             deltaMgdl?.let { profileUtil.fromMgdlToSignedStringInUnits(it) } ?: rh.gs(CoreUiStrings.value_unavailable_short),
         )
-        val bolusIob = iobCobCalculator.calculateIobFromBolus()
-        val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()
-        val totalIob = bolusIob.iob + basalIob.basaliob
+        val totalIob = AimiDashboardRules.heroIobUnits(
+            iobCobCalculator.calculateIobFromBolus(),
+            iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended(),
+        )
         val iobText = if (totalIob >= 0) rh.gs(InterfacesStrings.format_insulin_units, totalIob)
         else rh.gs(CoreUiStrings.format_insulin_units_signed, totalIob)
         val dash = rh.gs(CoreUiStrings.value_unavailable_short)
@@ -508,6 +511,13 @@ data class AimiDashboardTir(
 
 /** Pure rules behind [AimiDashboardViewModel], kept apart so they can be tested without a database. */
 internal object AimiDashboardRules {
+
+    /** The same sum as the IOB chip: each part rounded to 0.001 U before adding. */
+    fun heroIobUnits(bolus: IobTotal, basal: IobTotal): Double {
+        val bolusIob = bolus.round()
+        val basalIob = basal.round()
+        return bolusIob.iob + basalIob.basaliob
+    }
 
     /**
      * Autosens shown next to IOB. On the master a missing ratio is 100%, which is what the screen showed.

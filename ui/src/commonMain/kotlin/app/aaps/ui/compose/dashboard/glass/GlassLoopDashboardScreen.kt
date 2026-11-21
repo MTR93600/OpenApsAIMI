@@ -215,12 +215,16 @@ fun GlassLoopDashboardScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MetricCell(
                             p, Modifier.weight(1f),
-                            label = stringResource(UiStrings.dashboard_glass_loop_iob_label),
+                            label = uiState.iobLabel.ifEmpty { stringResource(UiStrings.dashboard_glass_loop_iob_label) },
                             labelColor = LoopPalette.indigo,
                             value = uiState.iobText,
                             valueColor = LoopPalette.indigo,
                             subContent = {
-                                Text(stringResource(UiStrings.dashboard_glass_loop_iob_hint), color = p.textMuted, fontSize = 9.sp)
+                                Text(
+                                    uiState.iobHint.ifEmpty { stringResource(UiStrings.dashboard_glass_loop_iob_hint, "--") },
+                                    color = p.textMuted,
+                                    fontSize = 9.sp,
+                                )
                             }
                         )
                         MetricCell(

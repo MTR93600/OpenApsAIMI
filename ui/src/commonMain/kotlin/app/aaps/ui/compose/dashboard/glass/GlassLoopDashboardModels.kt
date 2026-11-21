@@ -17,6 +17,10 @@ data class GlassLoopDashboardState(
     val longAvgDeltaText: String = "--",
     val longAvgDeltaIsPositive: Boolean = true,
     val iobText: String = "--",
+    /** "IOB APS". Empty until the first refresh; the screen then uses the string resource. */
+    val iobLabel: String = "",
+    /** Time of the APS IOB, or "--" when the loop has not run. */
+    val iobHint: String = "",
     val targetBgText: String = "--",
     val maxIobProfileText: String = "--",
     val maxSmbProfileText: String = "--",
