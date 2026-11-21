@@ -24,6 +24,7 @@ import app.aaps.core.interfaces.iob.GlucoseStatusProvider
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.overview.LastBgData
 import app.aaps.core.interfaces.plugin.ActivePlugin
 import app.aaps.core.interfaces.profile.ProfileFunction
@@ -32,6 +33,7 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.AdaptiveSmoothingQualityTier
 import app.aaps.core.interfaces.rx.events.EventLoopUpdateGui
+import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.source.CgmSensorStatusProvider
 import app.aaps.core.interfaces.source.PromotionRejectReason
 import app.aaps.core.interfaces.source.PromotionResult
@@ -41,6 +43,7 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.objects.extensions.isInProgress
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.compose.pump.tickerFlow
@@ -56,6 +59,7 @@ import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -64,6 +68,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -83,7 +88,7 @@ import kotlinx.coroutines.withContext
  * are the same. The glucose, IOB, loop pill, steps, heart rate and pump line come from the shared view
  * models the Glass home also uses, so they are not computed twice.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
 @ViewModelKey
 @Stable
@@ -97,6 +102,7 @@ class AimiDashboardViewModel(
     private val glucoseStatusProvider: GlucoseStatusProvider,
     private val lastBgData: LastBgData,
     private val loop: Loop,
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val dateUtil: DateUtil,
     private val rh: TextResolver,
     private val decimalFormatter: DecimalFormatter,
@@ -124,19 +130,24 @@ class AimiDashboardViewModel(
             .launchIn(viewModelScope)
     }
 
-    private fun refreshTriggers(): Flow<Unit> = merge(
+    private fun refreshTriggers(): Flow<Unit> {
         // Emits at once, then every minute: ages, "last AIMI run" and the adaptation freshness move with time.
-        tickerFlow(60_000L),
-        rxBus.toFlow(EventLoopUpdateGui::class).map { },
-        persistenceLayer.observeChanges(GV::class).map { },
-        persistenceLayer.observeChanges(TB::class).map { },
-        persistenceLayer.observeChanges(TT::class).map { },
-        persistenceLayer.observeChanges(TE::class).map { },
-        persistenceLayer.observeChanges(RM::class).map { },
-        activePlugin.activePump.batteryLevel.map { },
-        persistenceLayer.databaseClearedFlow.map { },
-        preferences.observe(StringKey.OApsAIMIContextStorage).map { },
-    )
+        val base = merge(
+            tickerFlow(60_000L),
+            rxBus.toFlow(EventLoopUpdateGui::class).map { },
+            persistenceLayer.observeChanges(GV::class).map { },
+            persistenceLayer.observeChanges(TB::class).map { },
+            persistenceLayer.observeChanges(TT::class).map { },
+            persistenceLayer.observeChanges(TE::class).map { },
+            persistenceLayer.observeChanges(RM::class).map { },
+            activePlugin.activePump.batteryLevel.map { },
+            persistenceLayer.databaseClearedFlow.map { },
+            preferences.observe(StringKey.OApsAIMIContextStorage).map { },
+        )
+        // A client's loop never runs, so EventLoopUpdateGui stays silent. The device status is the signal.
+        if (!config.AAPSCLIENT) return base
+        return merge(base, rxBus.toFlow(EventNsClientStatusUpdated::class).debounce(300).map { })
+    }
 
     private var refreshJob: Job? = null
 
@@ -189,7 +200,7 @@ class AimiDashboardViewModel(
     private suspend fun buildStatus(): AimiDashboardStatus {
         val now = dateUtil.now()
         val profile = profileFunction.getProfile()
-        val request = loop.lastRun?.request
+        val request = ApsResultSource.displayed(config, processedDeviceStatusData, now) { loop.lastRun?.request }
         val rt = request?.rawData() as? RT
 
         val activeTempBasal = processedTbrEbData.getTempBasalIncludingConvertedExtended(now)?.takeIf { it.isInProgress(dateUtil) }
@@ -234,9 +245,12 @@ class AimiDashboardViewModel(
             adaptationSummary = adaptationSummary,
             adaptationContentDescription = rh.gs(UiStrings.dashboard_aimi_adaptation_a11y, adaptationSummary),
             adaptationHasAttention = adaptation.attentionCount > 0,
-            pulseTitle = pulseTitle(loop.lastRun?.lastAPSRun, now),
+            pulseTitle = pulseTitle(
+                AimiDashboardRules.pulseAtMs(config.AAPSCLIENT, loop.lastRun?.lastAPSRun, processedDeviceStatusData.openApsTimestamp),
+                now,
+            ),
             pulseSummary = pulseSummary(request),
-            pulseMeta = pulseMeta(request),
+            pulseMeta = pulseMeta(request, rt),
             pulseHypoRisk = request?.isHypoRisk == true,
             contextIndicatorVisible = preferences.get(StringKey.OApsAIMIContextStorage).length > CONTEXT_MIN_LENGTH,
             smoothingTier = smoothing?.tier,
@@ -262,8 +276,17 @@ class AimiDashboardViewModel(
         val totalIob = bolusIob.iob + basalIob.basaliob
         val iobText = if (totalIob >= 0) rh.gs(InterfacesStrings.format_insulin_units, totalIob)
         else rh.gs(CoreUiStrings.format_insulin_units_signed, totalIob)
-        val autosensPercent = decimalFormatter.to0Decimal((request?.autosensResult?.ratio ?: 1.0) * 100.0)
         val dash = rh.gs(CoreUiStrings.value_unavailable_short)
+        val autosensRatio = AimiDashboardRules.autosensRatio(config.AAPSCLIENT, request?.autosensResult?.ratio, rt?.sensitivityRatio)
+        val autosensPercent = autosensRatio?.let { decimalFormatter.to0Decimal(it * 100.0) } ?: dash
+        val numbers = AimiDashboardRules.adjustmentNumbers(
+            hasRequest = request != null,
+            targetBg = request?.targetBG ?: 0.0,
+            smb = request?.smb ?: 0.0,
+            rate = request?.rate ?: -1.0,
+            peakMinutes = request?.oapsProfileAimi?.peakTime,
+            diaHours = request?.oapsProfileAimi?.dia,
+        )
 
         return AimiAdjustmentDetails(
             glycemiaLine = rh.gs(
@@ -282,12 +305,12 @@ class AimiDashboardViewModel(
             pumpSiteText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.CANNULA_CHANGE)?.let { now - it.timestamp }),
             pumpSensorText = formatDeviceAge(rh, persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.let { now - it.timestamp }),
             adjustments = activeAdjustments(now),
-            peakText = request?.oapsProfileAimi?.peakTime?.let { rh.gs(UiStrings.dashboard_adjustment_minutes, decimalFormatter.to0Decimal(it)) } ?: dash,
-            diaText = request?.oapsProfileAimi?.dia?.let { rh.gs(UiStrings.dashboard_adjustment_hours, decimalFormatter.to1Decimal(it)) } ?: dash,
+            peakText = numbers.peakMinutes?.let { rh.gs(UiStrings.dashboard_adjustment_minutes, decimalFormatter.to0Decimal(it)) } ?: dash,
+            diaText = numbers.diaHours?.let { rh.gs(UiStrings.dashboard_adjustment_hours, decimalFormatter.to1Decimal(it)) } ?: dash,
             // The target AIMI ended up using (RT.targetBG), not the profile target it started from. 0 means not set.
-            targetText = request?.targetBG?.takeIf { it > 0.0 }?.let { profileUtil.fromMgdlToStringInUnits(it) } ?: dash,
-            smbText = request?.let { rh.gs(UiStrings.dashboard_adjustment_units, decimalFormatter.to2Decimal(it.smb)) } ?: dash,
-            basalText = request?.rate?.takeIf { it >= 0.0 }?.let { rh.gs(UiStrings.dashboard_rate_uh, decimalFormatter.to2Decimal(it)) } ?: dash,
+            targetText = numbers.targetMgdl?.let { profileUtil.fromMgdlToStringInUnits(it) } ?: dash,
+            smbText = numbers.smbUnits?.let { rh.gs(UiStrings.dashboard_adjustment_units, decimalFormatter.to2Decimal(it)) } ?: dash,
+            basalText = numbers.basalUh?.let { rh.gs(UiStrings.dashboard_rate_uh, decimalFormatter.to2Decimal(it)) } ?: dash,
             reason = request?.reason?.let { AimiDashboardRules.plainText(it) }?.takeIf { it.isNotBlank() },
             trajectoryTitle = AimiDashboardRules.trajectoryLabel(rt?.trajectoryType)?.let { rh.gs(it) } ?: rt?.trajectoryType,
             trajectoryMetrics = rt?.takeIf { it.trajectoryType != null }?.let { r ->
@@ -387,10 +410,11 @@ class AimiDashboardViewModel(
         return if (request.isHypoRisk) rh.gs(UiStrings.dashboard_aimi_pulse_hypo, core) else core
     }
 
-    private fun pulseMeta(request: APSResult?): String {
+    private fun pulseMeta(request: APSResult?, rt: RT?): String {
         request ?: return ""
         val basal = if (request.rate == -1.0) NO_VALUE else rh.gs(UiStrings.dashboard_rate_uh, decimalFormatter.to2Decimal(request.rate))
-        val sens = decimalFormatter.to0Decimal((request.autosensResult?.ratio ?: 1.0) * 100.0)
+        val ratio = AimiDashboardRules.autosensRatio(config.AAPSCLIENT, request.autosensResult?.ratio, rt?.sensitivityRatio)
+        val sens = ratio?.let { decimalFormatter.to0Decimal(it * 100.0) } ?: NO_VALUE
         return rh.gs(UiStrings.dashboard_aimi_pulse_meta, decimalFormatter.to2Decimal(request.smb), basal, sens)
     }
 
@@ -484,6 +508,47 @@ data class AimiDashboardTir(
 
 /** Pure rules behind [AimiDashboardViewModel], kept apart so they can be tested without a database. */
 internal object AimiDashboardRules {
+
+    /**
+     * Autosens shown next to IOB. On the master a missing ratio is 100%, which is what the screen showed.
+     * On a client `autosensResult` is empty, so the master's `sensitivityRatio` is shown when it is a real number.
+     */
+    fun autosensRatio(isClient: Boolean, requestRatio: Double?, sensitivityRatio: Double?): Double? =
+        if (isClient) sensitivityRatio?.takeIf { it.isFinite() } else requestRatio ?: 1.0
+
+    /** When the pulse says the loop last ran. On the master this is `loop.lastRun.lastAPSRun`, unchanged. */
+    fun pulseAtMs(isClient: Boolean, localLastApsRun: Long?, openApsTimestamp: Long): Long? =
+        if (isClient) openApsTimestamp.takeIf { it > 0L } else localLastApsRun
+
+    /**
+     * The five adjustment numbers. Peak and DIA come only from `oapsProfileAimi`, which a device status
+     * does not carry, so on a client they stay null and the screen shows a dash.
+     */
+    fun adjustmentNumbers(
+        hasRequest: Boolean,
+        targetBg: Double,
+        smb: Double,
+        rate: Double,
+        peakMinutes: Double?,
+        diaHours: Double?,
+    ): AdjustmentNumbers {
+        if (!hasRequest) return AdjustmentNumbers(null, null, null, null, null)
+        return AdjustmentNumbers(
+            targetMgdl = targetBg.takeIf { it > 0.0 },
+            smbUnits = smb,
+            basalUh = rate.takeIf { it >= 0.0 },
+            peakMinutes = peakMinutes,
+            diaHours = diaHours,
+        )
+    }
+
+    data class AdjustmentNumbers(
+        val targetMgdl: Double?,
+        val smbUnits: Double?,
+        val basalUh: Double?,
+        val peakMinutes: Double?,
+        val diaHours: Double?,
+    )
 
     private const val SAFETY_CRITICAL_BG = 70.0
     private const val SAFETY_LIMITED_BG = 90.0

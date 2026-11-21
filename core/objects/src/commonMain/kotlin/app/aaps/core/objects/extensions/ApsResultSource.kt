@@ -1,0 +1,46 @@
+package app.aaps.core.objects.extensions
+
+import app.aaps.core.interfaces.aps.APSResult
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
+
+/**
+ * The APS result a screen should show.
+ *
+ * On a phone that loops, the caller passes the value it already showed. That value is returned as it is.
+ * On a client the loop is forced off, so `loop.lastRun` is empty: the master's `openaps.suggested` is used
+ * instead, and only while it is younger than [CLIENT_MAX_AGE_MS]. A timestamp in the future is not shown.
+ */
+object ApsResultSource {
+
+    /** Same bound as the Essential home: two missed loop runs, then the master's target is not current. */
+    const val CLIENT_MAX_AGE_MS = 15L * 60L * 1000L
+
+    /**
+     * One call reads the device status once. [ProcessedDeviceStatusData.getAPSResult] allocates a new
+     * result on every call.
+     */
+    fun displayed(
+        config: Config,
+        deviceStatus: ProcessedDeviceStatusData,
+        nowMs: Long,
+        local: () -> APSResult?,
+    ): APSResult? = when {
+        config.AAPSCLIENT -> {
+            val ts = deviceStatus.openApsTimestamp
+            if (ts <= 0L || nowMs - ts !in 0..CLIENT_MAX_AGE_MS) null else deviceStatus.getAPSResult()
+        }
+
+        else              -> local()
+    }
+
+    /** The target the APS used, in mg/dL, or null when it is missing, zero or not a real number. */
+    fun targetMgdl(
+        config: Config,
+        deviceStatus: ProcessedDeviceStatusData,
+        nowMs: Long,
+        local: () -> Double?,
+    ): Double? =
+        if (config.AAPSCLIENT) displayed(config, deviceStatus, nowMs) { null }?.targetBG?.takeIf { it.isFinite() && it > 0.0 }
+        else local()
+}

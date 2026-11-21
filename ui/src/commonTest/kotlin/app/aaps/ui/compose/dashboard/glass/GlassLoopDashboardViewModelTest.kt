@@ -10,6 +10,7 @@ import app.aaps.ui.UiStrings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -46,6 +47,79 @@ class GlassLoopDashboardViewModelTest {
         glucose = glucose,
         aimi = aimi,
     )
+
+    @Test
+    fun client_iobAndTargetFromMaster() {
+        val reading = clientGlassLoopReading(
+            hasResult = true,
+            openApsTimestamp = 1_000_000L,
+            targetBg = 80.0,
+            smb = 0.4,
+            iob = 1.7,
+            variableSens = 42.0,
+            aimi = AimiGlassDashboardData(
+                keyFactors = AimiGlassDashboardData.KeyFactors(
+                    targetBgMgdl = null,
+                    maxIobUnits = null,
+                    maxSmbUnits = 1.2,
+                    isfMgdlPerUnit = null,
+                    stableBgMinutes = 10.0,
+                ),
+            ),
+        )
+        val state = buildGlassLoopDashboardState(input(lastRun = reading.lastRun, aimi = reading.aimi), format)
+
+        assertEquals(1_000_000L, reading.lastRun?.dateMs)
+        assertEquals(0.4, reading.lastRun?.smbUnits)
+        assertEquals(1.7, reading.lastRun?.iobUnits)
+        assertEquals(80.0, reading.aimi.keyFactors?.targetBgMgdl)
+        assertEquals(42.0, reading.aimi.keyFactors?.isfMgdlPerUnit)
+        assertNull(reading.aimi.keyFactors?.maxIobUnits)
+        assertEquals(1.2, reading.aimi.keyFactors?.maxSmbUnits)
+        assertEquals("format_insulin_units(1.7)", state.iobText)
+        assertEquals("bg80.0", state.targetBgText)
+    }
+
+    @Test
+    fun client_missingResult_keepsFeed() {
+        val feed = AimiGlassDashboardData()
+        val reading = clientGlassLoopReading(
+            hasResult = false,
+            openApsTimestamp = 1_000_000L,
+            targetBg = 80.0,
+            smb = 0.4,
+            iob = 1.7,
+            variableSens = 42.0,
+            aimi = feed,
+        )
+
+        assertNull(reading.lastRun)
+        assertEquals(feed, reading.aimi)
+    }
+
+    @Test
+    fun master_unchanged() {
+        val state = buildGlassLoopDashboardState(
+            input(
+                lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.5, iobUnits = 0.3),
+                aimi = AimiGlassDashboardData(
+                    keyFactors = AimiGlassDashboardData.KeyFactors(
+                        targetBgMgdl = 90.0,
+                        maxIobUnits = 3.0,
+                        maxSmbUnits = null,
+                        isfMgdlPerUnit = null,
+                        stableBgMinutes = null,
+                    ),
+                ),
+            ),
+            format,
+        )
+
+        assertEquals("format_insulin_units(0.3)", state.iobText)
+        assertEquals("format_insulin_units(0.5)", state.requestedSmbText)
+        assertEquals("bg90.0", state.targetBgText)
+        assertEquals("14:32", state.lastRunTime)
+    }
 
     @Test
     fun `a null lastAPSResult produces a state with defaulted text and no crash`() {

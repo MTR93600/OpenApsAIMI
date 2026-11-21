@@ -17,6 +17,8 @@ import app.aaps.core.data.ue.ValueWithUnit
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.bolus.MasterActionExecutor
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.db.ProcessedTbrEbData
@@ -33,6 +35,7 @@ import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.objects.constraints.ConstraintObject
+import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.objects.extensions.convertedToPercent
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -58,6 +61,8 @@ class LoopHubImpl(
     private val constraintChecker: ConstraintsChecker,
     private val iobCobCalculator: IobCobCalculator,
     private val loop: Loop,
+    private val config: Config,
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val profileFunction: ProfileFunction,
     private val profileUtil: ProfileUtil,
     private val persistenceLayer: PersistenceLayer,
@@ -140,8 +145,11 @@ class LoopHubImpl(
     override val currentTargetMgdl: Double?
         get() = runBlocking {
             // Prefer the targetBG of the last APS run (AIMI writes it in rT.targetBG), the same
-            // value the overview shows. Not the static profile middle.
-            val apsTarget = loop.lastRun?.constraintsProcessed?.targetBG
+            // value the overview shows. Not the static profile middle. On a client that value is
+            // the master's, from the device status. The order stays: APS target, then the temp target.
+            val apsTarget = ApsResultSource.targetMgdl(config, processedDeviceStatusData, nowMs()) {
+                loop.lastRun?.constraintsProcessed?.targetBG
+            }
             if (apsTarget != null && apsTarget.isFinite() && apsTarget > 0.0) {
                 return@runBlocking apsTarget
             }
