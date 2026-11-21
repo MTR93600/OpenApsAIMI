@@ -9,7 +9,6 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -24,7 +23,9 @@ import kotlinx.serialization.json.JsonPrimitive
  *
  * The check uses the IEEE value, which is also what Gson does, so a decimal above 2^53 can round
  * before the fraction is tested. Treatment integers (durations, pump ids) sit far below that.
- * A quoted number with surrounding spaces is refused; kotlinx already refused it, and Gson trimmed.
+ * A quoted number goes through `toDoubleOrNull`. That parser is the same on the JVM and on Native:
+ * it trims spaces and accepts a leading `+`, a trailing `d` or `f`, and a hexadecimal float, as
+ * `Double.parseDouble` does. A fraction is still refused.
  */
 internal object WholeLongSerializer : KSerializer<Long> {
 
@@ -58,8 +59,7 @@ internal object WholeIntSerializer : KSerializer<Int> {
 
 private fun integralLong(element: JsonElement): Long {
     val primitive = element as? JsonPrimitive
-    if (primitive == null || primitive is JsonNull)
-        throw SerializationException("Expected an integral number, found $element")
+        ?: throw SerializationException("Expected an integral number, found $element")
     primitive.content.toLongOrNull()?.let { return it }
     val asDouble = primitive.content.toDoubleOrNull()
     if (asDouble != null && asDouble.isFinite()) {

@@ -62,7 +62,7 @@ internal object NsKtorClient {
         refreshToken: String,
         logging: Boolean,
         logger: (String) -> Unit,
-        onDecodeWarning: (String) -> Unit = {}
+        onDecodeWarning: (String) -> Unit
     ): Stack {
         val main = build(logging, logger)
         val refresh = build(logging, logger)

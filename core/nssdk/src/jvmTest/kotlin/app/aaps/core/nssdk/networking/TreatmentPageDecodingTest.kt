@@ -81,6 +81,24 @@ class TreatmentPageDecodingTest {
         assertThat(warnings.single()).startsWith("Treatments, documents skipped because they could not be read: 1. The first: bad:")
     }
 
+    /** Empty values and the ETag: the cursor still moves, and one warning names the count. */
+    @Test
+    fun `a page of only unreadable treatments is empty and the etag still advances`() = runTest {
+        enqueue(
+            """{"result":[
+              {"eventType":"Correction Bolus","date":{"x":1},"insulin":0.1,"identifier":"bad-a"},
+              {"eventType":"Correction Bolus","date":"not-a-number","insulin":0.1,"identifier":"bad-b"}
+            ]}"""
+        )
+
+        val response = client.getTreatmentsModifiedSince(1, 100)
+
+        assertThat(response.values).isEmpty()
+        assertThat(response.lastServerModified).isEqualTo(1785992481019L)
+        assertThat(warnings).hasSize(1)
+        assertThat(warnings.single()).startsWith("Treatments, documents skipped because they could not be read: 2. The first: bad-a:")
+    }
+
     @Test
     fun `first load keeps the readable treatments and does not invent a cursor`() = runTest {
         enqueue(
