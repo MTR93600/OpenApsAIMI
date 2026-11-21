@@ -276,6 +276,8 @@ class NSDeviceStatusHandler(
                         processedDeviceStatusData.openAPSData.suggested = suggested
                         processedDeviceStatusData.openAPSData.clockSuggestedDecoded = clock
                         processedDeviceStatusData.openAPSData.iob = nsDeviceStatus.openaps?.iob.safeGetDoubleAllowNull("iob")
+                        processedDeviceStatusData.openAPSData.displayedIob =
+                            nsDeviceStatus.openaps?.iob.safeGetDoubleAllowNull(ProcessedDeviceStatusData.DISPLAYED_IOB_KEY)
                     }
                     processedDeviceStatusData.openAPSData.clockSuggested = clock
                 }

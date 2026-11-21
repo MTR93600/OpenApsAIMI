@@ -121,6 +121,79 @@ class ApsResultSourceTest {
     }
 
     @Test
+    fun master_displayedIob_staysLocal() {
+        config.aps = true
+        fresh(target = 80.0, ageMs = 60_000L)
+        deviceStatus.openAPSData.displayedIob = 1.5
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+        assertEquals(0, deviceStatus.reads)
+    }
+
+    @Test
+    fun client_freshDisplayedIob_usesMaster() {
+        client()
+        fresh(target = 80.0, ageMs = 2 * 60_000L)
+        deviceStatus.openAPSData.displayedIob = 1.25
+
+        assertEquals(1.25, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_missingDisplayedIob_usesLocal() {
+        client()
+        fresh(target = 80.0, ageMs = 60_000L)
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_staleDisplayedIob_usesLocal() {
+        client()
+        fresh(target = 80.0, ageMs = 16 * 60_000L)
+        deviceStatus.openAPSData.displayedIob = 1.25
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_futureDisplayedIob_usesLocal() {
+        client()
+        fresh(target = 80.0, ageMs = -(ApsResultSource.CLIENT_FUTURE_SLACK_MS + 1_000L))
+        deviceStatus.openAPSData.displayedIob = 1.25
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_displayedIobZero_isUsed() {
+        client()
+        fresh(target = 80.0, ageMs = 60_000L)
+        deviceStatus.openAPSData.displayedIob = 0.0
+
+        assertEquals(0.0, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_displayedIobNotFinite_usesLocal() {
+        client()
+        fresh(target = 80.0, ageMs = 60_000L)
+        deviceStatus.openAPSData.displayedIob = Double.NaN
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
+    fun client_unreadableSuggested_displayedIob_usesLocal() {
+        client()
+        deviceStatus.openAPSData.clockSuggested = now - 60_000L
+        deviceStatus.openAPSData.clockSuggestedDecoded = now - 10 * 60_000L
+        deviceStatus.openAPSData.displayedIob = 1.25
+
+        assertEquals(0.4, ApsResultSource.displayedIob(config, deviceStatus, now, 0.4))
+    }
+
+    @Test
     fun client_lastSuggestedUnreadable_returnsNull() {
         client()
         deviceStatus.openAPSData.clockSuggested = now - 60_000L

@@ -221,6 +221,15 @@ enum class BooleanKey(
         sync = SyncSpec(SyncChannel.Cold, SyncDirection.Bidirectional)
     ),
 
+    // Off until the user turns it on. A client does not publish a device status, so the switch is hidden there.
+    ApsPublishDisplayedIob(
+        "aps_publish_displayed_iob",
+        false,
+        KeysStrings.pref_title_aps_publish_displayed_iob,
+        KeysStrings.pref_summary_aps_publish_displayed_iob,
+        showInNsClientMode = false,
+    ),
+
     // Simple Mode uploads with no switch, and that is the decision, not an oversight: `defaultedBySM`
     // hides the row and `hideParentScreenIfHidden` takes the whole Data choices screen with it. Two
     // separate reviews have read this as a bug and proposed dropping the flags - please do not.

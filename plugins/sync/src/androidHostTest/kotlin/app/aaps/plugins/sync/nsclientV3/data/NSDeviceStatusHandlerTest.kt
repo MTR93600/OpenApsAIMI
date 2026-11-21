@@ -20,6 +20,7 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.BeforeEach
@@ -362,6 +363,47 @@ internal class NSDeviceStatusHandlerTest {
         assertThat(openAPSData.clockSuggestedDecoded).isEqualTo(6_000L)
     }
 
+    @Test
+    fun displayedIob_present_isStored() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1, iob = buildJsonObject {
+            put("iob", 0.2)
+            put("displayed", 1.25)
+        })))
+
+        assertThat(openAPSData.iob).isEqualTo(0.2)
+        assertThat(openAPSData.displayedIob).isEqualTo(1.25)
+    }
+
+    @Test
+    fun displayedIob_absent_isNull() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1)))
+        assertThat(openAPSData.displayedIob).isNull()
+
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2, iob = buildJsonObject { put("iob", 0.2) })))
+        assertThat(openAPSData.displayedIob).isNull()
+        assertThat(openAPSData.iob).isEqualTo(0.2)
+    }
+
+    @Test
+    fun displayedIob_olderDocument_isUnchanged() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2, iob = buildJsonObject { put("displayed", 1.25) })))
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1)))
+
+        assertThat(openAPSData.displayedIob).isEqualTo(1.25)
+    }
+
+    @Test
+    fun displayedIob_unreadableNewerSuggested_isUnchanged() {
+        givenResults(APSResult.Algorithm.SMB)
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_1, iob = buildJsonObject { put("displayed", 1.25) })))
+        sut.handleNewData(arrayOf(deviceStatusAt(TIME_2, readable = false, iob = buildJsonObject { put("displayed", 9.0) })))
+
+        assertThat(openAPSData.displayedIob).isEqualTo(1.25)
+    }
+
     /** The one warning of the batch. */
     private fun oneWarning(): String {
         val message = argumentCaptor<String>()
@@ -387,14 +429,23 @@ internal class NSDeviceStatusHandlerTest {
     }
 
     /** @param readable false leaves out a field the loop result must have, so it cannot be decoded */
-    private fun deviceStatusAt(time: String, deliverAt: String? = null, readable: Boolean = true, date: Long? = null) = NSDeviceStatus(
+    private fun deviceStatusAt(
+        time: String,
+        deliverAt: String? = null,
+        readable: Boolean = true,
+        date: Long? = null,
+        iob: JsonObject? = null,
+    ) = NSDeviceStatus(
         device = "openaps://test",
         date = date,
-        openaps = NSDeviceStatus.OpenAps(suggested = buildJsonObject {
-            put("timestamp", time)
-            deliverAt?.let { put("deliverAt", it) }
-            if (readable) put("runningDynamicIsf", false)
-        })
+        openaps = NSDeviceStatus.OpenAps(
+            suggested = buildJsonObject {
+                put("timestamp", time)
+                deliverAt?.let { put("deliverAt", it) }
+                if (readable) put("runningDynamicIsf", false)
+            },
+            iob = iob,
+        )
     )
 
     private companion object {

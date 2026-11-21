@@ -49,4 +49,26 @@ object ApsResultSource {
     ): Double? =
         if (config.AAPSCLIENT) displayed(config, deviceStatus, nowMs) { null }?.targetBG?.takeIf { it.isFinite() && it > 0.0 }
         else local()
+
+    /**
+     * The IOB a screen should show.
+     *
+     * On a phone that loops, [local] is returned and the device status is not read.
+     * On a client, `openaps.iob.displayed` is used while the master's suggested is still current,
+     * with the same age rules as [displayed]. A missing, bad or old value falls back to [local].
+     */
+    fun displayedIob(
+        config: Config,
+        deviceStatus: ProcessedDeviceStatusData,
+        nowMs: Long,
+        local: Double,
+    ): Double {
+        if (!config.AAPSCLIENT) return local
+        val open = deviceStatus.openAPSData
+        val remote = open.displayedIob?.takeIf { it.isFinite() } ?: return local
+        val ts = deviceStatus.openApsTimestamp
+        val unreadable = open.clockSuggested > open.clockSuggestedDecoded
+        if (unreadable || ts <= 0L || nowMs - ts !in -CLIENT_FUTURE_SLACK_MS..CLIENT_MAX_AGE_MS) return local
+        return remote
+    }
 }

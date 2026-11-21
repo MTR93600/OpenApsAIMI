@@ -16,11 +16,14 @@ import app.aaps.core.interfaces.overview.SensitivityOverview
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.rx.events.EventShowDialog
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.keys.interfaces.Preferences
-import app.aaps.core.objects.extensions.round
+import app.aaps.core.objects.extensions.ApsResultSource
+import app.aaps.core.objects.extensions.displayedIobUnits
+import app.aaps.core.objects.extensions.profileDisplayedIob
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.extensions.displayText
 import dev.zacsweers.metro.Assisted
@@ -32,6 +35,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,6 +53,7 @@ class ChipsViewModel(
     private val rh: TextResolver,
     private val decimalFormatter: DecimalFormatter,
     private val dateUtil: DateUtil,
+    private val processedDeviceStatusData: ProcessedDeviceStatusData,
     private val aapsLogger: AAPSLogger,
     private val preferences: Preferences,
     private val rxBus: RxBus,
@@ -74,10 +80,13 @@ class ChipsViewModel(
         }
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
-    val iobUiState: StateFlow<IobUiState> = iobCobTicker.combine(cache.iobGraphFlow) { _, _ ->
-        val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
-        val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-        val total = bolusIob.iob + basalIob.basaliob
+    private val iobRefresh =
+        if (config.AAPSCLIENT) merge(iobCobTicker, rxBus.toFlow(EventNsClientStatusUpdated::class).map { })
+        else iobCobTicker
+
+    val iobUiState: StateFlow<IobUiState> = iobRefresh.combine(cache.iobGraphFlow) { _, _ ->
+        val local = iobCobCalculator.profileDisplayedIob()
+        val total = ApsResultSource.displayedIob(config, processedDeviceStatusData, dateUtil.now(), local)
         IobUiState(
             text = rh.gs(InterfacesStrings.format_insulin_units, total),
             iobTotal = total
@@ -150,9 +159,10 @@ class ChipsViewModel(
 
     fun showIobInfo() {
         viewModelScope.launch {
-            val bolusIob = iobCobCalculator.calculateIobFromBolus().round()
-            val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended().round()
-            val total = bolusIob.iob + basalIob.basaliob
+            val bolusIob = iobCobCalculator.calculateIobFromBolus()
+            val basalIob = iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()
+            val local = displayedIobUnits(bolusIob, basalIob)
+            val total = ApsResultSource.displayedIob(config, processedDeviceStatusData, dateUtil.now(), local)
             val message = listOf(
                 CoreUiStrings.bolus_iob_label to bolusIob.iob,
                 CoreUiStrings.treatments_wizard_basaliob_label to basalIob.basaliob,

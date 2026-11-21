@@ -12,11 +12,13 @@ import app.aaps.core.data.ue.Action
 import app.aaps.core.data.ue.Sources
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.interfaces.aps.APSResult
+import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.Loop
 import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.UserEntryLogger
+import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.profile.EffectiveProfile
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
@@ -29,9 +31,13 @@ import app.aaps.core.interfaces.queue.SmbPause
 import app.aaps.core.interfaces.receivers.ReceiverStatusStore
 import app.aaps.core.interfaces.utils.HardLimits
 import app.aaps.core.interfaces.utils.MidnightTime
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.constraints.ConstraintObject
+import app.aaps.core.objects.extensions.displayedIobUnits
+import app.aaps.core.objects.extensions.jsonObject
+import app.aaps.core.objects.extensions.with
 import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
 import app.aaps.shared.tests.TestBaseWithProfile
 import com.google.common.truth.Truth.assertThat
@@ -936,6 +942,50 @@ class LoopPluginTest : TestBaseWithProfile() {
 
         assertThat(stored.suggested).isNull()
         assertThat(stored.enacted).isNull()
+    }
+
+    @Test
+    fun deviceStatus_withSwitchOff_isByteIdentical() = runTest {
+        val apsIob = IobTotal(time = now, iob = 0.692, basaliob = -0.411, activity = 0.0126)
+        val request = apsResultReturning("eventualBG" to 120)
+        whenever(request.iob).thenReturn(apsIob)
+        prepareDeviceStatus(request)
+        whenever(preferences.get(BooleanKey.ApsPublishDisplayedIob)).thenReturn(false)
+
+        val stored = storedDeviceStatus()
+
+        val expectedIob = apsIob.jsonObject(dateUtil).with {
+            put("time", dateUtil.toISOString(loopPlugin.lastRun!!.lastAPSRun))
+        }.toString()
+        assertThat(stored.iob).isEqualTo(expectedIob)
+        assertThat(stored.suggested).doesNotContain("displayed")
+        assertThat(stored.enacted).isNull()
+        verify(activePlugin, never()).activeIobCobCalculator
+    }
+
+    @Test
+    fun deviceStatus_withSwitchOn_addsDisplayedIob() = runTest {
+        val apsIob = IobTotal(time = now, iob = 0.692, basaliob = -0.411, activity = 0.0126)
+        val request = apsResultReturning("eventualBG" to 120)
+        whenever(request.iob).thenReturn(apsIob)
+        prepareDeviceStatus(request)
+        whenever(preferences.get(BooleanKey.ApsPublishDisplayedIob)).thenReturn(true)
+        whenever(activePlugin.activeIobCobCalculator).thenReturn(iobCobCalculator)
+        whenever(iobCobCalculator.calculateIobFromBolus()).thenReturn(IobTotal(time = now, iob = 0.0014))
+        whenever(iobCobCalculator.calculateIobFromTempBasalsIncludingConvertedExtended()).thenReturn(IobTotal(time = now, basaliob = 0.0014))
+
+        val stored = storedDeviceStatus()
+
+        val displayed = displayedIobUnits(IobTotal(time = now, iob = 0.0014), IobTotal(time = now, basaliob = 0.0014))
+        val expectedIob = apsIob.jsonObject(dateUtil).with {
+            put("time", dateUtil.toISOString(loopPlugin.lastRun!!.lastAPSRun))
+            put(ProcessedDeviceStatusData.DISPLAYED_IOB_KEY, displayed)
+        }.toString()
+        assertThat(stored.iob).isEqualTo(expectedIob)
+        val iob = JSONObject(stored.iob!!)
+        assertThat(iob.getDouble("iob")).isWithin(0.0001).of(0.692)
+        assertThat(iob.getDouble("displayed")).isWithin(0.0000001).of(0.002)
+        assertThat(stored.suggested).doesNotContain("displayed")
     }
 
 // endregion
