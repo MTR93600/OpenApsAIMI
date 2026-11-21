@@ -48,27 +48,27 @@ class GlassLoopDashboardViewModelTest {
     )
 
     @Test
-    fun master_unchanged() {
-        val state = buildGlassLoopDashboardState(
-            input(
-                lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.5, iobUnits = 0.3),
-                aimi = AimiGlassDashboardData(
-                    keyFactors = AimiGlassDashboardData.KeyFactors(
-                        targetBgMgdl = 90.0,
-                        maxIobUnits = 3.0,
-                        maxSmbUnits = null,
-                        isfMgdlPerUnit = null,
-                        stableBgMinutes = null,
-                    ),
-                ),
+    fun client_iobAndTargetFromMaster() {
+        val aimi = AimiGlassDashboardData(
+            keyFactors = AimiGlassDashboardData.KeyFactors(
+                targetBgMgdl = null,
+                maxIobUnits = null,
+                maxSmbUnits = 1.2,
+                isfMgdlPerUnit = null,
+                stableBgMinutes = 10.0,
             ),
+        ).withMasterFactors(targetBg = 80.0, variableSens = 42.0)
+        val state = buildGlassLoopDashboardState(
+            input(lastRun = GlassLoopDashboardInput.LastRun(dateMs = 1_000_000L, smbUnits = 0.4, iobUnits = 1.7), aimi = aimi),
             format,
         )
 
-        assertEquals("format_insulin_units(0.3)", state.iobText)
-        assertEquals("format_insulin_units(0.5)", state.requestedSmbText)
-        assertEquals("bg90.0", state.targetBgText)
-        assertEquals("14:32", state.lastRunTime)
+        assertEquals(80.0, aimi.keyFactors?.targetBgMgdl)
+        assertEquals(42.0, aimi.keyFactors?.isfMgdlPerUnit)
+        assertEquals(null, aimi.keyFactors?.maxIobUnits)
+        assertEquals(1.2, aimi.keyFactors?.maxSmbUnits)
+        assertEquals("format_insulin_units(1.7)", state.iobText)
+        assertEquals("bg80.0", state.targetBgText)
     }
 
     @Test

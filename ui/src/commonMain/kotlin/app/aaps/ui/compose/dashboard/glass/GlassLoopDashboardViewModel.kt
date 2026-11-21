@@ -20,17 +20,17 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventNsClientStatusUpdated
 import app.aaps.core.interfaces.utils.DateUtil
-import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.keys.interfaces.TextRef
+import app.aaps.core.objects.extensions.ApsResultSource
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.AppScope
-import kotlinx.coroutines.FlowPreview
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -129,23 +129,7 @@ class GlassLoopDashboardViewModel(
         } else {
             activePlugin.activeAPS?.lastAPSResult
         }
-        val aimi = if (client && result != null) {
-            val factors = data.keyFactors ?: AimiGlassDashboardData.KeyFactors(
-                targetBgMgdl = null,
-                maxIobUnits = null,
-                maxSmbUnits = null,
-                isfMgdlPerUnit = null,
-                stableBgMinutes = null,
-            )
-            data.copy(
-                keyFactors = factors.copy(
-                    targetBgMgdl = result.targetBG.takeIf { it.isFinite() && it > 0.0 },
-                    isfMgdlPerUnit = result.variableSens?.takeIf { it.isFinite() },
-                ),
-            )
-        } else {
-            data
-        }
+        val aimi = if (client && result != null) data.withMasterFactors(result.targetBG, result.variableSens) else data
         return GlassLoopDashboardInput(
             hourOfDay = local.hour,
             isWeekend = local.dayOfWeek == DayOfWeek.SATURDAY || local.dayOfWeek == DayOfWeek.SUNDAY,
@@ -210,6 +194,23 @@ internal data class GlassLoopDashboardInput(
 }
 
 private const val NO_VALUE = "--"
+
+/** Puts the master's target and ISF on the key factors. The other factors stay as the feed sent them. */
+internal fun AimiGlassDashboardData.withMasterFactors(targetBg: Double, variableSens: Double?): AimiGlassDashboardData {
+    val factors = keyFactors ?: AimiGlassDashboardData.KeyFactors(
+        targetBgMgdl = null,
+        maxIobUnits = null,
+        maxSmbUnits = null,
+        isfMgdlPerUnit = null,
+        stableBgMinutes = null,
+    )
+    return copy(
+        keyFactors = factors.copy(
+            targetBgMgdl = targetBg.takeIf { it.isFinite() && it > 0.0 },
+            isfMgdlPerUnit = variableSens?.takeIf { it.isFinite() },
+        ),
+    )
+}
 
 /**
  * Builds the loop dashboard texts with the same strings and decimals as DEV. A value that is missing
