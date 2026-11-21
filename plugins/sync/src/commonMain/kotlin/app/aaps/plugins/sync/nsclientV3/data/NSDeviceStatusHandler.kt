@@ -16,6 +16,7 @@ import app.aaps.core.interfaces.workflow.CalculationWorkflow
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.nssdk.localmodel.devicestatus.NSDeviceStatus
+import app.aaps.core.utils.safeGetDoubleAllowNull
 import app.aaps.core.utils.safeGetString
 import app.aaps.core.utils.safeGetStringAllowNull
 import app.aaps.plugins.sync.nsclientV3.NSClientV3Plugin
@@ -274,6 +275,7 @@ class NSDeviceStatusHandler(
                     if (suggested != null) {
                         processedDeviceStatusData.openAPSData.suggested = suggested
                         processedDeviceStatusData.openAPSData.clockSuggestedDecoded = clock
+                        processedDeviceStatusData.openAPSData.iob = nsDeviceStatus.openaps?.iob.safeGetDoubleAllowNull("iob")
                     }
                     processedDeviceStatusData.openAPSData.clockSuggested = clock
                 }

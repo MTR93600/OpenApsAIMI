@@ -140,7 +140,7 @@ class GlassLoopDashboardViewModel(
                     GlassLoopDashboardInput.LastRun(
                         dateMs = processedDeviceStatusData.openApsTimestamp,
                         smbUnits = it.smb,
-                        iobUnits = (it.rawData() as? RT)?.IOB,
+                        iobUnits = clientIobUnits((it.rawData() as? RT)?.IOB, processedDeviceStatusData.openAPSData.iob),
                     )
                 } else {
                     GlassLoopDashboardInput.LastRun(
@@ -194,6 +194,10 @@ internal data class GlassLoopDashboardInput(
 }
 
 private const val NO_VALUE = "--"
+
+/** Client IOB: `RT.IOB`, or `openaps.iob.iob` when an early return left it out. */
+internal fun clientIobUnits(rtIob: Double?, openApsIob: Double?): Double? =
+    rtIob ?: openApsIob?.takeIf { it.isFinite() }
 
 /** Puts the master's target and ISF on the key factors. The other factors stay as the feed sent them. */
 internal fun AimiGlassDashboardData.withMasterFactors(targetBg: Double, variableSens: Double?): AimiGlassDashboardData {

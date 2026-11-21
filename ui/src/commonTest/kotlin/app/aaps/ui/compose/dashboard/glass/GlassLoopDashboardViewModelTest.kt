@@ -72,6 +72,22 @@ class GlassLoopDashboardViewModelTest {
     }
 
     @Test
+    fun client_iobFallsBackToOpenapsIob() {
+        val state = buildGlassLoopDashboardState(
+            input(
+                lastRun = GlassLoopDashboardInput.LastRun(
+                    dateMs = 1_000_000L,
+                    smbUnits = 0.0,
+                    iobUnits = clientIobUnits(rtIob = null, openApsIob = 0.8),
+                ),
+            ),
+            format,
+        )
+
+        assertEquals("format_insulin_units(0.8)", state.iobText)
+    }
+
+    @Test
     fun `a null lastAPSResult produces a state with defaulted text and no crash`() {
         val state = buildGlassLoopDashboardState(input(), format)
 

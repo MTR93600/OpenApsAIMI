@@ -57,6 +57,9 @@ interface ProcessedDeviceStatusData {
         var clockEnacted = 0L
         var suggested: RT? = null
         var enacted: RT? = null
+
+        /** `openaps.iob.iob` of the same document as [suggested]. */
+        var iob: Double? = null
     }
 
     var openAPSData: OpenAPSData
