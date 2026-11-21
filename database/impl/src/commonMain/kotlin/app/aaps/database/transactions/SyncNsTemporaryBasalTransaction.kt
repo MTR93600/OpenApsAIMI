@@ -7,7 +7,11 @@ import kotlin.math.abs
 /**
  * Sync the Temporary Basal from NS
  */
-class SyncNsTemporaryBasalTransaction(private val temporaryBasals: List<TemporaryBasal>, private val nsClientMode: Boolean) : Transaction<SyncNsTemporaryBasalTransaction.TransactionResult>() {
+class SyncNsTemporaryBasalTransaction(
+    private val temporaryBasals: List<TemporaryBasal>,
+    private val nsClientMode: Boolean,
+    val acceptCorrections: Boolean = false
+) : Transaction<SyncNsTemporaryBasalTransaction.TransactionResult>() {
 
     override suspend fun run(): TransactionResult {
         val result = TransactionResult()
@@ -21,14 +25,35 @@ class SyncNsTemporaryBasalTransaction(private val temporaryBasals: List<Temporar
                     }
 
                 if (current != null) {
-                    // nsId exists, allow only invalidation
+                    // Invalidation always. A follower with the switch on also copies rate, absolute or
+                    // percent, type and duration. The start time stays. A master ignores the switch.
+                    // Without it, only a shorter duration is copied. srvModified is not stored on the row.
                     if (current.isValid && !temporaryBasal.isValid) {
                         current.isValid = false
                         database.temporaryBasalDao.updateExistingEntry(current)
                         result.invalidated.add(current)
                     }
-                    // Allow update duration to shorter only
-                    if (current.duration != temporaryBasal.duration && nsClientMode && temporaryBasal.duration < current.duration) {
+                    if (nsClientMode && acceptCorrections) {
+                        // A longer duration must not run over the next valid temp basal.
+                        val nextStart = database.temporaryBasalDao
+                            .getTemporaryBasalStartingFromTimeToTime(current.timestamp + 1, current.timestamp + temporaryBasal.duration)
+                            .minOfOrNull { it.timestamp }
+                        val duration = if (nextStart == null) temporaryBasal.duration
+                        else minOf(temporaryBasal.duration, nextStart - current.timestamp)
+                        if (current.rate != temporaryBasal.rate ||
+                            current.isAbsolute != temporaryBasal.isAbsolute ||
+                            current.type != temporaryBasal.type ||
+                            current.duration != duration
+                        ) {
+                            current.rate = temporaryBasal.rate
+                            current.isAbsolute = temporaryBasal.isAbsolute
+                            current.type = temporaryBasal.type
+                            current.duration = duration
+                            database.temporaryBasalDao.updateExistingEntry(current)
+                            result.updated.add(current)
+                        }
+                    } else if (current.duration != temporaryBasal.duration && nsClientMode && temporaryBasal.duration < current.duration) {
+                        // Allow update duration to shorter only
                         current.duration = temporaryBasal.duration
                         database.temporaryBasalDao.updateExistingEntry(current)
                         result.updatedDuration.add(current)
@@ -83,6 +108,7 @@ class SyncNsTemporaryBasalTransaction(private val temporaryBasals: List<Temporar
 
         val updatedNsId = mutableListOf<TemporaryBasal>()
         val updatedDuration = mutableListOf<TemporaryBasal>()
+        val updated = mutableListOf<TemporaryBasal>()
         val inserted = mutableListOf<TemporaryBasal>()
         val invalidated = mutableListOf<TemporaryBasal>()
         val ended = mutableListOf<TemporaryBasal>()

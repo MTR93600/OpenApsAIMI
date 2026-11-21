@@ -651,6 +651,7 @@ nextMissedReadingsAlarm|LocalAlertLongKey|false
 nextPumpDisconnectedAlarm|LocalAlertLongKey|false
 notification_reader_dedup_state|StringNonKey|true
 notification_reader_packages|StringNonKey|true
+ns_accept_treatment_corrections|BooleanKey|true
 ns_alarm_stale_data_value|IntKey|true
 ns_alarm_urgent_stale_data_value|IntKey|true
 ns_alarms|BooleanKey|true

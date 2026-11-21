@@ -4,6 +4,7 @@ import app.aaps.core.data.model.BS
 import app.aaps.core.data.model.ICfg
 import app.aaps.core.data.model.IDs
 import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.nssdk.localmodel.treatment.EventType
 import app.aaps.core.nssdk.localmodel.treatment.NSBolus
 import app.aaps.core.nssdk.mapper.convertToRemoteAndBack
 import app.aaps.plugins.sync.extensions.contentEqualsTo
@@ -57,5 +58,32 @@ internal class BolusExtensionKtTest : TestBase() {
         bolus2 = (bolus.toNSBolus().convertToRemoteAndBack() as NSBolus).toBolus(iCfg)
         assertThat(bolus.contentEqualsTo(bolus2)).isTrue()
         assertThat(bolus.ids.contentEqualsTo(bolus2.ids)).isTrue()
+        assertThat(bolus2.iCfgFromNightscout).isTrue()
+    }
+
+    @Test
+    fun `toBolus without an insulin curve keeps the fallback and does not mark it as coming from Nightscout`() {
+        val fallback = ICfg("client", 18_000_000L, 3_600_000L, 1.0)
+        val document = NSBolus(
+            date = 10_000L,
+            identifier = "nightscoutId",
+            utcOffset = 0L,
+            isValid = true,
+            eventType = EventType.MEAL_BOLUS,
+            notes = null,
+            pumpId = null,
+            endId = null,
+            pumpType = null,
+            pumpSerial = null,
+            insulin = 1.0,
+            type = NSBolus.BolusType.NORMAL,
+            isBasalInsulin = false,
+            iCfg = null
+        )
+
+        val bolus = document.toBolus(fallback)
+
+        assertThat(bolus.iCfgFromNightscout).isFalse()
+        assertThat(bolus.iCfg).isEqualTo(fallback)
     }
 }

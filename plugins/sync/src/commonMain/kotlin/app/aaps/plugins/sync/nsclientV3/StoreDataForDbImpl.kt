@@ -237,6 +237,7 @@ class StoreDataForDbImpl(
             ended.add(TB::class.label, result.ended.size)
             nsIdUpdated.add(TB::class.label, result.updatedNsId.size)
             durationUpdated.add(TB::class.label, result.updatedDuration.size)
+            updated.add(TB::class.label, result.updated.size)
             sendLog("TemporaryBasal", TB::class.label)
             delay(pause)
         }

@@ -35,6 +35,8 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.BooleanKey
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.database.AppRepository
 import app.aaps.database.VacuumOutcome
 import app.aaps.database.entities.Bolus
@@ -155,7 +157,9 @@ class PersistenceLayerImpl(
     private val dateUtil: DateUtil,
     private val config: Config,
     private val apsResultProvider: () -> APSResult,
-    private val fabricPrivacy: FabricPrivacy
+    private val fabricPrivacy: FabricPrivacy,
+    // Deferred: PreferencesImpl injects PersistenceLayer, so a direct Preferences here cycles.
+    private val preferences: () -> Preferences
 ) : PersistenceLayer {
 
     private suspend fun log(entries: List<UE>) {
@@ -429,7 +433,8 @@ class PersistenceLayerImpl(
 
     override suspend fun syncNsBolus(boluses: List<BS>, doLog: Boolean): PersistenceLayer.TransactionResult<BS> = withContext(aapsIoDispatcher) {
         try {
-            val result = repository.runTransactionForResultSuspend(SyncNsBolusTransaction(boluses.asSequence().map { it.toDb() }.toList()))
+            val acceptCorrections = config.AAPSCLIENT && preferences().get(BooleanKey.NsClientAcceptTreatmentCorrections)
+            val result = repository.runTransactionForResultSuspend(SyncNsBolusTransaction(boluses.asSequence().map { it.toDb() }.toList(), acceptCorrections))
             val transactionResult = PersistenceLayer.TransactionResult<BS>()
             val ueValues = mutableListOf<UE>()
             result.inserted.forEach {
@@ -463,7 +468,7 @@ class PersistenceLayerImpl(
                 transactionResult.updatedNsId.add(it.fromDb())
             }
             result.updated.forEach {
-                aapsLogger.debug(LTag.DATABASE, "Updated amount of bolus $it")
+                aapsLogger.debug(LTag.DATABASE, "Updated bolus $it")
                 transactionResult.updated.add(it.fromDb())
             }
             log(ueValues)
@@ -1640,7 +1645,14 @@ class PersistenceLayerImpl(
 
     override suspend fun syncNsTemporaryBasals(temporaryBasals: List<TB>, doLog: Boolean): PersistenceLayer.TransactionResult<TB> = withContext(aapsIoDispatcher) {
         try {
-            val result = repository.runTransactionForResultSuspend(SyncNsTemporaryBasalTransaction(temporaryBasals.asSequence().map { it.toDb() }.toList(), config.AAPSCLIENT))
+            val acceptCorrections = config.AAPSCLIENT && preferences().get(BooleanKey.NsClientAcceptTreatmentCorrections)
+            val result = repository.runTransactionForResultSuspend(
+                SyncNsTemporaryBasalTransaction(
+                    temporaryBasals.asSequence().map { it.toDb() }.toList(),
+                    config.AAPSCLIENT,
+                    acceptCorrections
+                )
+            )
             val transactionResult = PersistenceLayer.TransactionResult<TB>()
             val ueValues = mutableListOf<UE>()
             result.inserted.forEach {
@@ -1701,6 +1713,10 @@ class PersistenceLayerImpl(
             result.updatedDuration.forEach {
                 aapsLogger.debug(LTag.DATABASE, "Updated duration TemporaryBasal $it")
                 transactionResult.updatedDuration.add(it.fromDb())
+            }
+            result.updated.forEach {
+                aapsLogger.debug(LTag.DATABASE, "Updated TemporaryBasal $it")
+                transactionResult.updated.add(it.fromDb())
             }
             log(ueValues)
             transactionResult

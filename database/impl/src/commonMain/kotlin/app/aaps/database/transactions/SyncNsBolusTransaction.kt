@@ -5,7 +5,10 @@ import app.aaps.database.entities.Bolus
 /**
  * Sync the Bolus from NS
  */
-class SyncNsBolusTransaction(private val boluses: List<Bolus>) : Transaction<SyncNsBolusTransaction.TransactionResult>() {
+class SyncNsBolusTransaction(
+    private val boluses: List<Bolus>,
+    val acceptCorrections: Boolean = false
+) : Transaction<SyncNsBolusTransaction.TransactionResult>() {
 
     override suspend fun run(): TransactionResult {
         val result = TransactionResult()
@@ -23,10 +26,24 @@ class SyncNsBolusTransaction(private val boluses: List<Bolus>) : Transaction<Syn
                     database.bolusDao.updateExistingEntry(current)
                     result.invalidated.add(current)
                 }
-                if (current.amount != bolus.amount) {
-                    current.amount = bolus.amount
-                    database.bolusDao.updateExistingEntry(current)
-                    result.updated.add(current)
+                if (!acceptCorrections) {
+                    if (current.amount != bolus.amount) {
+                        current.amount = bolus.amount
+                        database.bolusDao.updateExistingEntry(current)
+                        result.updated.add(current)
+                    }
+                } else {
+                    val amountChanged = current.amount != bolus.amount
+                    val typeChanged = current.type != bolus.type
+                    // iCfgFromNightscout is false when toBolus filled the curve from the client fallback.
+                    val iCfgChanged = bolus.iCfgFromNightscout && current.insulinConfiguration != bolus.insulinConfiguration
+                    if (amountChanged) current.amount = bolus.amount
+                    if (typeChanged) current.type = bolus.type
+                    if (iCfgChanged) current.insulinConfiguration = bolus.insulinConfiguration
+                    if (amountChanged || typeChanged || iCfgChanged) {
+                        database.bolusDao.updateExistingEntry(current)
+                        result.updated.add(current)
+                    }
                 }
                 continue
             }

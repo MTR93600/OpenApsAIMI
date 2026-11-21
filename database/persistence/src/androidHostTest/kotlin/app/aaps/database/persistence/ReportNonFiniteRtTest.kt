@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
+import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.database.AppRepository
 import app.aaps.database.transactions.InsertOrUpdateApsResultTransaction
 import kotlinx.coroutines.test.runTest
@@ -46,7 +47,7 @@ internal class ReportNonFiniteRtTest {
         whenever(repository.runTransactionForResultSuspend<InsertOrUpdateApsResultTransaction.TransactionResult>(any()))
             .thenReturn(InsertOrUpdateApsResultTransaction.TransactionResult())
         val config = mock<Config>().also { whenever(it.AAPSCLIENT).thenReturn(isClient) }
-        return PersistenceLayerImpl(mock<AAPSLogger>(), repository, mock<DateUtil>(), config, { result }, fabricPrivacy)
+        return PersistenceLayerImpl(mock<AAPSLogger>(), repository, mock<DateUtil>(), config, { result }, fabricPrivacy, { mock<Preferences>() })
     }
 
     @Test

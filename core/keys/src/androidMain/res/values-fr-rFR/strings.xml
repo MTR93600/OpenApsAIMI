@@ -112,6 +112,8 @@
     <string name="pref_summary_ns_receive_running_mode">Accepter les changements de mode de fonctionnement depuis Nightscout.</string>
     <string name="pref_title_ns_receive_tbr_eb">Recevoir le DBT/EB depuis NS</string>
     <string name="pref_summary_ns_receive_tbr_eb">Accepter les débits de base temporaires et les bolus étendus depuis Nightscout.</string>
+    <string name="pref_title_ns_accept_treatment_corrections">Accepter les corrections de traitements depuis NS</string>
+    <string name="pref_summary_ns_accept_treatment_corrections">Sur un suiveur, appliquer une correction ultérieure d\'une basale temporaire ou d\'un bolus reçue de Nightscout. L\'heure de début ne change pas.</string>
     <string name="pref_title_ns_notifications_from_alarms">Alarmes NS</string>
     <string name="pref_title_ns_notifications_from_announcements">Annonces de NS</string>
     <string name="pref_title_ns_use_cellular">Utiliser les données mobiles</string>

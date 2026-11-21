@@ -28,6 +28,9 @@ data class BS(
             isBasalInsulin == other.isBasalInsulin &&
             iCfg == other.iCfg
 
+    /** True when the Nightscout document carried an insulin curve. Not part of the stored record. */
+    var iCfgFromNightscout: Boolean = false
+
     fun onlyNsIdAdded(previous: BS): Boolean =
         previous.id != id &&
             contentEqualsTo(previous) &&
