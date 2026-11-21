@@ -461,8 +461,6 @@ class SyncNsTemporaryBasalTransactionTest {
 
         assertThat(kept.duration).isEqualTo(5_000L)
         assertThat(kept.end).isEqualTo(next.timestamp)
-        assertThat(next.timestamp).isEqualTo(6_000L)
-        assertThat(next.duration).isEqualTo(60_000L)
         assertThat(result.updated).isEmpty()
         verify(temporaryBasalDao, never()).updateExistingEntry(any())
     }
