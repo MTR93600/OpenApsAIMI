@@ -15,7 +15,7 @@ internal class QrModules(val size: Int, private val dark: BooleanArray) {
     operator fun get(x: Int, y: Int): Boolean = dark[y * size + x]
 }
 
-/** [text] as a QR code, or null where this platform cannot make one (iOS for now: it is only a client). */
+/** [text] as a QR code, or null where this platform cannot make one. */
 internal expect fun qrModules(text: String): QrModules?
 
 /** True where this platform can show a QR code. Asked by making a tiny one, so it cannot disagree with [qrModules]. */
