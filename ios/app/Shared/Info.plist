@@ -4,6 +4,8 @@
 <dict>
 	<key>AAPSBuildType</key>
 	<string>$(CONFIGURATION)</string>
+	<key>AAPSRole</key>
+	<string>$(AAPS_ROLE)</string>
 	<key>AAPSConnectIqUrlScheme</key>
 	<string>$(AAPS_CIQ_URL_SCHEME)</string>
 	<key>AapsAppGroupId</key>

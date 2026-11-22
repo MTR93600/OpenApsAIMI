@@ -45,8 +45,8 @@ import kotlinx.coroutines.launch
  * Uploads to Tidepool, the same on Android and iOS.
  *
  * It enters the plugin list from a platform file, not from here: on Android with the `@NotNSClient`
- * qualifier, so an AAPSClient build never shows it (`TidepoolPluginRegistration`); on iOS, which is
- * always a master, in the plain bucket (`IosTidepoolPluginRegistration`). Key 320 on both.
+ * qualifier, so an AAPSClient build never shows it (`TidepoolPluginRegistration`); on iOS with the
+ * same qualifier, so the follower app never shows it (`IosTidepoolPluginRegistration`). Key 320 on both.
  */
 @SingleIn(AppScope::class)
 @Inject

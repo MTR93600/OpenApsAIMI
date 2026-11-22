@@ -68,6 +68,8 @@ import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.search.BuiltInSearchables
 import app.aaps.core.interfaces.di.APS
+import app.aaps.core.interfaces.di.NotNSClient
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.implementation.maintenance.KeepAliveChecks
 import app.aaps.implementation.profile.ProfileSwitchScheduler
 import app.aaps.plugins.aps.loop.runningMode.IosRunningModeExpiryScheduler
@@ -109,10 +111,12 @@ import kotlinx.coroutines.CoroutineScope
  * `AimiStorage` and `HormonitorStudyExporterProvider` are in `IosAimiPlatformBindings`; the HealthKit
  * physio sources in `IosAimiPhysioBindings`; `AimiKeyValueCache` is `IosAimiKeyValueCache`.
  *
- * The phone is a master (`IosConfig`), so these plugins really reach a pump and a sensor: the iOS
- * Medtrum driver (`IosMedtrumPlugin`), the Omnipod Dash driver (`IosOmnipodDashPlugin`, from
- * `:pump:omnipod:dashctl`) and the Dexcom ONE+ / G7 driver (`DexcomOnePlusPlugin`) are contributed to
- * the plugin map below, beside `VirtualPumpPlugin` and `NSClientSourcePlugin`.
+ * In the master app (`IosConfig`) these plugins really reach a pump and a sensor: the iOS Medtrum
+ * driver (`IosMedtrumPlugin`) and the Omnipod Dash driver (`IosOmnipodDashPlugin`, from
+ * `:pump:omnipod:dashctl`) are in the `@PumpDriver` bucket below, and the Dexcom ONE+ / G7 driver
+ * (`DexcomOnePlusPlugin`) is in the plain plugin map beside `VirtualPumpPlugin` and
+ * `NSClientSourcePlugin`. The follower app (AAPSClient) uses the same graph; `IosAppStartup` leaves the
+ * `@APS`, `@PumpDriver` and `@NotNSClient` buckets out of its plugin list.
  */
 @DependencyGraph(AppScope::class)
 interface IosAppGraph : MetroViewModelMultibindings {
@@ -205,16 +209,22 @@ interface IosAppGraph : MetroViewModelMultibindings {
     /**
      * Plugins that register themselves with `@ContributesIntoMap`, keyed by their order.
      *
-     * `IosAppStartup` merges [contributedApsPlugins] into this list when `config.APS`, the same rule
-     * as `MetroGraphs.allPlugins` on Android. The `@PumpDriver` and `@NotNSClient` qualifiers are
-     * Android-only annotations, so no plugin compiled for iOS can carry them; the iOS pump drivers
-     * register in this unqualified bucket instead.
+     * `IosAppStartup` merges the qualified buckets below into this list, each only when the build
+     * should have it, the same rule as `MetroGraphs.allPlugins` on Android.
      */
     val contributedPlugins: Map<Int, PluginBase>
 
     /** Plugins that belong only in a build that runs the loop - `ObjectivesPlugin` among them. */
     @APS
     val contributedApsPlugins: Map<Int, PluginBase>
+
+    /** The pump drivers (Medtrum, Omnipod Dash). Merged only when `config.PUMPDRIVERS`. */
+    @PumpDriver
+    val contributedPumpDriverPlugins: Map<Int, PluginBase>
+
+    /** Plugins a follower must not have (Tidepool). Merged only when not `config.AAPSCLIENT`. */
+    @NotNSClient
+    val contributedNotNsClientPlugins: Map<Int, PluginBase>
 
     /** Started by `IosAppStartup`, as `MainApp` starts them on Android. */
     val runningModeReconciler: RunningModeReconciler

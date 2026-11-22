@@ -4,6 +4,9 @@ import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.aps.APS
 import app.aaps.core.interfaces.aps.Sensitivity
 import app.aaps.core.interfaces.calibration.Calibration
+import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.configuration.ExternalOptions
+import app.aaps.core.interfaces.configuration.InitProgress
 import app.aaps.core.interfaces.constraints.Objectives
 import app.aaps.core.interfaces.constraints.Safety
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -27,8 +30,10 @@ import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.smoothing.Smoothing
 import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.sync.Sync
+import app.aaps.core.keys.interfaces.AppPlatform
 import app.aaps.core.keys.interfaces.TextRef
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.reflect.KClass
@@ -158,8 +163,9 @@ class IosPluginPermissionsTest {
 
     private fun sut(
         plugins: List<PluginBase> = emptyList(),
-        providers: Set<PermissionProvider> = emptySet()
-    ) = IosPluginPermissions(logger, FakeActivePlugin(plugins), status) { providers }
+        providers: Set<PermissionProvider> = emptySet(),
+        client: Boolean = false
+    ) = IosPluginPermissions(logger, FakeActivePlugin(plugins), RoleConfig(client), status) { providers }
 
     private fun List<PermissionGroup>.ids() = flatMap { it.permissions }
 
@@ -167,6 +173,24 @@ class IosPluginPermissionsTest {
     fun `bluetooth and notifications are always listed`() {
         assertEquals(listOf(IosPluginPermissions.BLUETOOTH, IosPluginPermissions.NOTIFICATIONS), sut().collectAllPermissions().ids())
         assertTrue(logger.errors.isEmpty())
+    }
+
+    /** The follower app has no Bluetooth usage text, and iOS stops an app that asks without one. */
+    @Test
+    fun `the follower app never lists bluetooth`() {
+        status.states[IosPluginPermissions.BLUETOOTH] = IosPermissionState.NOT_ASKED
+
+        assertEquals(listOf(IosPluginPermissions.NOTIFICATIONS), sut(client = true).collectAllPermissions().ids())
+        assertTrue(sut(client = true).collectMissingPermissions().isEmpty())
+    }
+
+    @Test
+    fun `the follower app drops a bluetooth group a plugin declares`() {
+        val provider = object : PermissionProvider {
+            override fun requiredPermissions() = listOf(group(IosPluginPermissions.BLUETOOTH))
+        }
+
+        assertEquals(listOf(IosPluginPermissions.NOTIFICATIONS), sut(providers = setOf(provider), client = true).collectAllPermissions().ids())
     }
 
     @Test
@@ -253,4 +277,43 @@ class IosPluginPermissionsTest {
         assertEquals(listOf(IosPluginPermissions.BLUETOOTH), status.asked)
         assertTrue(done)
     }
+}
+
+/** Only the role matters to the class under test. */
+private class RoleConfig(private val client: Boolean) : Config {
+    override val SUPPORTED_NS_VERSION = 0
+    override val APS get() = !client
+    override val AAPSCLIENT get() = client
+    override val AAPSCLIENT1 get() = client
+    override val AAPSCLIENT2 = false
+    override val AAPSCLIENT3 = false
+    override val PUMPCONTROL = false
+    override val PUMPDRIVERS get() = !client
+    override val FLAVOR get() = if (client) "aapsclient" else "full"
+    override val VERSION_NAME = ""
+    override val HEAD = ""
+    override val COMMITTED = false
+    override val BUILD_VERSION = ""
+    override val REMOTE = ""
+    override val BUILD_TYPE = ""
+    override val VERSION = ""
+    override val platform = AppPlatform.Ios
+    override val APPLICATION_ID = ""
+    override val DEBUG = false
+    override val currentDeviceModelString = ""
+    override val deviceModelForUpload = ""
+    override val deviceManufacturer = ""
+    override val appName: TextRef = TextRef.Literal("test")
+    override val initProgressFlow = MutableStateFlow(InitProgress())
+    override val initSnackbarFlow = MutableSharedFlow<String>()
+    override fun updateInitProgress(step: String, current: Int, total: Int) = Unit
+    override fun initCompleted() = Unit
+    override fun initFailed(error: String) = Unit
+    override fun showInitSnackbar(message: String) = Unit
+    override fun beginReconfiguring() = Unit
+    override fun endReconfiguring() = Unit
+    override fun isDev() = false
+    override fun isEngineeringModeOrRelease() = false
+    override fun isEngineeringMode() = false
+    override fun isEnabled(option: ExternalOptions) = false
 }

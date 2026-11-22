@@ -82,15 +82,17 @@ class IosOmnipodDashPluginGraphTest {
     }
 
     @Test
-    fun `the app graph offers Dash in the plugin list next to Medtrum`() {
+    fun `the app graph offers Dash in the pump driver bucket next to Medtrum`() {
         TestStorage.install()
         val app = createGraphFactory<IosAppGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoSockets, NoCrashReporter)
 
-        val plugins = app.contributedPlugins
+        val plugins = app.contributedPumpDriverPlugins
         val dash = assertIs<IosOmnipodDashPlugin>(plugins[1080], "Dash under the Android key 1080")
         assertIs<IosMedtrumPlugin>(plugins[1120])
         assertEquals(PluginType.PUMP, dash.getType())
         assertEquals(1, plugins.values.count { it is IosOmnipodDashPlugin }, "one Dash plugin only")
+        // Only in the @PumpDriver bucket, so the follower app, which does not merge it, has no driver.
+        assertTrue(app.contributedPlugins.values.none { it is IosOmnipodDashPlugin || it is IosMedtrumPlugin }, "no driver in the plain bucket")
     }
 
     @Test

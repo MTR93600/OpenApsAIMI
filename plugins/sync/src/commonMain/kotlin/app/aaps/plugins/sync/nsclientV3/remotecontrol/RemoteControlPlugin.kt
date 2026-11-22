@@ -24,9 +24,9 @@ import dev.zacsweers.metro.binding
  * contexts to the master phone through Nightscout.
  *
  * Only a follower has it, as on dev_OAPSAIMI: it is listed and switched on only when
- * [Config.AAPSCLIENT] is true, and switched off everywhere else. An iOS phone is always a master,
- * so it never shows this plugin. The master side - taking the contexts in - is
- * `NsIncomingDataProcessor` and works on every platform.
+ * [Config.AAPSCLIENT] is true, and switched off everywhere else. On iOS that is the follower app
+ * (AAPSClient); the master app never shows this plugin. The master side - taking the contexts in -
+ * is `NsIncomingDataProcessor` and works on every platform.
  *
  * The dev plugin first asked for a premium licence key that was checked against a hash written in
  * the source code. That check is not ported: a key in public source code is not a secret.

@@ -261,6 +261,10 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
         contributedPlugins = graph.contributedPlugins,
         apsPlugins = graph.contributedApsPlugins,
         mergeApsPlugins = graph.config.APS,
+        pumpDriverPlugins = graph.contributedPumpDriverPlugins,
+        mergePumpDriverPlugins = graph.config.PUMPDRIVERS,
+        notNsClientPlugins = graph.contributedNotNsClientPlugins,
+        mergeNotNsClientPlugins = !graph.config.AAPSCLIENT,
         startPeriodicWork = {
             // As Android's `MainApp` does next to scheduling `KeepAliveWorker`: the first maintenance
             // pass runs at once and would call a cold start's old database "BG readings missed".
@@ -294,7 +298,11 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
     // with - on the next tick, as on Android. Their handlers were registered earlier by
     // `registerAimiBackgroundTasks`, from the Swift `init`: iOS only allows that before launch ends.
     // `install` catches its own failures: a background job must not take the app down.
-    IosAimiBackgroundTasks.install(graph.basalMlTrainingCoordinator, logger)
+    //
+    // The master app only. The follower app (AAPSClient) never runs the loop, so it has no AIMI data
+    // to train on or to archive. Its handlers are still registered from the Swift `init`, which is
+    // harmless: both apps share one Info.plist, with the task ids in it, and nothing queues a task.
+    if (graph.config.APS) IosAimiBackgroundTasks.install(graph.basalMlTrainingCoordinator, logger)
 
     // Attach to the notification centre. Registering a category only records it now, so that building
     // the graph does not need an app bundle - see `IosNotificationDelegate.install`. It is done here

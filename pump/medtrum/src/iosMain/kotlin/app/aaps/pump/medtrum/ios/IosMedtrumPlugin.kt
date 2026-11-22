@@ -2,6 +2,7 @@ package app.aaps.pump.medtrum.ios
 
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.PumpType
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationId
@@ -85,10 +86,11 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  * order Medtrum in the same place. They never meet: this file is in `iosMain` and the Android one
  * is in `pump/medtrum/src/main`.
  *
- * No `@PumpDriver` qualifier, unlike Android: that qualifier is an Android-only annotation, and
- * `IosAppGraph` puts the iOS pump drivers in the unqualified `Map<Int, PluginBase>` bucket.
+ * `@PumpDriver`, as on Android: `IosAppStartup` merges this bucket only when `config.PUMPDRIVERS`,
+ * so the follower app (AAPSClient) does not offer this driver.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
+@PumpDriver
 @MetroIntKey(1120)
 @SingleIn(AppScope::class)
 @Inject

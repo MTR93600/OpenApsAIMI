@@ -1,6 +1,7 @@
 package app.aaps.implementation.plugin
 
 import app.aaps.core.interfaces.InterfacesStrings
+import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.plugin.ActivePlugin
@@ -14,13 +15,16 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 /**
- * The permissions an iOS master phone needs, as iOS reports them, so a refused one is shown.
+ * The permissions the iOS app needs, as iOS reports them, so a refused one is shown.
  *
  * iOS has no list of permissions to enumerate the way Android has `Manifest.permission`, but the
  * ones that matter here can each be read:
  *
- * - **Bluetooth**, always listed. The pump and the sensor both talk over it, so without it the phone
- *   neither reads glucose nor doses insulin.
+ * - **Bluetooth**, listed in the master app only. The pump and the sensor both talk over it, so
+ *   without it the phone neither reads glucose nor doses insulin. The follower app (AAPSClient) gets
+ *   everything from Nightscout and never asks: it has no Bluetooth usage text in its Info.plist, and
+ *   iOS stops an app that asks for Bluetooth without one. A Bluetooth group a plugin declares is
+ *   dropped there too, for the same reason.
  * - **Notifications**, always listed. Alarms reach the user through them.
  * - **Location**, only when something declares a group with [LOCATION] - an automation rule that
  *   uses where the phone is.
@@ -40,6 +44,7 @@ import dev.zacsweers.metro.SingleIn
 class IosPluginPermissions(
     private val aapsLogger: AAPSLogger,
     private val activePlugin: ActivePlugin,
+    private val config: Config,
     private val status: IosPermissionStatus,
     private val permissionProviders: () -> Set<PermissionProvider>
 ) : PluginPermissions {
@@ -66,12 +71,12 @@ class IosPluginPermissions(
         IosPermissionState.GRANTED, IosPermissionState.UNKNOWN  -> false
     }
 
-    private fun baseGroups(): List<PermissionGroup> = listOf(
+    private fun baseGroups(): List<PermissionGroup> = listOfNotNull(
         PermissionGroup(
             permissions = listOf(BLUETOOTH),
             rationaleTitle = InterfacesStrings.permission_bluetooth_title,
             rationaleDescription = InterfacesStrings.permission_bluetooth_description
-        ),
+        ).takeUnless { config.AAPSCLIENT },
         PermissionGroup(
             permissions = listOf(NOTIFICATIONS),
             rationaleTitle = ImplementationStrings.permission_notifications_title,
@@ -90,7 +95,8 @@ class IosPluginPermissions(
                 "A plugin declares permissions iOS cannot check: " + unknown.flatMap { it.permissions }.distinct().joinToString()
             )
         }
-        // A plugin may ask for Bluetooth too; it is already in the list once.
+        // A plugin may ask for Bluetooth too; it is already in the list once, or must not be asked
+        // at all in the follower app.
         return checkable.filter { group -> group.permissions.none { it in BASE } }
     }
 

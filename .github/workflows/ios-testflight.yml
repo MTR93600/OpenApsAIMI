@@ -1,4 +1,5 @@
-# Builds the iOS client and uploads it to TestFlight for internal testing.
+# Builds the two iOS apps - AAPS (the master) and AAPS2 (the follower, shown as AAPSClient) - and
+# uploads them to TestFlight for internal testing.
 #
 # ## Why the triggers are what they are
 #
@@ -48,8 +49,8 @@ jobs:
     timeout-minutes: 90
 
     strategy:
-      # Both clients, because a tester running two of them needs both updated together - an old
-      # AAPS2 against a new AAPS is a combination nobody built or tried.
+      # Both apps, because a tester running the master and the follower needs both updated together -
+      # an old AAPS2 (AAPSClient) against a new AAPS is a combination nobody built or tried.
       #
       # `fail-fast: false` so a failure on one still uploads the other: they are separate apps in App
       # Store Connect, and half an upload is better than none when the other half already worked.

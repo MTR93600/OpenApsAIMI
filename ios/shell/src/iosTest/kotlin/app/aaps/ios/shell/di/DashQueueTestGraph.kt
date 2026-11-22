@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ConfigBuilder
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.di.APS
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.insulin.ConcentrationHelper
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.logging.AAPSLogger
@@ -71,6 +72,9 @@ interface DashQueueTestGraph {
 
     @APS
     val contributedApsPlugins: Map<Int, PluginBase>
+
+    @PumpDriver
+    val contributedPumpDriverPlugins: Map<Int, PluginBase>
 
     val omnipodDashPump: IosOmnipodDashPlugin
 

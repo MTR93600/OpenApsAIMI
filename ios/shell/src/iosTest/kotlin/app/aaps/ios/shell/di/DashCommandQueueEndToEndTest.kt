@@ -232,6 +232,8 @@ class DashCommandQueueEndToEndTest {
             contributedPlugins = withoutOtherRadios(graph.contributedPlugins),
             apsPlugins = graph.contributedApsPlugins,
             mergeApsPlugins = graph.config.APS,
+            pumpDriverPlugins = withoutOtherRadios(graph.contributedPumpDriverPlugins),
+            mergePumpDriverPlugins = graph.config.PUMPDRIVERS,
             startPeriodicWork = {},
             markInitialized = { graph.config.initCompleted() },
         ).run()

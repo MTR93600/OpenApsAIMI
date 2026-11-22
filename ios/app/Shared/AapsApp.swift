@@ -3,12 +3,12 @@ import AapsShared
 
 /// The app shell, built once into both Xcode targets, AAPS and AAPS2.
 ///
-/// The app is a master phone that runs the loop; the role is set in `IosConfig`, not here. The two
-/// targets differ only in bundle id, name and icon. Their bundle ids (`app.aaps.client` and
-/// `app.aaps.client2`) still carry the name of the first iOS port, which was a follower. They stay,
-/// because a new bundle id is a new app for iOS and the installed settings and data would be lost.
-/// The name is read back from the bundle, so this file does not know or care which of the two it is
-/// running as.
+/// AAPS is the master app, which runs the loop. AAPS2 is the follower app, shown as AAPSClient. The
+/// role comes from the `AAPSRole` key of the Info.plist (the `AAPS_ROLE` build setting of each
+/// target) and is read by `IosConfig`, not here. Their bundle ids (`app.aaps.client` and
+/// `app.aaps.client2`) still carry the name of the first iOS port. They stay, because a new bundle
+/// id is a new app for iOS and the installed settings and data would be lost. The name is read back
+/// from the bundle, so this file does not know or care which of the two it is running as.
 @main
 struct AapsApp: App {
 

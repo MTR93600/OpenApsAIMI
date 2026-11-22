@@ -24,11 +24,15 @@ import platform.UIKit.UIDevice
  * What kind of build this is, answered for iOS.
  *
  * On Android these values come from the Gradle flavour: `full`, `pumpcontrol`, `aapsclient`. iOS
- * builds one kind only: the **master** phone, the same role as the Android `full` flavour. It runs
- * the loop, talks to the pump and the sensor, and writes and uploads the therapy records.
+ * builds two kinds, chosen by the `AAPSRole` key of the app's Info.plist ([IosAppRole]):
  *
- * The bundle ids are still `app.aaps.client` and `app.aaps.client2`, a name from the first iOS port,
- * which was a follower. They do not decide the role; this class does.
+ * - the **master** app (Xcode target AAPS), the same role as the Android `full` flavour. It runs the
+ *   loop, talks to the pump and the sensor, and writes and uploads the therapy records.
+ * - the **follower** app (Xcode target AAPS2, shown as AAPSClient), the same role as the Android
+ *   `aapsclient` flavour. It shows the master's data from Nightscout and sends commands to the master.
+ *
+ * The bundle ids are still `app.aaps.client` and `app.aaps.client2`, a name from the first iOS port.
+ * They do not decide the role; the Info.plist key does.
  *
  * This is a real implementation, not a stand-in. Getting [APS] or [PUMPDRIVERS] wrong here would
  * make shared code offer features the app cannot perform.
@@ -44,28 +48,35 @@ class IosConfig(
      * reachable by the person using the phone, so `extra/engineering_mode` can be created by hand
      * there exactly as it is created in `AAPS/extra` on Android.
      */
-    private val extraDir: String? = defaultExtraDir()
+    private val extraDir: String? = defaultExtraDir(),
+    /** Master or follower. From the Info.plist; a test passes it. */
+    val role: IosAppRole = IosAppRole.fromBundle(),
 ) : Config {
 
     override val SUPPORTED_NS_VERSION: Int = 150000
 
     /*
-     * The values of the Android `full` flavour: the loop runs here (APS), pump drivers are offered
-     * (PUMPDRIVERS), and this phone is not a follower (AAPSCLIENT false). The owner chose this on
+     * The master app has the values of the Android `full` flavour: the loop runs here (APS), pump
+     * drivers are offered (PUMPDRIVERS), and the phone is not a follower. The owner chose this on
      * 2026-10-22: the iPhone is a master phone, exactly like AAPS on Android.
+     *
+     * The follower app has the values of the Android `aapsclient` flavour, the same as the desktop
+     * follower (`DesktopClientConfig`): no loop, no pump drivers, AAPSCLIENT. The owner added it on
+     * 2026-11-22, in the AAPS2 target, which was not used as a second master.
      *
      * PUMPCONTROL stays false: that flavour means "pump remote control without a loop".
      */
-    override val APS: Boolean = true
+    override val APS: Boolean = role == IosAppRole.MASTER
     override val PUMPCONTROL: Boolean = false
-    override val PUMPDRIVERS: Boolean = true
+    override val PUMPDRIVERS: Boolean = role == IosAppRole.MASTER
 
-    override val AAPSCLIENT: Boolean = false
+    override val AAPSCLIENT: Boolean = role == IosAppRole.CLIENT
 
     /** The name of the Android flavour with the same role, so shared code that compares it agrees. */
-    override val FLAVOR: String = "full"
+    override val FLAVOR: String = if (role == IosAppRole.CLIENT) "aapsclient" else "full"
 
-    override val AAPSCLIENT1: Boolean = false
+    /** One follower app only, so it is follower number 1, as the Android `aapsclient` flavour. */
+    override val AAPSCLIENT1: Boolean = role == IosAppRole.CLIENT
     override val AAPSCLIENT2: Boolean = false
     override val AAPSCLIENT3: Boolean = false
     /**
@@ -194,6 +205,36 @@ class IosConfig(
 
         /** Used only where there is no app bundle to ask, which in practice means a test binary. */
         internal const val DEFAULT_BUNDLE_ID = "app.aaps.client"
+    }
+}
+
+/**
+ * The role of the iOS app, from the `AAPSRole` key of its Info.plist. Each Xcode target sets the key
+ * through the `AAPS_ROLE` build setting.
+ */
+enum class IosAppRole {
+
+    MASTER,
+    CLIENT;
+
+    companion object {
+
+        /** The Info.plist key. */
+        const val INFO_PLIST_KEY = "AAPSRole"
+
+        /** The value of [INFO_PLIST_KEY] that makes the follower app. */
+        const val CLIENT_VALUE = "aapsclient"
+
+        /**
+         * Only the exact value [CLIENT_VALUE] makes a follower. Anything else is the master, which is
+         * what the app was before the key existed: a test binary has no bundle, and the master app
+         * must not change because a key is missing.
+         */
+        fun fromValue(value: String?): IosAppRole =
+            if (value?.trim()?.lowercase() == CLIENT_VALUE) CLIENT else MASTER
+
+        fun fromBundle(): IosAppRole =
+            fromValue(NSBundle.mainBundle.objectForInfoDictionaryKey(INFO_PLIST_KEY) as? String)
     }
 }
 

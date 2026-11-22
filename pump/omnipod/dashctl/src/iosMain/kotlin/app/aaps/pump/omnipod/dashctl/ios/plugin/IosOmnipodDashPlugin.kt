@@ -24,6 +24,7 @@ import app.aaps.pump.omnipod.dashctl.ui.DashWizardRequest
 import app.aaps.pump.omnipod.dashctl.ui.dashSettingsScreen
 import app.aaps.core.keys.interfaces.PreferenceItem
 import kotlin.time.Clock
+import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -87,12 +88,14 @@ import dev.zacsweers.metro.IntKey as MetroIntKey
  *
  * `@MetroIntKey(1080)` is the number of the Android `OmnipodDashPumpPlugin`, so both platforms order
  * Dash in the same place. They never meet: this file is in iosMain of `:pump:omnipod:dashctl`, which
- * the Android app does not use. No `@PumpDriver` qualifier, as `IosMedtrumPlugin`: `IosAppGraph`
- * puts the iOS pump drivers in the unqualified `Map<Int, PluginBase>` bucket.
+ * the Android app does not use. `@PumpDriver`, as on Android and as `IosMedtrumPlugin`:
+ * `IosAppStartup` merges this bucket only when `config.PUMPDRIVERS`.
  *
- * The iPhone is a full master phone: this plugin drives the pod itself, never through AAPSClient.
+ * Only the master app offers this plugin, and there it drives the pod itself. The follower app
+ * (AAPSClient) has no pump drivers.
  */
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
+@PumpDriver
 @MetroIntKey(1080)
 @SingleIn(AppScope::class)
 @Inject

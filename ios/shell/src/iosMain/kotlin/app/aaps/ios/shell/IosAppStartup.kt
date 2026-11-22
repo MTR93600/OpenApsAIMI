@@ -73,6 +73,12 @@ internal class IosAppStartup(
     /** The `@APS` bucket. Merged only when [mergeApsPlugins], like `MetroGraphs.allPlugins`. */
     private val apsPlugins: Map<Int, PluginBase> = emptyMap(),
     private val mergeApsPlugins: Boolean = false,
+    /** The `@PumpDriver` bucket. Merged only when [mergePumpDriverPlugins] (`config.PUMPDRIVERS`). */
+    private val pumpDriverPlugins: Map<Int, PluginBase> = emptyMap(),
+    private val mergePumpDriverPlugins: Boolean = false,
+    /** The `@NotNSClient` bucket. Merged only when [mergeNotNsClientPlugins] (`!config.AAPSCLIENT`). */
+    private val notNsClientPlugins: Map<Int, PluginBase> = emptyMap(),
+    private val mergeNotNsClientPlugins: Boolean = false,
     /** Starts the shared periodic housekeeping. A lambda so a test can run this without building it. */
     private val startPeriodicWork: () -> Unit,
     /**
@@ -142,18 +148,26 @@ internal class IosAppStartup(
     }
 
     /**
-     * The same rule as Android's `mergePlugins`: a later bucket wins an order key, and a clash is
+     * The same rule as Android's `MetroGraphs.allPlugins` and `mergePlugins`: each qualified bucket is
+     * merged only when this build should have it, a later bucket wins an order key, and a clash is
      * logged rather than thrown, because a wrong plugin list must not stop the app from starting.
+     *
+     * This is what keeps the pump drivers and Tidepool out of the follower app (AAPSClient), and
+     * Objectives out of any build that does not loop.
      */
     private fun mergedPlugins(): Map<Int, PluginBase> {
-        if (!mergeApsPlugins) return contributedPlugins
         val merged = LinkedHashMap(contributedPlugins)
-        for ((key, plugin) in apsPlugins) {
-            merged[key]?.let { previous ->
-                aapsLogger.error(LTag.CORE, "PLUGIN LIST: order key $key used by both ${previous::class.simpleName} and @APS ${plugin::class.simpleName} - one of them is dropped")
+        fun mergeBucket(name: String, bucket: Map<Int, PluginBase>) {
+            for ((key, plugin) in bucket) {
+                merged[key]?.let { previous ->
+                    aapsLogger.error(LTag.CORE, "PLUGIN LIST: order key $key used by both ${previous::class.simpleName} and $name ${plugin::class.simpleName} - one of them is dropped")
+                }
+                merged[key] = plugin
             }
-            merged[key] = plugin
         }
+        if (mergeApsPlugins) mergeBucket("@APS", apsPlugins)
+        if (mergePumpDriverPlugins) mergeBucket("@PumpDriver", pumpDriverPlugins)
+        if (mergeNotNsClientPlugins) mergeBucket("@NotNSClient", notNsClientPlugins)
         return merged
     }
 

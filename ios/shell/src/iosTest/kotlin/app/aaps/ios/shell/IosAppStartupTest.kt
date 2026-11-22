@@ -210,6 +210,36 @@ class IosAppStartupTest {
         assertEquals(listOf("iob", "objectives"), merged.registered.map { (it as NamedPlugin).id })
     }
 
+    /** The pump drivers belong only in the master app: the follower app (AAPSClient) has none. */
+    @Test
+    fun `pump drivers are merged only when asked`() {
+        val plugins = mapOf(10 to NamedPlugin("iob"))
+        val drivers = mapOf(1080 to NamedPlugin("dash"), 1120 to NamedPlugin("medtrum"))
+
+        val notMerged = RecordingRegistry()
+        IosAppStartup(SilentLogger, notMerged, plugins, pumpDriverPlugins = drivers, mergePumpDriverPlugins = false, startPeriodicWork = {}, markInitialized = {}).run()
+        val merged = RecordingRegistry()
+        IosAppStartup(SilentLogger, merged, plugins, pumpDriverPlugins = drivers, mergePumpDriverPlugins = true, startPeriodicWork = {}, markInitialized = {}).run()
+
+        assertEquals(listOf("iob"), notMerged.registered.map { (it as NamedPlugin).id })
+        assertEquals(listOf("iob", "dash", "medtrum"), merged.registered.map { (it as NamedPlugin).id })
+    }
+
+    /** Tidepool is in the `@NotNSClient` bucket, as on Android: the follower app leaves it out. */
+    @Test
+    fun `not-follower plugins are merged only when asked`() {
+        val plugins = mapOf(10 to NamedPlugin("iob"))
+        val notClient = mapOf(320 to NamedPlugin("tidepool"))
+
+        val follower = RecordingRegistry()
+        IosAppStartup(SilentLogger, follower, plugins, notNsClientPlugins = notClient, mergeNotNsClientPlugins = false, startPeriodicWork = {}, markInitialized = {}).run()
+        val master = RecordingRegistry()
+        IosAppStartup(SilentLogger, master, plugins, notNsClientPlugins = notClient, mergeNotNsClientPlugins = true, startPeriodicWork = {}, markInitialized = {}).run()
+
+        assertEquals(listOf("iob"), follower.registered.map { (it as NamedPlugin).id })
+        assertEquals(listOf("iob", "tidepool"), master.registered.map { (it as NamedPlugin).id })
+    }
+
     /** The master services read plugin state, so they start after the plugins, as in `MainApp`. */
     @Test
     fun `master services start after the plugins`() {

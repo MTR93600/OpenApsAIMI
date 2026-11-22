@@ -533,6 +533,7 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
+				AAPS_ROLE = master;
 				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -603,6 +604,7 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
+				AAPS_ROLE = aapsclient;
 				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -622,9 +624,16 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPSClient;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPSClient uses the camera only to read the pairing QR code shown by your master phone.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPSClient uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPSClient does not need Health. If a feature you switch on asks for it, AAPSClient only reads from Health and never writes to it.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPSClient does not need Health. If a feature you switch on asks for it, AAPSClient only reads from Health and never writes to it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AAPSClient uses your location only for automation rules you set up yourself.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -686,6 +695,7 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				AAPS_CIQ_URL_SCHEME = "aaps-ciq";
+				AAPS_ROLE = master;
 				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -756,6 +766,7 @@
 			baseConfigurationReference = AA1000300000000000000 /* Signing.xcconfig */;
 			buildSettings = {
 				AAPS_CIQ_URL_SCHEME = "aaps2-ciq";
+				AAPS_ROLE = aapsclient;
 				"AAPS_TFLITE_KIND[sdk=iphoneos*]" = device;
 				"AAPS_TFLITE_KIND[sdk=iphonesimulator*]" = sim;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -775,9 +786,16 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Shared/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPSClient;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "AAPSClient uses the camera only to read the pairing QR code shown by your master phone.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "AAPSClient uses Face ID only to unlock the app and its protected settings, when you have switched that protection on.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "AAPSClient does not need Health. If a feature you switch on asks for it, AAPSClient only reads from Health and never writes to it.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "AAPSClient does not need Health. If a feature you switch on asks for it, AAPSClient only reads from Health and never writes to it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "AAPSClient uses your location only for automation rules you set up yourself.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -876,7 +894,7 @@
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPSClient;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -902,7 +920,7 @@
 				CURRENT_PROJECT_VERSION = "$(AAPS_BUILD_NUMBER:default=1)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiveActivity/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = AAPS2;
+				INFOPLIST_KEY_CFBundleDisplayName = AAPSClient;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

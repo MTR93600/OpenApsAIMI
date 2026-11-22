@@ -75,7 +75,7 @@ object IosPlatformBindings {
     @SingleIn(AppScope::class)
     fun dateUtil(): DateUtil = DateUtilImpl(IosDateFormatPlatform())
 
-    /** What kind of build this is. An iOS build is a master phone, like the Android `full` flavour. */
+    /** What kind of build this is: the master app or the follower app, from the Info.plist (`IosAppRole`). */
     @Provides
     @SingleIn(AppScope::class)
     fun config(): Config = IosConfig()
