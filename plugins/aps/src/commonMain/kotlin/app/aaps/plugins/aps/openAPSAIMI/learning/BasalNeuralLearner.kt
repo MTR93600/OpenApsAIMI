@@ -264,12 +264,18 @@ class BasalNeuralLearner @Inject constructor(
      * Model input = 6 glucose-dynamics base features + 10 physiological-context features (mirror of the SMB schema)
      * → `BasalMlTrainingCoordinator.INPUT_SIZE`. Falls back to neutral physio if the caller's vector is the wrong
      * size, so a wiring mistake degrades to context-blind rather than crashing on an input-size mismatch.
+     *
+     * Slot 4 is always [BasalMlSchema.MODEL_DURA_AVG], never [duraAvg]: no model was trained on a real
+     * value there. [duraAvg] is read by nothing here; it stays in the signature (and in the public
+     * functions) so every caller keeps passing the real value, ready for the next schema change.
      */
     private fun modelInput(
         bg: Double, basal: Double, accel: Double, duraMin: Double, duraAvg: Double, iob: Double,
         physioFeatures: FloatArray,
     ): FloatArray {
-        val base = floatArrayOf(bg.toFloat(), basal.toFloat(), accel.toFloat(), duraMin.toFloat(), duraAvg.toFloat(), iob.toFloat())
+        val base = floatArrayOf(
+            bg.toFloat(), basal.toFloat(), accel.toFloat(), duraMin.toFloat(), BasalMlSchema.MODEL_DURA_AVG.toFloat(), iob.toFloat(),
+        )
         val physio = if (physioFeatures.size == neutralPhysioFeatures.size) physioFeatures else neutralPhysioFeatures
         return base + physio
     }
@@ -320,6 +326,8 @@ class BasalNeuralLearner @Inject constructor(
      * The learned multiplier is clamped to [RUNTIME_T3C_FACTOR_MIN] .. [RUNTIME_T3C_FACTOR_MAX]. Before
      * this clamp existed the T3C head could scale the user's aggressiveness by anything its publish
      * range allowed (0.3x .. 3.0x), with no floor, no ceiling and no liveness check.
+     *
+     * [duraAvg] does not reach the model: slot 4 is held at [BasalMlSchema.MODEL_DURA_AVG].
      */
     fun getT3cAdaptiveDecision(
         bg: Double,
@@ -403,6 +411,8 @@ class BasalNeuralLearner @Inject constructor(
     /**
      * Same result as [getUniversalBasalMultiplier], plus the raw value and the source, for the
      * `adaptive_basal` block of AIMI_Decisions.jsonl.
+     *
+     * [duraAvg] does not reach the model: slot 4 is held at [BasalMlSchema.MODEL_DURA_AVG].
      */
     fun getUniversalBasalDecision(
         bg: Double,

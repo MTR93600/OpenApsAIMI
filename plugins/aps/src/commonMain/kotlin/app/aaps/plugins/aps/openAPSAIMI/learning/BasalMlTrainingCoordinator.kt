@@ -516,7 +516,7 @@ internal object BasalMlDatasetParser {
 
     /** Fallback probe when the train set is empty (should not happen in normal publish flow). */
     fun neutralProbeInput(): FloatArray {
-        val base = floatArrayOf(100f, 1f, 0f, 30f, 45f, 0.5f)
+        val base = floatArrayOf(100f, 1f, 0f, 30f, BasalMlSchema.MODEL_DURA_AVG.toFloat(), 0.5f)
         val physio = SmbRefinementFeatureSchema.latentFeatureValues(null) +
             SmbRefinementFeatureSchema.modeFeatureValues(null) +
             SmbRefinementFeatureSchema.causalFeatureValues(null)
@@ -649,7 +649,9 @@ internal object BasalMlDatasetParser {
             val basal = cols[iBasal].toFloatOrNull() ?: return@forEachLine
             val accel = cols[iAccel].toFloatOrNull() ?: return@forEachLine
             val duraMin = cols[iDuraMin].toFloatOrNull() ?: return@forEachLine
-            val duraAvg = cols[iDuraAvg].toFloatOrNull() ?: return@forEachLine
+            // The duraAvg column stays required (old files have it), but its value never reaches the
+            // model: slot 4 is held at BasalMlSchema.MODEL_DURA_AVG, as at run time.
+            if (cols[iDuraAvg].toFloatOrNull() == null) return@forEachLine
             val iob = cols[iIob].toFloatOrNull() ?: return@forEachLine
             val target = cols[iTarget].toDoubleOrNull() ?: return@forEachLine
             val currentScale = cols[iBasalScale].toDoubleOrNull() ?: return@forEachLine
@@ -671,7 +673,7 @@ internal object BasalMlDatasetParser {
                     iobU = iob.toDouble(),
                     bolusU = bolusU,
                     cobG = cobG,
-                    features = floatArrayOf(bg.toFloat(), basal, accel, duraMin, duraAvg, iob) + physio,
+                    features = floatArrayOf(bg.toFloat(), basal, accel, duraMin, BasalMlSchema.MODEL_DURA_AVG.toFloat(), iob) + physio,
                 )
             )
         }

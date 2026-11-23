@@ -17,6 +17,23 @@ internal object BasalMlSchema {
      * dataset parser.
      */
     const val INPUT_SIZE = 16
+
+    /**
+     * Value of model input slot 4 (`duraAvg`) at run time AND in the training rows. It is always 0, on
+     * purpose.
+     *
+     * Until 2026-11 the loop never filled `duraISFaverage`: it was 0 on every tick. So every basal and
+     * T3C model in the field was trained with 0 in this slot. A column that is constant in training keeps
+     * mean 0 / std 1 in the network normalisation, so the weights of this slot were never trained. The
+     * real value is a BG average in mg/dL (close to the current BG), and sending it would push a large
+     * number into those untrained weights and change the dose in a way nobody has measured.
+     *
+     * So `BasalNeuralLearner.modelInput` and `BasalMlDatasetParser` both write this constant in slot 4,
+     * whatever value the caller or the CSV holds. The CSV still logs the real value, so a future model
+     * can learn from it. Remove this constant, and use the real value, only together with a schema change
+     * that retrains both heads from zero.
+     */
+    const val MODEL_DURA_AVG = 0.0
 }
 
 /**
