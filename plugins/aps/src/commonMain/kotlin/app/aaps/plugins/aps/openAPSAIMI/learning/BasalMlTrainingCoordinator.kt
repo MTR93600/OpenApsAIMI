@@ -55,59 +55,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
         const val INPUT_SIZE = BasalMlSchema.INPUT_SIZE
 
         /**
-         * Index of the bg column in the feature vector built by `BasalNeuralLearner.modelInput`.
-         *
-         * The spread probe sweeps this one column over [SPREAD_SWEEP_BG_MGDL] and holds every other
-         * feature at its training median. Sweeping one axis at a time is on purpose: a joint
-         * p10/p50/p90 vector mixes states that cannot happen together (p90 bg with p90 iob) and can
-         * show a healthy looking spread on a model that is in fact blind to bg.
-         */
-        internal const val BG_FEATURE_INDEX = 0
-
-        /**
-         * The bg values the spread probe sweeps: the SAME fixed clinical anchors the runtime health
-         * probe uses (`BasalNeuralLearner.answersToBg`).
-         *
-         * The two must not drift apart. The runtime probe nulls a model that does not answer across
-         * these anchors, so a publish gate that measured a different window could publish a model its
-         * own loader then refuses: training reports success, the runtime silently serves the heuristic,
-         * and no log line links the two. `BasalMlTrainingCoordinatorTest` fails if they diverge.
-         *
-         * The gate used to sweep the p10 .. p90 of the training bg column instead. On real field data
-         * (one device, 24 h, 260 ticks) that window was 79.2 .. 157.6 mg/dL, 78.4 mg/dL wide: 0.44x of
-         * the clinical span, so it understated that model's bg response by about 2.3x while the
-         * threshold below is written in full-range units. Worse, the window is narrowest for a
-         * well-controlled patient, so the old gate was loosest exactly where a wrong model is hardest
-         * to notice.
-         */
-        internal val SPREAD_SWEEP_BG_MGDL: List<Double> = BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL
-
-        /**
-         * Smallest output spread we accept over the bg sweep, in multiplier units.
-         *
-         * A model that answers the same value for every bg is useless, and it is not a rare case: the
-         * model shipped on 12 July 2026 answered 0.19918 for every input, with a spread of 3.4e-08 over
-         * bg 40..400. It stayed in place for 40 days. The threshold is in real multiplier units on
-         * purpose, because a spread of 0.001 would pass any plain "not a constant" test while being the
-         * same thing as a constant for the patient.
-         *
-         * The value is now DERIVED, not inherited. Two measurements fix it, both on patient-shaped data
-         * with the fixed training seed, 10 seeds per side (`AdversarialBasalLearningTest`):
-         * - over the anchors, models that really learned moved by 0.073 .. 0.143 (basal head) and
-         *   0.042 .. 0.158 (T3C head). Raising this number above 0.05 starts rejecting them.
-         * - models trained on pure label noise moved MORE, not less: 0.159 .. 0.208. So no spread
-         *   threshold at all separates a live model from a noise model, and lowering this number buys
-         *   nothing either. Rejecting noise is [MAX_BASELINE_MAE_RATIO]'s job, not this one's.
-         *
-         * It also cannot go below `BasalNeuralLearner.PROBE_MIN_SPREAD`, or the loader would refuse
-         * what this gate just published. That runtime constant is 0.05 and is shared by both heads,
-         * which is why ONE shared number is kept here as well instead of one per head: a per-head
-         * value under 0.05 could never be served. The T3C head pays for that — 2 of its 10 genuinely
-         * learned models sit under 0.05 — but they would be dropped at load time anyway.
-         */
-        internal const val MIN_OUTPUT_SPREAD = 0.05
-
-        /**
          * The candidate's held-out mean absolute error must be at most this fraction of the best
          * constant predictor's (the median training label). 0.95 asks for at least 5% better.
          *
@@ -296,7 +243,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
             valInputs = split.valInputs,
             valTargets = split.valBasalTargets,
             config = config,
-            outputRange = 0.5..2.0,
+            outputRange = BasalHeadHealthGate.BASAL_OUTPUT_RANGE,
         )
         return when {
             published -> HeadTrainResult.PUBLISHED
@@ -315,7 +262,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
             valInputs = split.valInputs,
             valTargets = split.valT3cTargets,
             config = config,
-            outputRange = 0.3..3.0,
+            outputRange = BasalHeadHealthGate.T3C_OUTPUT_RANGE,
         )
         return when {
             published -> HeadTrainResult.PUBLISHED
@@ -326,27 +273,28 @@ class BasalMlTrainingCoordinator @Inject constructor(
     /**
      * Trains a candidate and publishes it only if it passes every gate.
      *
-     * The range probe and the spread probe run on the bootstrap run too. They used to be switched off
-     * when there was no model on disk yet, which let the very first candidate publish on nothing more
-     * than "the numbers are finite". A dead model published that way then blocked every later candidate,
-     * because each retrain produced the same out of range output and was dropped before the loss was
-     * even compared. Publishing no model is a safe outcome: the caller falls back to the heuristic.
+     * The range probe runs on the bootstrap run too. It used to be switched off when there was no model on disk
+     * yet, which let the very first candidate publish on nothing more than "the numbers are finite". A dead model
+     * published that way then blocked every later candidate. Publishing no model is a safe outcome: the caller
+     * falls back to the heuristic.
      *
-     * The candidate also has to beat the best constant predictor on the held-out rows
-     * ([MAX_BASELINE_MAE_RATIO]). The spread probe alone cannot do that job: measured, a model trained
-     * on pure label noise moves MORE across the bg anchors than a model that found the real function.
+     * The candidate has to beat the best constant predictor on the held-out rows ([MAX_BASELINE_MAE_RATIO]).
+     * That is the quality gate: measured, a model trained on pure label noise moves MORE across the bg anchors
+     * than a model that found the real function, so no spread threshold can do this job.
+     *
+     * The last gate is [BasalHeadHealthGate], the very check `BasalNeuralLearner` runs when it loads the file, at
+     * the same probe point (the candidate's own input mean) and the same threshold. So a model this method
+     * publishes is never refused by its own loader. The spread probe of `NeuralModelTrainer` is not armed for
+     * these heads (no sweep values, spread 0): it probed at the training median, a different point. The check
+     * that passed is written into the file as a stamp ([BasalHeadHealthGate.stampFields]); a file without it is
+     * an older one and is judged by the older rule.
      *
      * `requireIncumbentBeat` is left off (the default) on purpose, same as `AimiSmbTrainer`. Comparing
      * against the model on disk is what froze this exact basal head for 40+ days: the model shipped on
      * 12 July 2026 answered a near-constant value, a constant hugs the label mean and so scores a
      * deceptively low validation loss, and every later candidate - however well trained - was rejected
-     * for not beating it. The liveness probes above (range, spread, baseline-MAE) are the safe way to
-     * keep a bad model out; a val-loss ratchet against a possibly-already-broken incumbent is not.
-     *
-     * Restored 2026-09-30 to match `origin/dev_OAPSAIMI`. This branch had been passing
-     * `requireIncumbentBeat = hasIncumbent` since a mechanical peel commit, with this paragraph
-     * dropped, so the basal head was running the ratchet the reference warns against while the SMB
-     * head in the same module was not.
+     * for not beating it. The liveness gates above are the safe way to keep a bad model out; a val-loss
+     * ratchet against a possibly-already-broken incumbent is not.
      */
     private fun trainAndMaybePublish(
         weightsPath: AimiPath,
@@ -356,7 +304,6 @@ class BasalMlTrainingCoordinator @Inject constructor(
         valTargets: List<DoubleArray>,
         config: TrainingConfig,
         outputRange: ClosedFloatingPointRange<Double>,
-        minOutputSpread: Double = MIN_OUTPUT_SPREAD,
     ): Boolean {
         return NeuralModelTrainer.trainAndPublish(
             storage = storage,
@@ -366,10 +313,21 @@ class BasalMlTrainingCoordinator @Inject constructor(
             inputSize = INPUT_SIZE,
             probeInput = BasalMlDatasetParser.representativeProbeInput(trainInputs),
             outputRange = outputRange,
-            spreadFeatureIndex = BG_FEATURE_INDEX,
-            spreadSweepValues = SPREAD_SWEEP_BG_MGDL,
-            minOutputSpread = minOutputSpread,
+            minOutputSpread = 0.0,
             maxBaselineErrorRatio = MAX_BASELINE_MAE_RATIO,
+            finalGate = { candidate, baselineErrorRatio ->
+                val verdict = BasalHeadHealthGate.check(candidate, outputRange, BasalHeadHealthGate.CONSTANT_SPREAD)
+                if (verdict.ok) {
+                    BasalHeadHealthGate.stampFields(baselineErrorRatio)
+                } else {
+                    log.info(
+                        LTag.AIMI,
+                        "$TAG: candidate ${storage.displayPath(weightsPath)} refused by the health gate: " +
+                            "reason=${verdict.reason.name.lowercase()} out=${verdict.outputs} spread=${verdict.spread}",
+                    )
+                    null
+                }
+            },
             log = { log.info(LTag.AIMI, "$TAG: $it") },
         ) != null
     }

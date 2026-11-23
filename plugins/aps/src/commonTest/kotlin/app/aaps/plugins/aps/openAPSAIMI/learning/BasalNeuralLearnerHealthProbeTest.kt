@@ -6,15 +6,21 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.MapPreferences
 import app.aaps.plugins.aps.openAPSAIMI.NoOpAapsLogger
 import app.aaps.plugins.aps.openAPSAIMI.tpo.InMemoryAimiStorage
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiNeuralModelStore
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -26,6 +32,11 @@ import kotlin.test.assertTrue
  *
  * The T3C head shares the network class, the file format and the trainer, so it can die the same way.
  * It had no probe and no runtime clamp at all; the tests at the end of this file pin both.
+ *
+ * The probe is [BasalHeadHealthGate], the same check the trainer runs before it publishes. The fixtures
+ * have an input mean of 0, so the probe point is the zero vector with BG swept over the anchors. The last
+ * tests pin what serves after a refused file (target, then `.bak`, then the model in memory) and the two
+ * spread thresholds (stamped files 0.001, older files 0.05).
  *
  * Port of `BasalNeuralLearnerHealthProbeTest` from `dev_OAPSAIMI`. What changed:
  * - dev mocked `BasalMlModelStore` and `AimiNeuralNetwork` with mockk. Here there is no mock: the weight
@@ -53,6 +64,10 @@ class BasalNeuralLearnerHealthProbeTest {
     /** Weight file of a network that really answers to BG (feature index 0): [low] at 70 mg/dL, [high] at 250 mg/dL. */
     private fun bgSensitiveNet(low: Double, high: Double): String =
         networkJson(bgWeight = 1.0, hiddenBias = -70.0, outWeight = (high - low) / 180.0, outBias = low)
+
+    /** [bgSensitiveNet] with the gate stamp a publish writes, so it is judged at the constant-only threshold. */
+    private fun stamped(json: String): String =
+        JsonObject(Json.parseToJsonElement(json).jsonObject + BasalHeadHealthGate.stampFields(0.6)).toString()
 
     private fun networkJson(bgWeight: Double, hiddenBias: Double, outWeight: Double, outBias: Double): String {
         val inputSize = BasalMlSchema.INPUT_SIZE
@@ -269,7 +284,110 @@ class BasalNeuralLearnerHealthProbeTest {
         storage.writeText(t3cFile, constantNet(1.5))
         learner.reloadModels()
 
-        assertEquals(BasalNeuralLearner.T3cFactorSource.HEURISTIC, t3cAt(learner, bg = 250.0).source)
+        // The dead file is refused and moved aside. No backup passes, so the model already in memory stays.
+        assertFalse(storage.exists(t3cFile))
+        assertTrue(storage.exists(storage.sibling(t3cFile, BasalMlModelStore.REJECTED_SUFFIX)))
+        val decision = t3cAt(learner, bg = 250.0)
+        assertEquals(BasalNeuralLearner.T3cFactorSource.NEURAL, decision.source)
+        assertNear(1.8, decision.multiplier)
+    }
+
+    // -- D4: what serves after a refused file -----------------------------------------------------
+
+    @Test
+    fun refusedTargetFallsBackToTheBackupThatPassesTheSameGate() {
+        storage.writeText(storage.sibling(basalFile, ".bak"), bgSensitiveNet(low = 0.9, high = 1.25))
+        val learner = learnerWith(basalNet = constantNet(1.0), t3cNet = null)
+
+        val decision = decisionAt(learner, bg = 70.0)
+
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.NEURAL, decision.source)
+        assertNear(0.9, decision.rawValue)
+        val status = learner.basalModelStatus()
+        assertEquals(BasalNeuralLearner.ModelOrigin.BACKUP, status.origin)
+        assertEquals(BasalHeadHealthGate.Reason.CONSTANT, status.targetGate)
+    }
+
+    @Test
+    fun refusedTargetAndRefusedBackupKeepTheModelInMemory() {
+        val learner = learnerWith(basalNet = bgSensitiveNet(low = 0.9, high = 1.25), t3cNet = null)
+        assertEquals(BasalNeuralLearner.ModelOrigin.CURRENT, learner.basalModelStatus().origin)
+
+        storage.writeText(basalFile, constantNet(1.0))
+        storage.writeText(storage.sibling(basalFile, ".bak"), bgSensitiveNet(low = 2.5, high = 4.0))
+        learner.reloadModels()
+
+        val decision = decisionAt(learner, bg = 70.0)
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.NEURAL, decision.source)
+        assertNear(0.9, decision.rawValue)
+        assertEquals(BasalNeuralLearner.ModelOrigin.KEPT, learner.basalModelStatus().origin)
+    }
+
+    @Test
+    fun withNoModelInMemoryARefusedFileLeavesTheHeuristic() {
+        val learner = learnerWith(basalNet = constantNet(1.0), t3cNet = null)
+
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.HEURISTIC, decisionAt(learner, bg = 140.0).source)
+        val status = learner.basalModelStatus()
+        assertEquals(BasalNeuralLearner.ModelOrigin.NONE, status.origin)
+        assertEquals(BasalHeadHealthGate.Reason.CONSTANT, status.targetGate)
+    }
+
+    @Test
+    fun refusedTargetNeverRotatesIntoTheBackup() {
+        val goodBackup = bgSensitiveNet(low = 0.9, high = 1.25)
+        storage.writeText(storage.sibling(basalFile, ".bak"), goodBackup)
+        val dead = constantNet(1.0)
+        learnerWith(basalNet = dead, t3cNet = null)
+
+        // The refused target was moved aside, so the next publish has no target to rotate.
+        assertFalse(storage.exists(basalFile))
+        assertEquals(dead, storage.readText(storage.sibling(basalFile, BasalMlModelStore.REJECTED_SUFFIX)))
+        val next = AimiNeuralNetwork.fromJsonString(bgSensitiveNet(low = 1.0, high = 1.2))
+        assertNotNull(next)
+        assertTrue(AimiNeuralModelStore.save(storage, basalFile, next))
+
+        assertEquals(goodBackup, storage.readText(storage.sibling(basalFile, ".bak")))
+    }
+
+    @Test
+    fun missingTargetReportsNoGateVerdict() {
+        val learner = learnerWith(basalNet = null, t3cNet = null)
+
+        val status = learner.basalModelStatus()
+        assertEquals(BasalNeuralLearner.ModelOrigin.NONE, status.origin)
+        assertNull(status.targetGate)
+        assertNull(status.targetSpread)
+    }
+
+    // -- D3: one threshold for stamped files, the old one for older files -------------------------
+
+    @Test
+    fun unstampedFileIsJudgedAtTheLegacySpread() {
+        // Moves 0.01 over the anchors: more than a constant, less than the old 0.05 rule.
+        val learner = learnerWith(basalNet = bgSensitiveNet(low = 1.0, high = 1.01), t3cNet = null)
+
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.HEURISTIC, decisionAt(learner, bg = 140.0).source)
+        assertEquals(BasalHeadHealthGate.Reason.CONSTANT, learner.basalModelStatus().targetGate)
+    }
+
+    @Test
+    fun stampedFileIsJudgedAtTheConstantOnlySpread() {
+        val learner = learnerWith(basalNet = stamped(bgSensitiveNet(low = 1.0, high = 1.01)), t3cNet = null)
+
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.NEURAL, decisionAt(learner, bg = 140.0).source)
+        val status = learner.basalModelStatus()
+        assertEquals(BasalNeuralLearner.ModelOrigin.CURRENT, status.origin)
+        assertEquals(BasalHeadHealthGate.Reason.OK, status.targetGate)
+        assertNear(0.01, status.targetSpread ?: Double.NaN)
+    }
+
+    @Test
+    fun stampedConstantFileIsStillRefused() {
+        val learner = learnerWith(basalNet = stamped(constantNet(1.0)), t3cNet = null)
+
+        assertEquals(BasalNeuralLearner.BasalMultiplierSource.HEURISTIC, decisionAt(learner, bg = 140.0).source)
+        assertEquals(BasalHeadHealthGate.Reason.CONSTANT, learner.basalModelStatus().targetGate)
     }
 
     @Test

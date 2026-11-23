@@ -133,104 +133,123 @@ class BasalNeuralLearner @Inject constructor(
     /**
      * Neutral physiological context (backfill / when no live state is available): 4 latent + 3 mode + 3 causal = 10,
      * reusing the SMB feature schema so the two models share one physio vocabulary.
-     *
-     * DO NOT MOVE THIS PROPERTY BELOW THE `init` BLOCK. Kotlin runs property initializers and `init`
-     * blocks in declaration order. The `init` block loads the models and probes them, the probe builds
-     * its input with [modelInput], and [modelInput] reads this vector. Declared after `init`, this
-     * property is still `null` while the probe runs, so the probe would crash (or silently probe a
-     * wrong-size input) at construction time. The order is load-bearing, not cosmetic.
      */
     private val neutralPhysioFeatures: FloatArray =
         SmbRefinementFeatureSchema.latentFeatureValues(null) +
             SmbRefinementFeatureSchema.modeFeatureValues(null) +
             SmbRefinementFeatureSchema.causalFeatureValues(null)
 
-    // Keep `neutralPhysioFeatures` declared ABOVE this block: the health probe inside loadModels()
-    // reads it. See the KDoc of that property.
+    /** Which basal model serves this tick and what the gate said about the target file. Read by [basalModelStatus]. */
+    private var basalStatus = ModelStatus(ModelOrigin.NONE, targetGate = null, targetSpread = null)
+
+    // Keep the model fields and `basalStatus` declared ABOVE this block: loadModels() assigns them, and a
+    // property declared below `init` would overwrite that with its own initial value.
     init {
         loadModels()
     }
 
+    /** Which weight file the model in service came from. */
+    enum class ModelOrigin {
+
+        /** The target file passed the gate. */
+        CURRENT,
+
+        /** The target was refused or unreadable; its `.bak` passed the gate. */
+        BACKUP,
+
+        /** No file passed; the model already in memory stays in service. */
+        KEPT,
+
+        /** No model: the heuristic serves. */
+        NONE,
+    }
+
+    /**
+     * Load result of one head, for the `adaptive_basal` block of AIMI_Decisions.jsonl.
+     *
+     * [targetGate] is the gate verdict on the target file, `null` when the target is missing or cannot be read.
+     * [targetSpread] is its measured spread over the BG anchors.
+     */
+    data class ModelStatus(
+        val origin: ModelOrigin,
+        val targetGate: BasalHeadHealthGate.Reason?,
+        val targetSpread: Double?,
+    )
+
+    private class HeadLoad(val net: AimiNeuralNetwork?, val status: ModelStatus)
+
     private fun loadModels() {
-        val t3cWeights = storage.file("t3c_brain_weights.json")
-        val basalWeights = storage.file("basal_adaptive_weights.json")
-
-        neuralT3cNet = BasalMlModelStore.loadValid(storage, t3cWeights, BasalMlSchema.INPUT_SIZE)
-        neuralBasalNet = BasalMlModelStore.loadValid(storage, basalWeights, BasalMlSchema.INPUT_SIZE)
-        rejectUnhealthyNets()
-    }
-
-    /**
-     * Drops a model when it does not react to blood glucose, or answers outside the range that head may
-     * ever publish. Runs for BOTH heads, on every path that assigns them (construction and
-     * [reloadModels]).
-     *
-     * A constant model is not a theory, it is a measured failure mode. A shipped
-     * `basal_adaptive_weights.json` was probed directly and returned **0.19918 for every input**
-     * (spread over BG 40..400 = 3.4e-08). The runtime clamp turned that constant into exactly 0.70 on
-     * 100 % of ticks, on two devices 40 days apart, which reads like a confident decision instead of a
-     * dead model. Without this probe nothing tells the two apart. When the probe fails the heuristic
-     * takes over, because a heuristic that moves is worth more than a number that never does.
-     *
-     * The T3C head shares the same network class, the same file format and the same trainer, so it can
-     * die in exactly the same way. It used to be loaded with no probe at all.
-     */
-    private fun rejectUnhealthyNets() {
-        neuralBasalNet = neuralBasalNet?.takeIf {
-            answersToBg(it, "basal", BASAL_PROBE_OUTPUT_MIN, BASAL_PROBE_OUTPUT_MAX)
-        }
-        neuralT3cNet = neuralT3cNet?.takeIf {
-            answersToBg(it, "T3C", T3C_PROBE_OUTPUT_MIN, T3C_PROBE_OUTPUT_MAX)
-        }
-    }
-
-    /**
-     * Sweeps [ClinicalBgAnchors.PROBE_BG_MGDL] through [net] and answers whether the model is alive.
-     *
-     * Alive means two things at once: every answer is finite and inside [outputMin] .. [outputMax]
-     * (the publish range of that head), and the answers move by at least [PROBE_MIN_SPREAD] across the
-     * anchors. A model that passes the range check with one constant value is the dead model described
-     * in [rejectUnhealthyNets]; only the spread check catches it.
-     *
-     * [label] only names the head in the log lines ("basal" / "T3C").
-     */
-    private fun answersToBg(
-        net: AimiNeuralNetwork,
-        label: String,
-        outputMin: Double,
-        outputMax: Double,
-    ): Boolean {
-        val outputs = try {
-            ClinicalBgAnchors.PROBE_BG_MGDL.map { bg ->
-                net.predict(
-                    modelInput(
-                        bg = bg,
-                        basal = BASAL_PROBE_BASAL_UPH,
-                        accel = 0.0,
-                        duraMin = BASAL_PROBE_DURA_MIN,
-                        duraAvg = BASAL_PROBE_DURA_AVG,
-                        iob = BASAL_PROBE_IOB_U,
-                        physioFeatures = neutralPhysioFeatures,
-                    )
-                )[0]
-            }
-        } catch (e: Exception) {
-            log.error(LTag.AIMI, "BasalNeuralLearner: $label model probe failed, using the heuristic", e)
-            return false
-        }
-
-        val bad = outputs.any { !it.isFinite() || it < outputMin || it > outputMax }
-        val spread = (outputs.maxOrNull() ?: 0.0) - (outputs.minOrNull() ?: 0.0)
-        if (!bad && spread >= PROBE_MIN_SPREAD) return true
-
-        log.warn(
-            LTag.AIMI,
-            "BasalNeuralLearner: $label model REJECTED (out=${outputs.joinToString(",") { fmt5(it) }} " +
-                "spread=${fmt6(spread)} range=${aimiFmt2(outputMin)}..${aimiFmt2(outputMax)}) — it does not answer " +
-                "to BG, falling back to the heuristic",
+        val basal = loadHead(
+            target = storage.file("basal_adaptive_weights.json"),
+            label = "basal",
+            outputRange = BasalHeadHealthGate.BASAL_OUTPUT_RANGE,
+            inMemory = neuralBasalNet,
         )
-        return false
+        neuralBasalNet = basal.net
+        basalStatus = basal.status
+        neuralT3cNet = loadHead(
+            target = storage.file("t3c_brain_weights.json"),
+            label = "T3C",
+            outputRange = BasalHeadHealthGate.T3C_OUTPUT_RANGE,
+            inMemory = neuralT3cNet,
+        ).net
     }
+
+    /**
+     * Loads one head: the target, then its `.bak`, then the model already in memory. Each file must pass
+     * [BasalHeadHealthGate], the same check the trainer ran before it published. Runs for BOTH heads, at
+     * construction and in [reloadModels].
+     *
+     * Why a gate at all: a shipped `basal_adaptive_weights.json` returned **0.19918 for every input** (spread over
+     * BG 40..400 = 3.4e-08). The runtime clamp turned that constant into 0.70 on 100 % of ticks, on two devices
+     * 40 days apart, which looked like a confident decision. The T3C head shares the network class, the file
+     * format and the trainer, so it can die the same way.
+     *
+     * A refused target is moved aside ([BasalMlModelStore.quarantine]) so the next publish cannot rotate it into
+     * `.bak`. When no file passes, the model in memory stays: it passed this same gate when it was loaded, and a
+     * bad new file must not take a good model out of service. At construction there is none, so the heuristic
+     * serves.
+     */
+    private fun loadHead(
+        target: AimiPath,
+        label: String,
+        outputRange: ClosedFloatingPointRange<Double>,
+        inMemory: AimiNeuralNetwork?,
+    ): HeadLoad {
+        var targetVerdict: BasalHeadHealthGate.Verdict? = null
+        for (candidate in BasalMlModelStore.candidates(storage, target)) {
+            val file = storage.displayPath(candidate.path)
+            val net = candidate.net
+            if (net == null) {
+                log.warn(LTag.AIMI, "BasalNeuralLearner: $label model file=$file cannot be read, skipped")
+                continue
+            }
+            val verdict = BasalHeadHealthGate.check(net, outputRange, BasalHeadHealthGate.minSpreadFor(candidate.stamp))
+            if (candidate.slot == BasalMlModelStore.Slot.TARGET) targetVerdict = verdict
+            if (verdict.ok) {
+                val origin = if (candidate.slot == BasalMlModelStore.Slot.TARGET) ModelOrigin.CURRENT else ModelOrigin.BACKUP
+                return HeadLoad(net, statusOf(origin, targetVerdict))
+            }
+            log.warn(
+                LTag.AIMI,
+                "BasalNeuralLearner: $label model REJECTED file=$file reason=${verdict.reason.name.lowercase()} " +
+                    "out=${verdict.outputs.joinToString(",") { fmt5(it) }} spread=${fmt6(verdict.spread)} " +
+                    "min=${fmt6(verdict.minSpread)} range=${aimiFmt2(outputRange.start)}..${aimiFmt2(outputRange.endInclusive)} " +
+                    "probe=[${verdict.probePoint.joinToString(",") { fmt5(it) }}] bg=${BasalHeadHealthGate.BG_FEATURE_INDEX}",
+            )
+            if (candidate.slot == BasalMlModelStore.Slot.TARGET && !BasalMlModelStore.quarantine(storage, candidate.path)) {
+                log.error(LTag.AIMI, "BasalNeuralLearner: $label model file=$file could not be moved aside")
+            }
+        }
+        val origin = if (inMemory != null) ModelOrigin.KEPT else ModelOrigin.NONE
+        return HeadLoad(inMemory, statusOf(origin, targetVerdict))
+    }
+
+    private fun statusOf(origin: ModelOrigin, targetVerdict: BasalHeadHealthGate.Verdict?) =
+        ModelStatus(origin, targetVerdict?.reason, targetVerdict?.spread?.takeIf { it.isFinite() })
+
+    /** Load status of the Universal Adaptive Basal head, for the decision log. */
+    fun basalModelStatus(): ModelStatus = stateLock.withLock { basalStatus }
 
     /** Reload weight files from disk after background training publishes new models. */
     fun reloadModels() = stateLock.withLock {
@@ -997,23 +1016,16 @@ class BasalNeuralLearner @Inject constructor(
     }
 
     /**
-     * The blood-glucose anchors, in mg/dL, that EVERY probe of these two heads must sweep.
+     * The blood-glucose anchors, in mg/dL, that the health check of these two heads sweeps.
      *
-     * This is a contract between two places, not a local detail:
-     * - the runtime loader probes a model on these anchors before it is allowed to dose
-     *   (`answersToBg`, called from `rejectUnhealthyNets`);
-     * - the publish gate in the trainer must probe a candidate on the SAME anchors.
+     * There is one check, [BasalHeadHealthGate], and it runs both when the trainer publishes and when this
+     * class loads a file. Both sides used to have their own probe, and when they sweep different inputs the
+     * system can publish a model that its own loader then refuses: training reports success, the runtime
+     * silently falls back to the heuristic, and nothing in the logs connects the two.
      *
-     * If the two sweep different inputs, the system can publish a model that its own loader then
-     * refuses on the next reload. That is worse than either probe alone: training reports success, the
-     * runtime silently falls back to the heuristic, and nothing in the logs connects the two.
-     *
-     * The publish gate today samples the p10/p50/p90 of the TRAINING bg column instead, and that is the
-     * mismatch. Measured on real patient field data (24 h, n=260) the training p10..p90 window is
-     * 79.2..157.6 mg/dL = 78.4 mg/dL wide, only 0.44x of the clinical span 70..250 mg/dL, so the gate
-     * understates a model's real bg response by about 2.3x on that patient. On 10 patient-shaped seeds
-     * that cost 5 of 10 models that genuinely learned (rejected), and let 1 of 10 pure-noise models
-     * through.
+     * The publish gate once sampled the p10/p50/p90 of the TRAINING bg column instead. Measured on real patient
+     * field data (24 h, n=260) that window was 79.2..157.6 mg/dL = 78.4 mg/dL wide, only 0.44x of the clinical
+     * span 70..250 mg/dL, so it understated a model's real bg response by about 2.3x on that patient.
      *
      * Why these three values: a low anchor inside the hypo band, a mid anchor near target, and a high
      * anchor in the correction band. They are fixed on purpose. A per-patient window shrinks with a
@@ -1022,7 +1034,7 @@ class BasalNeuralLearner @Inject constructor(
      */
     object ClinicalBgAnchors {
 
-        /** Low / mid / high blood glucose, mg/dL. Do not narrow this without changing both probes. */
+        /** Low / mid / high blood glucose, mg/dL. */
         val PROBE_BG_MGDL: List<Double> = listOf(70.0, 140.0, 250.0)
     }
 
@@ -1059,35 +1071,6 @@ class BasalNeuralLearner @Inject constructor(
          */
         const val RUNTIME_T3C_FACTOR_MIN = 0.5
         const val RUNTIME_T3C_FACTOR_MAX = 2.0
-
-        const val BASAL_PROBE_BASAL_UPH = 1.0
-        const val BASAL_PROBE_DURA_MIN = 30.0
-        const val BASAL_PROBE_DURA_AVG = 45.0
-        const val BASAL_PROBE_IOB_U = 0.5
-
-        /**
-         * A model that moves less than this across [ClinicalBgAnchors.PROBE_BG_MGDL] is treated as
-         * constant. Shared by both heads: the unit is the same (a fraction of a multiplier). It is an
-         * absolute floor on "this model is not a constant", so it is relatively more permissive for the
-         * T3C head, whose label window (0.5 .. 2.0) is three times wider than the basal one
-         * (0.85 .. 1.35). That is the safe direction: it never rejects a model that really moves.
-         */
-        const val PROBE_MIN_SPREAD = 0.05
-
-        /**
-         * Accepted probe output of each head = the range that head is allowed to PUBLISH in
-         * (`BasalMlTrainingCoordinator.trainBasalHead` / `trainT3cHead`).
-         *
-         * The probe must not be tighter than the publish range, or the loader would refuse a model the
-         * trainer just published and the two sides would fight forever. Values that are in the publish
-         * range but outside the runtime clamp are accepted here and clamped later, which is why the log
-         * line prints the raw value: a model living at 0.31 and a model that learned 0.50 both apply
-         * 0.50, and only `raw` tells them apart.
-         */
-        const val BASAL_PROBE_OUTPUT_MIN = 0.5
-        const val BASAL_PROBE_OUTPUT_MAX = 2.0
-        const val T3C_PROBE_OUTPUT_MIN = 0.3
-        const val T3C_PROBE_OUTPUT_MAX = 3.0
 
         const val GOVERNANCE_WINDOW_MAX = 288 // ~24h @ 5-min cadence
         const val GOVERNANCE_MIN_SAMPLES = 36 // ~3h warmup

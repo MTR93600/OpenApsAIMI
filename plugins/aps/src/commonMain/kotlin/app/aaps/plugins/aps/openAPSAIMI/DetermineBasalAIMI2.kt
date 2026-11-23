@@ -1512,6 +1512,12 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         put("n_clamped", nDecision?.clamped ?: false)
         put("n_floor", nDecision?.floor ?: AimiJson.NULL)
         put("n_ceiling", nDecision?.ceiling ?: AimiJson.NULL)
+        // Which weight file serves (current, backup, kept, none) and what the health gate said about the
+        // target file at the last load (ok, constant, range, nonfinite, size; none = missing or unreadable).
+        val nStatus = basalNeuralLearner.basalModelStatus()
+        put("n_model", nStatus.origin.name.lowercase())
+        put("n_gate", nStatus.targetGate?.name?.lowercase() ?: "none")
+        put("n_spread", nStatus.targetSpread ?: AimiJson.NULL)
         put("combined", combined)
         val gov = basalNeuralLearner.getGovernanceSnapshot()
         put("governance_action", gov.action.name)

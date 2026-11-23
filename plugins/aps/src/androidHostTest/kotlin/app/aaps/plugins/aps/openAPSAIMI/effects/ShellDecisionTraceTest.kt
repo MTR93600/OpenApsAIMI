@@ -4416,6 +4416,8 @@ class ShellDecisionTraceTest {
                     reason = "trace",
                     timestamp = now,
                 )
+            } else if (inv.method.name == "basalModelStatus") {
+                BasalNeuralLearner.ModelStatus(BasalNeuralLearner.ModelOrigin.NONE, targetGate = null, targetSpread = null)
             } else if (inv.method.returnType == Void.TYPE) {
                 null
             } else {

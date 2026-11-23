@@ -105,6 +105,19 @@ class AndroidAimiStorageTest {
     }
 
     @Test
+    fun replaceKeepingBackup_without_a_target_leaves_the_existing_bak_alone(@TempDir dir: File) {
+        // The basal loader moves a refused target aside. The next publish must then keep the good backup.
+        val file = File(dir, "weights.json")
+        val bak = File(dir, "weights.json.bak").apply { writeText("last good model") }
+
+        val ok = storage.replaceKeepingBackup(pathOf(file), "new model")
+
+        assertThat(ok).isTrue()
+        assertThat(file.readText()).isEqualTo("new model")
+        assertThat(bak.readText()).isEqualTo("last good model")
+    }
+
+    @Test
     fun replaceKeepingBackup_leaves_the_target_readable_when_the_write_fails(@TempDir dir: File) {
         val lockedDir = File(dir, "locked").apply { mkdirs() }
         val file = File(lockedDir, "weights.json").apply { writeText("previous model") }

@@ -4,6 +4,7 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlinx.serialization.json.JsonElement
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -114,11 +115,9 @@ internal object NeuralModelTrainer {
      * And the window is NARROWEST for a well-controlled patient, so the old gate was loosest exactly where a wrong
      * model is hardest to notice.
      *
-     * The values must also be the ones the runtime health probe uses (`BasalNeuralLearner.answersToBg`, which
-     * sweeps `BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL` and drops the model when it does not answer). If
-     * the two probes sample different windows, training can publish a model that its own loader then refuses:
-     * training reports success, the runtime silently falls back to the heuristic, and no log line links the two.
-     * That is a worse failure than either probe alone.
+     * Callers sweep `BasalNeuralLearner.ClinicalBgAnchors.PROBE_BG_MGDL`. The basal and T3C heads no longer use this
+     * probe: they run `BasalHeadHealthGate` through `finalGate` instead, the same check their loader runs, so
+     * training cannot publish a model that its own loader then refuses.
      *
      * An empty [sweepValues] falls back to the old p10/p50/p90 window. It is kept only so a measurement test can
      * compare the two windows on one model; [trainAndPublish] refuses to run the spread gate on it.
@@ -407,6 +406,10 @@ internal object NeuralModelTrainer {
      * @param valLossTolerance a **tolerance**, not a hurdle: the candidate may be up to this factor WORSE than the
      *   incumbent and still publish (1.05 = up to 5% worse). It exists so a slightly noisier but fresher model can
      *   take over. It is not a "must beat by 5%" rule.
+     * @param finalGate optional last gate, run on the candidate after every other gate has passed. It gets the
+     *   held-out error ratio of [maxBaselineErrorRatio] (`NaN` when that check is off). It answers the extra
+     *   top-level fields to write into the weight file (a stamp of the check that passed), or `null` to discard the
+     *   candidate. The basal and T3C heads use it for `BasalHeadHealthGate`, the same check their loader runs.
      * @param log optional diagnostic sink (reject reasons + publish); defaults to no-op.
      * @return the published network, or null if nothing was published.
      */
@@ -428,6 +431,7 @@ internal object NeuralModelTrainer {
         constantBaseline: ConstantBaseline = ConstantBaseline.MAE_VS_MEDIAN,
         requireIncumbentBeat: Boolean = false,
         valLossTolerance: Double = 1.0,
+        finalGate: ((candidate: AimiNeuralNetwork, baselineErrorRatio: Double) -> Map<String, JsonElement>?)? = null,
         log: (String) -> Unit = {},
     ): AimiNeuralNetwork? {
         if (split.trainInputs.isEmpty() || split.valInputs.isEmpty()) return null
@@ -500,6 +504,7 @@ internal object NeuralModelTrainer {
         // The candidate must be worth more than "always answer the constant". Only the candidate is checked:
         // an incumbent that cannot beat the constant cannot block a candidate that can, because the validation
         // loss comparison below already prefers the better fit on the very same held-out rows.
+        var baselineErrorRatio = Double.NaN
         if (maxBaselineErrorRatio > 0.0) {
             val (candidateError, baselineError) = when (constantBaseline) {
                 ConstantBaseline.MAE_VS_MEDIAN -> heldOutMaeAgainstConstant(candidate::predict, split)
@@ -519,6 +524,7 @@ internal object NeuralModelTrainer {
                 log("candidate does not beat the $what=$candidateError baseline=$baselineError ratio=$ratio > $maxBaselineErrorRatio — discard")
                 return null
             }
+            baselineErrorRatio = ratio
         }
 
         if (incumbentUsable) {
@@ -533,7 +539,16 @@ internal object NeuralModelTrainer {
             return null
         }
 
-        if (!AimiNeuralModelStore.save(storage, weightsPath, candidate)) {
+        val extraFields = if (finalGate != null) {
+            finalGate(candidate, baselineErrorRatio) ?: run {
+                log("candidate refused by the final gate — discard")
+                return null
+            }
+        } else {
+            emptyMap()
+        }
+
+        if (!AimiNeuralModelStore.save(storage, weightsPath, candidate, extraFields)) {
             log("atomic save failed for ${storage.displayPath(weightsPath)}")
             return null
         }

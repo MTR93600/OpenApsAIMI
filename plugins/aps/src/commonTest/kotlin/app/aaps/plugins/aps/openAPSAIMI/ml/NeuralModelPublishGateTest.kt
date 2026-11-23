@@ -5,9 +5,11 @@ import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.learning.BasalNeuralLearner
 import app.aaps.plugins.aps.openAPSAIMI.tpo.InMemoryAimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlin.math.abs
 import kotlin.random.Random
@@ -320,6 +322,60 @@ class NeuralModelPublishGateTest {
 
         assertNotNull(published, lines.toString())
         assertTrue(lines.any { it.contains("published") }, lines.toString())
+    }
+
+    // ---------------------------------------------------------------- G7: the final gate and its stamp
+
+    @Test
+    fun finalGateStampIsWrittenIntoThePublishedFileAndTheFileStillLoads() {
+        val rows = basalRows()
+        var seenRatio = Double.NaN
+
+        val published = NeuralModelTrainer.trainAndPublish(
+            storage = storage,
+            weightsPath = weights,
+            split = NeuralModelTrainer.split80_20(rows, basalTargets(rows)),
+            config = TrainingConfig(learningRate = 0.01, epochs = 200, patience = 20),
+            inputSize = inputSize,
+            outputRange = basalRange,
+            maxBaselineErrorRatio = 0.95,
+            finalGate = { _, ratio ->
+                seenRatio = ratio
+                mapOf("stamp" to JsonPrimitive(7), "inputSize" to JsonPrimitive(99))
+            },
+        )
+
+        assertNotNull(published)
+        assertTrue(seenRatio.isFinite() && seenRatio <= 0.95, "ratio $seenRatio")
+        val text = storage.readText(weights)
+        assertNotNull(text)
+        val root = Json.parseToJsonElement(text).jsonObject
+        assertEquals(JsonPrimitive(7), root["stamp"])
+        // An extra field can never replace a field of the network itself.
+        assertEquals(JsonPrimitive(inputSize), root["inputSize"])
+        assertNotNull(AimiNeuralNetwork.fromJsonString(text))
+    }
+
+    @Test
+    fun finalGateAnsweringNullPublishesNothing() {
+        val rows = basalRows()
+        val lines = mutableListOf<String>()
+
+        val published = NeuralModelTrainer.trainAndPublish(
+            storage = storage,
+            weightsPath = weights,
+            split = NeuralModelTrainer.split80_20(rows, basalTargets(rows)),
+            config = TrainingConfig(learningRate = 0.01, epochs = 200, patience = 20),
+            inputSize = inputSize,
+            outputRange = basalRange,
+            maxBaselineErrorRatio = 0.95,
+            finalGate = { _, _ -> null },
+            log = { lines += it },
+        )
+
+        assertNull(published)
+        assertFalse(storage.exists(weights))
+        assertTrue(lines.any { it.contains("final gate") }, lines.toString())
     }
 
     // ---------------------------------------------------------------- G2: the range probe on bootstrap

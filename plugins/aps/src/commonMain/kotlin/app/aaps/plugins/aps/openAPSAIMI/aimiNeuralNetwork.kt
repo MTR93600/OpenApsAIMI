@@ -521,6 +521,14 @@ class AimiNeuralNetwork(
     /** Copy of the output bias. For tests and diagnostics only. */
     internal fun outputBiasCopy(): DoubleArray = biasOutput.copyOf()
 
+    /**
+     * Copy of the input mean, the training average of every feature. Its size is the input size.
+     *
+     * The basal head health gate (`BasalHeadHealthGate`) uses it as its probe point: a place the model has really
+     * seen, on every feature, instead of a vector we made up.
+     */
+    internal fun inputMeanCopy(): DoubleArray = inputMean.copyOf()
+
     /** Copy of the hidden bias. For tests and diagnostics only. */
     internal fun hiddenBiasCopy(): DoubleArray = biasHidden.copyOf()
 

@@ -4,6 +4,10 @@ import app.aaps.plugins.aps.openAPSAIMI.AimiNeuralNetwork
 import app.aaps.plugins.aps.openAPSAIMI.loadFromFile
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiPath
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Crash-safe, validated persistence for [AimiNeuralNetwork] weight files, shared by every AIMI on-device trainer
@@ -23,9 +27,25 @@ import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
  */
 internal object AimiNeuralModelStore {
 
-    fun save(storage: AimiStorage, target: AimiPath, network: AimiNeuralNetwork): Boolean =
+    /**
+     * Writes [network] to [target]. [extraFields] are added at the top level of the JSON (for example the stamp of
+     * the health check that passed). They can never replace a field of the network itself, and the loader ignores
+     * keys it does not know, so older code still reads the file.
+     */
+    fun save(
+        storage: AimiStorage,
+        target: AimiPath,
+        network: AimiNeuralNetwork,
+        extraFields: Map<String, JsonElement> = emptyMap(),
+    ): Boolean =
         try {
-            storage.replaceKeepingBackup(target, network.toJsonString())
+            val text = if (extraFields.isEmpty()) {
+                network.toJsonString()
+            } else {
+                val root = Json.parseToJsonElement(network.toJsonString()).jsonObject
+                JsonObject(root + extraFields.filterKeys { it !in root }).toString()
+            }
+            storage.replaceKeepingBackup(target, text)
         } catch (_: Exception) {
             false
         }
