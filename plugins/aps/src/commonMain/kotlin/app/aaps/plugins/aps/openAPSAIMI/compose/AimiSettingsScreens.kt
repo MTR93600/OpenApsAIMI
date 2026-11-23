@@ -131,6 +131,7 @@ internal enum class AimiSettingsSectionId {
     EndoTuning,
     T3cMode,
     T3cAutodriveAuthority,
+    T3cTransitionGuard,
     T3cBehaviour,
     T3cCfrdLgsFloor,
     T3cCfrdCobDelay,
@@ -560,6 +561,7 @@ internal object AimiSettingsScreens {
         ),
         fields(AimiSettingsSectionId.T3cMode, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED, BooleanKey.OApsAIMIT3cBrittleMode),
         fields(AimiSettingsSectionId.T3cAutodriveAuthority, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIT3cAutodriveBasalAuthority),
+        fields(AimiSettingsSectionId.T3cTransitionGuard, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.EXPERT, BooleanKey.OApsAIMIT3cTransitionGuard),
         fields(
             AimiSettingsSectionId.T3cBehaviour, AimiSettingsContentId.PreferencesT3c, AimiSettingsLevel.ADVANCED,
             BooleanKey.OApsAIMIT3cHyperBasalFloor, BooleanKey.OApsAIMIT3cCfrdMode, BooleanKey.OApsAIMIT3cCfrdExacerbationMode,

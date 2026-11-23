@@ -85,6 +85,7 @@ internal class AimiTickWorkingState {
     var lastRecursiveAuthorityGateDecision: RecursiveBeliefAuthorityGate.Decision? = null
     var lastT3cHistoricalBypassNeutralizedThisTick: Boolean = false
     var lastT3cRuntimeOwnership: AimiDecisionContext.T3cRuntimeOwnershipExport? = null
+    var lastT3cGuard2: AimiDecisionContext.T3cGuard2Export? = null
     var lastRbtChaosEvaluation: RbtChaosEvaluator.Result? = null
     var lastRbtAppliedHints: RbtResolutionBridge.AppliedHints? = null
     var rbtResolvedThisTick = false

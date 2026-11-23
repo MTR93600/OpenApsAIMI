@@ -1603,6 +1603,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         work.lastRbtAppliedHints = null
         work.lastT3cHistoricalBypassNeutralizedThisTick = false
         work.lastT3cRuntimeOwnership = null
+        work.lastT3cGuard2 = null
         work.rbtResolvedThisTick = false
         work.lastRbtLiveCommitResult = null
         work.lastLoadGovernorMultiplierG = 1.0
@@ -1752,30 +1753,16 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         }
         val gs = pack.gs!!
         val f = pack.features
-        val glucoseStatus = when {
-            ctx.glucoseStatus == null -> GlucoseStatusAIMI(
-                glucose = gs.glucose,
-                noise = gs.noise,
-                delta = gs.delta,
-                shortAvgDelta = gs.shortAvgDelta,
-                longAvgDelta = gs.longAvgDelta,
-                date = gs.date,
-                duraISFminutes = f?.stable5pctMinutes ?: 0.0,
-                duraISFaverage = f?.stable5pctAverage ?: 0.0,
-                parabolaMinutes = f?.parabolaMinutes ?: 0.0,
-                deltaPl = f?.delta5Prev ?: 0.0,
-                deltaPn = f?.delta5Next ?: 0.0,
-                bgAcceleration = f?.accel ?: 0.0,
-                a0 = f?.a0 ?: 0.0,
-                a1 = f?.a1 ?: 0.0,
-                a2 = f?.a2 ?: 0.0,
-                corrSqu = f?.corrR2 ?: 0.0,
-                sourceSensor = gs.sourceSensor
-            )
+        // The status is the one the caller built (`OpenAPSAIMIPlugin`, `DetermineBasalAimiEngine`). Its
+        // stable band (duraISFminutes / duraISFaverage) is NOT filled in here from [f]: the phase
+        // `bootstrapPhysiologyAfterEarlyTick` and the T3C paths already read it from the context
+        // before this step, and a second value here would give the tick two truths. The callers
+        // fill it with `withStableBand`.
+        val glucoseStatus = if (ctx.glucoseStatus.sourceSensor == null && gs.sourceSensor != null) {
             // Enrich if caller omitted sensor but calculator pack has it (One+ / G7 / G6)
-            ctx.glucoseStatus.sourceSensor == null && gs.sourceSensor != null ->
-                ctx.glucoseStatus.copy(sourceSensor = gs.sourceSensor)
-            else -> ctx.glucoseStatus
+            ctx.glucoseStatus.copy(sourceSensor = gs.sourceSensor)
+        } else {
+            ctx.glucoseStatus
         }
         ensurePredictionFallback(rT, glucoseStatus.glucose)
         return AimiGlucosePackLoadOutcome.Continue(glucoseStatus, f)
@@ -3158,6 +3145,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 }
                 override fun setLastNgrBasalMultiplier(multiplier: Double) {
                     work.lastNgrBasalMultiplier = multiplier
+                }
+                override fun setLastT3cGuard2(guard2: AimiDecisionContext.T3cGuard2Export) {
+                    work.lastT3cGuard2 = guard2
                 }
             },
         )
@@ -7607,6 +7597,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         decisionCtx.adjustments.harmonia_simulation = work.lastHarmoniaDecision?.toJsonObject()
         decisionCtx.adjustments.harmonia_production = work.lastHarmoniaProductionDecision?.toJsonObject()
         decisionCtx.adjustments.t3c_runtime_ownership = work.lastT3cRuntimeOwnership
+        decisionCtx.adjustments.t3c_guard2 = work.lastT3cGuard2
         decisionCtx.adjustments.replay_quality = ReplayQualityExportBuilder.toJsonObject(
             ReplayQualityExportBuilder.build(
                 phaseOutput = work.lastPhysiologicalPhaseOutput,
@@ -15467,6 +15458,7 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 markFinalLoopDecisionFromRT(rT, currentTemp)
             }
         },
+        recordTransitionGuard = { work.lastT3cGuard2 = it },
     )
 }
 

@@ -4,6 +4,7 @@ import app.aaps.core.data.time.SystemTimeZone
 import app.aaps.core.interfaces.utils.MidnightTime
 import app.aaps.plugins.aps.openAPSAIMI.llm.claude.ClaudeModelResolver
 import app.aaps.plugins.aps.openAPSAIMI.llm.gemini.GeminiModelResolver
+import app.aaps.plugins.aps.openAPSAIMI.extensions.aimiTickGlucoseStatus
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiKeyValueCache
 import app.aaps.plugins.aps.openAPSAIMI.utils.AimiStorage
 import app.aaps.plugins.aps.openAPSAIMI.ports.AimiTickCaptureHook
@@ -1612,30 +1613,9 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
             val f = pack.features
 
 // Construit l?objet attendu par determine_basal
-            val glucoseStatusAimi = GlucoseStatusAIMI(
-                glucose         = gs.glucose,
-                noise           = gs.noise,
-                delta           = gs.delta,
-                shortAvgDelta   = gs.shortAvgDelta,
-                longAvgDelta    = gs.longAvgDelta,
-                date            = gs.date,
-
-                // Champs AIMI disponibles
-                duraISFminutes  = f?.stable5pctMinutes ?: 0.0,
-                deltaPl         = f?.delta5Prev ?: 0.0,
-                deltaPn         = f?.delta5Next ?: 0.0,
-                bgAcceleration  = f?.accel ?: 0.0,
-                corrSqu         = f?.corrR2 ?: 0.0,
-
-                // Champs non expos?s par AimiBgFeatures => valeurs neutres
-                duraISFaverage  = 0.0,
-                parabolaMinutes = 0.0,
-                a0              = 0.0,
-                a1              = 0.0,
-                a2              = 0.0,
-                // Propagate CGM source (G6/G7/One+/…) so AIMI lead stays G6-only
-                sourceSensor    = gs.sourceSensor
-            )
+            // The stable band (duraISFminutes and its real average) comes from the features.
+            // parabolaMinutes and a0-a2 stay 0 on purpose, see `aimiTickGlucoseStatus`.
+            val glucoseStatusAimi = aimiTickGlucoseStatus(gs, f)
             futureActivity = Round.roundTo(futureActivity, 0.0001)
             sensorLagActivity = Round.roundTo(sensorLagActivity, 0.0001)
             historicActivity = Round.roundTo(historicActivity, 0.0001)

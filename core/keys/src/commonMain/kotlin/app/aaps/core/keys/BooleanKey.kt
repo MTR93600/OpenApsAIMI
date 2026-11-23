@@ -905,6 +905,21 @@ enum class BooleanKey(
         summary = KeysStrings.pref_summary_aimi_t3c_hyper_basal_floor,
         dependency = OApsAIMIT3cBrittleMode,
     ),
+    /**
+     * T3C Safety Guard 2 (resistance to sensitivity transition): after glucose stayed high and stable
+     * for more than 20 minutes, cut the T3C basal as soon as glucose starts to fall (to zero at
+     * -1.2 mg/dL per 5 min). Off by default: it never acted before its input was wired (2026-11), so
+     * it runs in shadow first. With the key off the decision log (`AIMI_Decisions.jsonl`, block
+     * `adjustments.t3c_guard2`) still records what it would do (`would_fire`, `would_mult`).
+     * Depends on T3C brittle mode.
+     */
+    OApsAIMIT3cTransitionGuard(
+        key = "key_aimi_t3c_transition_guard",
+        defaultValue = false,
+        title = KeysStrings.pref_title_aimi_t3c_transition_guard,
+        summary = KeysStrings.pref_summary_aimi_t3c_transition_guard,
+        dependency = OApsAIMIT3cBrittleMode,
+    ),
     /** Cystic fibrosis-related diabetes (CFRD) adaptations in T3C mode:
      *  higher LGS safety floor, COB absorption delay, exacerbation support.
      *  Default ON: T3C brittle is the intended basal-only path for CFRD; prefs are visible under T3C. */

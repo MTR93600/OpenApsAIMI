@@ -7,6 +7,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt0
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
@@ -78,6 +79,49 @@ internal interface AimiT3cTickTail {
 }
 
 /**
+ * Evaluates T3C Safety Guard 2 ([DynamicBasalController.t3cTransitionGuard]) for the decision log,
+ * with the key on or off, and adds a console line when it fires (or would fire).
+ *
+ * @return [enabled], so the caller passes the same value to [DynamicBasalController.computeT3c].
+ */
+internal fun recordT3cTransitionGuard(
+    enabled: Boolean,
+    source: String,
+    delta: Float,
+    shortAvgDelta: Double,
+    duraISFminutes: Double,
+    duraISFaverage: Double,
+    activationThreshold: Double,
+    consoleLog: MutableList<String>,
+    record: (AimiDecisionContext.T3cGuard2Export) -> Unit,
+): Boolean {
+    val guard = DynamicBasalController.t3cTransitionGuard(
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        duraISFminutes = duraISFminutes,
+        duraISFaverage = duraISFaverage,
+        activationThreshold = activationThreshold,
+    )
+    record(
+        AimiDecisionContext.T3cGuard2Export(
+            enabled = enabled,
+            would_fire = guard.wouldFire,
+            would_mult = guard.multiplier,
+            dura_minutes = duraISFminutes,
+            dura_average = duraISFaverage,
+            source = source,
+        )
+    )
+    if (guard.wouldFire) {
+        consoleLog.add(
+            "T3C_GUARD2: on=$enabled mult=${aimiFmt2(guard.multiplier)} " +
+                "duraMin=${aimiFmt0(duraISFminutes)} duraAvg=${aimiFmt0(duraISFaverage)} src=$source"
+        )
+    }
+    return enabled
+}
+
+/**
  * T3C brittle basal decision. Sets [RT.rate] and [RT.duration] only. Never writes [RT.units].
  * The heart-rate snapshot failure keeps the reference fallback (boost 0.0) and is a typed
  * [OptionalSignal.Failed] plus the existing console line.
@@ -112,6 +156,7 @@ internal fun decideT3cBrittleMode(
     hrSnapshot: AimiT3cHrSnapshot,
     lookbacks: AimiT3cLookbacks,
     tail: AimiT3cTickTail,
+    recordTransitionGuard: (AimiDecisionContext.T3cGuard2Export) -> Unit,
 ): RT {
     rT.reason = StringBuilder("")
     rT.deliverAt = aimiWallClockMs()
@@ -233,6 +278,18 @@ internal fun decideT3cBrittleMode(
     )
     val maxBasalCapForPi = if (treeUnlock.unlock) riseBasalCap else steadyBasalCap
 
+    val transitionGuardEnabled = recordT3cTransitionGuard(
+        enabled = preferences.get(BooleanKey.OApsAIMIT3cTransitionGuard),
+        source = AimiDecisionContext.T3cGuard2Export.SOURCE_BRITTLE,
+        delta = delta,
+        shortAvgDelta = shortAvgDelta,
+        duraISFminutes = duraISFminutes,
+        duraISFaverage = duraISFaverage,
+        activationThreshold = activationThreshold,
+        consoleLog = consoleLog,
+        record = recordTransitionGuard,
+    )
+
     val computedRate = DynamicBasalController.computeT3c(
         bg = bg,
         targetBg = targetBg,
@@ -246,6 +303,7 @@ internal fun decideT3cBrittleMode(
         isf = variableSensitivity.coerceAtLeast(10.0),
         duraISFminutes = duraISFminutes,
         duraISFaverage = duraISFaverage,
+        transitionGuardEnabled = transitionGuardEnabled,
         eventualBg = if (eventualBg > 0) eventualBg else null,
         activationThreshold = activationThreshold,
         aggressiveness = aggressiveness,

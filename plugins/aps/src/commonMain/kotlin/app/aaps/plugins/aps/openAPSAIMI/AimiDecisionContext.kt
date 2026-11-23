@@ -544,6 +544,11 @@ internal data class AimiDecisionContext(
         var intelligence_snapshot: JsonObject? = null,
         /** Runtime ownership of T3C for this tick: native RBT, legacy fallback, or safety terminal. */
         var t3c_runtime_ownership: T3cRuntimeOwnershipExport? = null,
+        /**
+         * T3C Safety Guard 2 of this tick: what it would do, and whether its key let it act.
+         * Written whenever a T3C path ran, key on or off. Null on ticks without T3C.
+         */
+        var t3c_guard2: T3cGuard2Export? = null,
         /** Loop vs auditor binding for this tick (sync disposition; follow-up may arrive async). */
         var auditor_tick: JsonObject? = null,
         /**
@@ -569,6 +574,33 @@ internal data class AimiDecisionContext(
         val legacy_fallback_allowed: Boolean,
         val reason: String,
     )
+
+    /**
+     * T3C Safety Guard 2 (`DynamicBasalController.t3cTransitionGuard`) for one tick.
+     *
+     * @param enabled the key `OApsAIMIT3cTransitionGuard`. When false the guard does not act and
+     *   [would_fire] / [would_mult] are a shadow only.
+     * @param would_fire true when the guard fires (or would fire with the key on).
+     * @param would_mult the factor it puts (or would put) on the T3C basal, 1.0 when it does not fire.
+     * @param dura_minutes minutes glucose stayed inside the 5 % band.
+     * @param dura_average average glucose of that band, mg/dL.
+     * @param source which T3C path computed it, [SOURCE_BRITTLE] or [SOURCE_RBT_DEMAND].
+     */
+    data class T3cGuard2Export(
+        val enabled: Boolean,
+        val would_fire: Boolean,
+        val would_mult: Double,
+        val dura_minutes: Double,
+        val dura_average: Double,
+        val source: String,
+    ) {
+        companion object {
+            /** The T3C brittle basal decision. */
+            const val SOURCE_BRITTLE = "brittle"
+            /** The T3C basal demand given to the Recursive Belief Tree. */
+            const val SOURCE_RBT_DEMAND = "rbt_demand"
+        }
+    }
 
     data class MealAbsorptionPhaseExport(
         val phase: String,
@@ -1046,6 +1078,16 @@ internal data class AimiDecisionContext(
                 ownershipJson.put("legacy_fallback_allowed", ownership.legacy_fallback_allowed)
                 ownershipJson.put("reason", ownership.reason)
                 adj.put("t3c_runtime_ownership", ownershipJson)
+            }
+            adjustments.t3c_guard2?.let { guard2 ->
+                val guard2Json = JsonObj()
+                guard2Json.put("enabled", guard2.enabled)
+                guard2Json.put("would_fire", guard2.would_fire)
+                guard2Json.put("would_mult", guard2.would_mult)
+                guard2Json.put("dura_minutes", guard2.dura_minutes)
+                guard2Json.put("dura_average", guard2.dura_average)
+                guard2Json.put("source", guard2.source)
+                adj.put("t3c_guard2", guard2Json)
             }
             adjustments.auditor_tick?.let { auditorTick ->
                 adj.put("auditor_tick", auditorTick)

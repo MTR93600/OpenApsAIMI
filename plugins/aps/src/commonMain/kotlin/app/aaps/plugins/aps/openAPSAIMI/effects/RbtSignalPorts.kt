@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.effects
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.GlucoseStatusAIMI
 import app.aaps.core.interfaces.aps.OapsProfileAimi
+import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.NGRConfig
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysioContextMTR
@@ -50,4 +51,5 @@ internal interface AimiPhysioTick {
 internal interface AimiRbtTickWrites {
     fun setLastPostHypoOrdinal(ordinal: Int)
     fun setLastNgrBasalMultiplier(multiplier: Double)
+    fun setLastT3cGuard2(guard2: AimiDecisionContext.T3cGuard2Export)
 }

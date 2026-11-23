@@ -9,6 +9,7 @@ import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.aps.openAPSAIMI.AimiDecisionContext
 import app.aaps.plugins.aps.openAPSAIMI.NightGrowthResistanceMode
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.basal.DynamicBasalController
@@ -251,6 +252,18 @@ internal fun buildRbtExtendedSignals(
             state.adaptiveMult - 1.0
         }
         val aggressiveness = (rawAggressiveness + rawAggressiveness * adaptiveBoost).coerceIn(0.3, 2.0)
+        val activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold)
+        val transitionGuardEnabled = recordT3cTransitionGuard(
+            enabled = preferences.get(BooleanKey.OApsAIMIT3cTransitionGuard),
+            source = AimiDecisionContext.T3cGuard2Export.SOURCE_RBT_DEMAND,
+            delta = state.delta,
+            shortAvgDelta = state.shortAvgDelta.toDouble(),
+            duraISFminutes = state.duraISFminutes,
+            duraISFaverage = state.duraISFaverage,
+            activationThreshold = activationThreshold,
+            consoleLog = consoleLog,
+            record = tickWrites::setLastT3cGuard2,
+        )
         val computedRate = DynamicBasalController.computeT3c(
             bg = state.bg,
             targetBg = state.targetBg.toDouble(),
@@ -264,8 +277,9 @@ internal fun buildRbtExtendedSignals(
             isf = state.variableSensitivity.toDouble().coerceAtLeast(10.0),
             duraISFminutes = state.duraISFminutes,
             duraISFaverage = state.duraISFaverage,
+            transitionGuardEnabled = transitionGuardEnabled,
             eventualBg = state.eventualBG.takeIf { it.isFinite() },
-            activationThreshold = preferences.get(DoubleKey.OApsAIMIT3cActivationThreshold),
+            activationThreshold = activationThreshold,
             aggressiveness = aggressiveness,
             maxBasalCap = maxBasalCap,
             trajectory = t3cTrajectory,

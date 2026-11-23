@@ -509,6 +509,7 @@ key_aimi_t3c_cfrd_lgs_floor|DoubleKey|true
 key_aimi_t3c_cfrd_mode|BooleanKey|true
 key_aimi_t3c_hyper_basal_floor|BooleanKey|true
 key_aimi_t3c_physio_informed|BooleanKey|true
+key_aimi_t3c_transition_guard|BooleanKey|true
 key_aimi_thyroid_debug|BooleanKey|true
 key_aimi_thyroid_enabled|BooleanKey|true
 key_aimi_thyroid_guard_level|StringKey|true

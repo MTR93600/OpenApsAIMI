@@ -366,6 +366,7 @@ internal class AimiPreferenceTree(
                             items = shown(
                                 AimiSettingsSectionId.T3cMode,
                                 AimiSettingsSectionId.T3cAutodriveAuthority,
+                                AimiSettingsSectionId.T3cTransitionGuard,
                                 AimiSettingsSectionId.T3cBehaviour,
                                 AimiSettingsSectionId.T3cCfrdLgsFloor,
                                 AimiSettingsSectionId.T3cCfrdCobDelay,

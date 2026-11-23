@@ -16,6 +16,7 @@ import app.aaps.plugins.aimicontracts.AimiTherapyCommand
 import app.aaps.plugins.aimicontracts.AimiTickResult
 import app.aaps.plugins.aimicontracts.toAimiTickResult
 import app.aaps.plugins.aimiengine.AimiEngine
+import app.aaps.plugins.aps.openAPSAIMI.extensions.withStableBand
 
 /**
  * Wires [AimiEngine.evaluate] to [DetermineBasalaimiSMB2.determine_basal].
@@ -58,7 +59,7 @@ class DetermineBasalAimiEngine(
             longAvgDelta = input.glucose.longAvgDelta.valueOrNull ?: 0.0,
             noise = input.glucose.noise.valueOrNull ?: 0.0,
             date = input.meta.wallClockEpochMs,
-        )
+        ).withStableBand(plugin.glucoseStatusCalculatorAimi.getAimiFeatures(allowOldData = true))
         val currentTemp = CurrentTemp(
             duration = ((input.pump.tempBasalRemainingMs ?: 0L) / 60_000L).toInt(),
             rate = input.pump.tempBasalUPerHour.valueOrNull ?: 0.0,
@@ -129,7 +130,10 @@ class DetermineBasalAimiEngine(
     companion object {
         /**
          * Snapshot fields with no determine_basal equivalent (documented gaps):
-         * - duraISF / parabola features (in AimiAdvancedFeatures, not yet consumed)
+         * - the stable band (duraISFminutes / duraISFaverage) is not in the snapshot: it is read
+         *   from the plugin's own glucose calculator, like `OpenAPSAIMIPlugin` does, so a replay of a
+         *   captured snapshot on another device sees that device's band
+         * - parabola features (left at 0, like `OpenAPSAIMIPlugin`)
          * - TDD windows, TIR quality, physio windows (partially in snapshot)
          * - 7 persist keys live in AimiCausalState (transitional mirrors, see syncFromLegacyPrebolus)
          *

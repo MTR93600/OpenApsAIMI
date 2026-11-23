@@ -258,6 +258,41 @@ class DynamicBasalController @Inject constructor(
             return bg + (velocity * t) + (0.5 * accel * t * t)
         }
 
+        /** Glucose speed used by [computeT3c] and [t3cTransitionGuard], in mg/dL per 5 min. */
+        private fun t3cVelocity(delta: Float, shortAvgDelta: Double): Float =
+            delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
+
+        /**
+         * Result of T3C Safety Guard 2 (resistance to sensitivity transition).
+         *
+         * @param wouldFire true when glucose was high for a long time and now falls.
+         * @param multiplier the factor the guard puts on the T3C basal: 1.0 when it does not fire,
+         *   down to 0.0 at a speed of -1.2 mg/dL per 5 min or faster.
+         */
+        data class T3cTransitionGuard(val wouldFire: Boolean, val multiplier: Double)
+
+        /**
+         * T3C Safety Guard 2. Glucose stayed inside a 5 % band for more than 20 minutes
+         * ([duraISFminutes]) with an average ([duraISFaverage], mg/dL) above [activationThreshold],
+         * and now falls faster than -0.2 mg/dL per 5 min: the basal is cut in proportion to the fall.
+         *
+         * Pure. [computeT3c] applies it only when its key is on; callers also use it to log what
+         * the guard would do while the key is off.
+         */
+        fun t3cTransitionGuard(
+            delta: Float,
+            shortAvgDelta: Double,
+            duraISFminutes: Double,
+            duraISFaverage: Double,
+            activationThreshold: Double,
+        ): T3cTransitionGuard {
+            val velocity = t3cVelocity(delta, shortAvgDelta)
+            val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > activationThreshold
+            val nowFalling = velocity < -0.2f
+            if (!(wasChronicallyHigh && nowFalling)) return T3cTransitionGuard(wouldFire = false, multiplier = 1.0)
+            return T3cTransitionGuard(wouldFire = true, multiplier = (1.0 + (velocity + 0.2) / 1.0).coerceIn(0.0, 1.0))
+        }
+
         /**
          * Dedicated T3c Brittle Mode calculation — ISF-driven, resistance-aware.
          *
@@ -270,8 +305,9 @@ class DynamicBasalController @Inject constructor(
          *    default 100) — anticipatory: engages on where BG is heading, not current BG
          *  - ISF-driven formula (not multiplier-based) → proper correction magnitude
          *  - Adaptive horizon: 20 min at BG 130–160, 15 min above 160 (more urgent)
-         *  - Resistance→sensitivity transition detection: cut basal EARLY when drop begins
-         *    after a prolonged hyperglycemic period (duraISFminutes)
+         *  - Resistance→sensitivity transition detection (Safety Guard 2): cut basal EARLY when drop
+         *    begins after a prolonged hyperglycemic period. It acts only when [transitionGuardEnabled]
+         *    is true (key `OApsAIMIT3cTransitionGuard`, off by default). See [t3cTransitionGuard].
          */
         fun computeT3c(
             bg: Double,
@@ -286,6 +322,7 @@ class DynamicBasalController @Inject constructor(
             isf: Double,
             duraISFminutes: Double,
             duraISFaverage: Double,
+            transitionGuardEnabled: Boolean,
             eventualBg: Double?,
             activationThreshold: Double = 130.0,
             aggressiveness: Double = 1.0,
@@ -294,7 +331,7 @@ class DynamicBasalController @Inject constructor(
             anticipationHints: T3cAnticipation.Hints = T3cAnticipation.Hints.DISABLED
         ): Double {
             val effectiveIsf = isf.coerceAtLeast(10.0)
-            val velocity = delta * 0.7f + shortAvgDelta.toFloat() * 0.3f
+            val velocity = t3cVelocity(delta, shortAvgDelta)
 
             // ── Safety Guard 1: Adaptive Immediate Zero Basal ──────────────
             val floor = (targetBg - 20.0).coerceAtLeast(70.0)
@@ -302,10 +339,9 @@ class DynamicBasalController @Inject constructor(
             if (bg < floor || (bg < cushion && delta < -1.0f) || (bg < targetBg && delta < -1.5f)) return 0.0
 
             // ── Safety Guard 2: Resistance→Sensitivity transition ──────────
-            val wasChronicallyHigh = duraISFminutes > 20.0 && duraISFaverage > activationThreshold
-            val nowFalling = velocity < -0.2f
-            val resTransitionMult = if (wasChronicallyHigh && nowFalling) {
-                (1.0 + (velocity + 0.2) / 1.0).coerceIn(0.0, 1.0)
+            // Acts only when the key is on. With the key off the caller logs what it would do.
+            val resTransitionMult = if (transitionGuardEnabled) {
+                t3cTransitionGuard(delta, shortAvgDelta, duraISFminutes, duraISFaverage, activationThreshold).multiplier
             } else 1.0
 
             // ── Safety Guard 3: Excessive IOB ──────────────────────────────
