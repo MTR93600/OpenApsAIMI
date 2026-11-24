@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.recursive
 
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
@@ -178,7 +179,7 @@ object BeliefLeafAdapterRegistry {
             }
             BeliefLeafId.HTR_RELEASE -> {
                 val floor = ext.htrLeafSmbFloorU ?: ctx.htrResult?.smbFloorU
-                floor?.let { leaf(id, it, 1.2, if ((ctx.htrResult?.active == true) || ctx.replaceHtrRelease) 1.0 else 0.4, ctx.htrResult?.reason?.take(80) ?: "RBT floor") }
+                floor?.let { leaf(id, it, 1.2, if ((ctx.htrResult?.active == true) || ctx.replaceHtrRelease) 1.0 else 0.4, ctx.htrResult?.reason?.takeWholeChars(80) ?: "RBT floor") }
             }
             BeliefLeafId.HTC_HYPO -> leaf(id, if (ctx.hypoMinPredIgnored) 1.0 else 0.0, 0.9, 0.9, "minPredIgnored=${ctx.hypoMinPredIgnored}")
             BeliefLeafId.RISK_ENVELOPE -> ctx.riskEnvelope?.let { leaf(id, it.compositeMinMgdl, 0.9, 0.8, "envelope min") }
@@ -336,7 +337,7 @@ object BeliefLeafAdapterRegistry {
                     snap.suppressMealInterpretation -> 0.65
                     else -> 0.35
                 }
-                leaf(id, risk, 1.0, snap.dominantConfidence.coerceIn(0.15, 1.0), snap.reasonSummary.take(80))
+                leaf(id, risk, 1.0, snap.dominantConfidence.coerceIn(0.15, 1.0), snap.reasonSummary.takeWholeChars(80))
             }
 
             // Shadow @ τ = 60
@@ -350,7 +351,7 @@ object BeliefLeafAdapterRegistry {
                 leaf(id, it, 0.6, 0.6, "auditor conf=${fmt2(it)}")
             }
             BeliefLeafId.SHADOW_SENTINEL_VERDICT -> ext.shadowSentinelVerdictLabel?.let {
-                leaf(id, 1.0, 0.55, 0.55, it.take(60))
+                leaf(id, 1.0, 0.55, 0.55, it.takeWholeChars(60))
             }
             BeliefLeafId.SHADOW_ORCH -> if (ext.shadowOrchestratorActive || ctx.shadowOrchestratorActive) {
                 leaf(id, 1.0, 0.3, 0.3, "shadow orchestrator")
@@ -380,7 +381,7 @@ object BeliefLeafAdapterRegistry {
             else -> return null
         }
         val c = ctx.scenario.contributors.firstOrNull { it.id == contributorId } ?: return null
-        return leaf(id, c.terminalDeltaMgdl ?: 0.0, 0.7, 0.75, c.summary.take(60))
+        return leaf(id, c.terminalDeltaMgdl ?: 0.0, 0.7, 0.75, c.summary.takeWholeChars(60))
     }
 
     private fun mealCred(ctx: RecursiveBeliefTickContext): Double =

@@ -164,6 +164,33 @@ internal class NSClientV3PluginTest : TestBaseWithProfile() {
         assertThat(storeDataForDb.nsIdDeviceStatuses.snapshot()).hasSize(2) // still only 1
     }
 
+    @Test
+    fun `a device status that cannot be converted is skipped so the queue goes on`() = runTest {
+        // Stored JSON that cannot be read back: here it ends in half an emoji, as a cut log line once did.
+        val broken = DS(
+            timestamp = 10000,
+            suggested = "{\"temp\":\"absolute\",\"consoleLog\":[\"reason=basal pause \uD83D",
+            device = "openaps://test",
+            uploaderBattery = 50,
+            isCharging = false,
+        )
+
+        val result = sut.nsAdd("devicestatus", DataSyncSelector.PairDeviceStatus(broken, 1000), "1/3")
+
+        assertThat(result).isTrue()
+        verify(nsAndroidClient, never()).createDeviceStatus(anyOrNull())
+    }
+
+    @Test
+    fun `a device status that fails on the network is retried later`() = runTest {
+        val deviceStatus = DS(timestamp = 10000, device = "openaps://test", uploaderBattery = 50, isCharging = false)
+        whenever(nsAndroidClient.createDeviceStatus(anyOrNull())).thenThrow(RuntimeException("offline"))
+
+        val result = sut.nsAdd("devicestatus", DataSyncSelector.PairDeviceStatus(deviceStatus, 1000), "1/3")
+
+        assertThat(result).isFalse()
+    }
+
     // ---- masterReachable (client→master edit/control gating) ----
 
     private fun buildPlugin(orphanDetector: OrphanDetector): NSClientV3Plugin =

@@ -4,6 +4,7 @@ import app.aaps.core.interfaces.aps.CurrentTemp
 import app.aaps.core.interfaces.aps.IobTotal
 import app.aaps.core.interfaces.aps.OapsProfileAimi
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.DoubleKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -327,7 +328,7 @@ internal fun decideT3cBrittleMode(
     if (autodriveBasalProposal != null && autodriveBasalProposal.strippedSmbU > 0.0) {
         consoleLog.add(
             "T3C_AD_BASAL: smb stripped ${aimiFmt2(autodriveBasalProposal.strippedSmbU)}U " +
-                "(reason=${autodriveBasalProposal.reason.take(80)})"
+                "(reason=${autodriveBasalProposal.reason.takeWholeChars(80)})"
         )
     }
     val maxBasalCap = fusion.maxBasalCapUph

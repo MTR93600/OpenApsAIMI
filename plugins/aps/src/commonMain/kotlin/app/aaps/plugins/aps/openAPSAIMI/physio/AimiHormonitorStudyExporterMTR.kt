@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.concurrent.withLock
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.interfaces.Preferences
@@ -205,7 +206,7 @@ class AimiHormonitorStudyExporterMTR(
             pendingTickEndId = 0L
             pendingTickPulseWallMs = 0L
         }
-        val safeMessage = errorMessage.replace("\n", " ").take(500)
+        val safeMessage = errorMessage.replace("\n", " ").takeWholeChars(500)
         aapsLogger.warn(
             LTag.AIMI,
             "[$TAG] loop_tick_aborted tickId=$tickId phase=${lastPhaseName ?: "?"} $errorClass: $safeMessage"

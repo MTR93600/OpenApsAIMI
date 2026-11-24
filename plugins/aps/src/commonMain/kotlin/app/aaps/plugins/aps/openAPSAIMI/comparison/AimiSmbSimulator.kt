@@ -12,6 +12,7 @@ import app.aaps.core.interfaces.aps.RT
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.ui.UiInteraction
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.plugins.aps.openAPSSMB.DetermineBasalSMB
 import app.aaps.plugins.aps.openAPSAIMI.DetermineBasalaimiSMB2
 import app.aaps.core.interfaces.utils.DateUtil
@@ -252,7 +253,7 @@ class DualEngineSimulator @Inject constructor(
             predictedBg = result.predBGs?.IOB?.lastOrNull()?.toDouble(),
             iob = tick.iobData.firstOrNull()?.iob ?: 0.0,
             cob = tick.mealData.mealCOB,
-            reason = result.reason.toString().take(200) // Truncate for storage
+            reason = result.reason.toString().takeWholeChars(200) // Truncate for storage
         )
     }
 

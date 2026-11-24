@@ -1,6 +1,7 @@
 package app.aaps.core.interfaces.aps
 
 import app.aaps.core.data.datetime.parseIsoToEpochMillisOrNull
+import app.aaps.core.interfaces.utils.withoutLoneSurrogates
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
@@ -8,6 +9,8 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -47,7 +50,9 @@ data class RT(
     @Serializable(with = StringBuilderSerializer::class)
     var aimilog: StringBuilder = StringBuilder(),
 
+    @Serializable(with = CleanStringListSerializer::class)
     var consoleLog: MutableList<String>? = null,
+    @Serializable(with = CleanStringListSerializer::class)
     var consoleError: MutableList<String>? = null,
     var isHypoRisk: Boolean = false,
 
@@ -89,13 +94,32 @@ data class RT(
 
         override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("StringBuilder", PrimitiveKind.STRING)
 
+        /** Half an emoji left by a cut becomes �, so the JSON can always be read back. See [withoutLoneSurrogates]. */
         override fun serialize(encoder: Encoder, value: StringBuilder) {
-            encoder.encodeString(value.toString())
+            encoder.encodeString(value.toString().withoutLoneSurrogates())
         }
 
         override fun deserialize(decoder: Decoder): StringBuilder {
             return StringBuilder().append(decoder.decodeString())
         }
+    }
+
+    /**
+     * A list of log lines, written like any list of strings, except that half an emoji left by a cut
+     * becomes �. Such a half cannot be read back from JSON, and one device status that carries it
+     * stopped every later upload to Nightscout. Reading is unchanged.
+     */
+    object CleanStringListSerializer : KSerializer<MutableList<String>> {
+
+        private val delegate = ListSerializer(String.serializer())
+
+        override val descriptor: SerialDescriptor = delegate.descriptor
+
+        override fun serialize(encoder: Encoder, value: MutableList<String>) {
+            delegate.serialize(encoder, value.map { it.withoutLoneSurrogates() })
+        }
+
+        override fun deserialize(decoder: Decoder): MutableList<String> = delegate.deserialize(decoder).toMutableList()
     }
 
     object TimestampToIsoSerializer : KSerializer<Long> {

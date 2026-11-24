@@ -873,8 +873,18 @@ class NSClientV3Plugin(
     }
 
     private suspend fun dbOperationDeviceStatus(collection: String = "devicestatus", dataPair: DataSyncSelector.PairDeviceStatus, progress: String): Boolean {
+        // A record that cannot be converted will never be converted: retrying it would stop every
+        // later device status from uploading, which kept the Nightscout OpenAPS pill stale until a full
+        // sync. Skip it and go on. A device status is a snapshot and the next one comes a few minutes
+        // later. A network error below still returns false, so it is retried as before.
+        val data = try {
+            dataPair.value.toNSDeviceStatus()
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.NSCLIENT, "DeviceStatus ${dataPair.value.id} cannot be converted, skipped", e)
+            nsClientRepository.addLog("◄ SKIPPED", "DeviceStatus ${dataPair.value.id}: ${e::class.simpleName}")
+            return true
+        }
         try {
-            val data = dataPair.value.toNSDeviceStatus()
             nsClientRepository.addLog("► ADD $collection", "Sent ${dataPair::class.simpleName} $progress", Json {}.encodeToJsonElement(data))
             nsAndroidClient?.createDeviceStatus(data)?.let { result ->
                 when (result.response) {

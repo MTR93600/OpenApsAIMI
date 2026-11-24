@@ -6,6 +6,7 @@ import app.aaps.core.data.json.OrgJsonCompat.optDoubleCompat
 import app.aaps.core.data.json.OrgJsonCompat.optStringCompat
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.StringKey
@@ -73,7 +74,7 @@ internal class TpoLlmValidator(
             return@withContext TpoLlmResult(
                 verdict = TpoLlmVerdict.UNCERTAIN,
                 confidence = 0.0,
-                rationale = raw.take(240),
+                rationale = raw.takeWholeChars(240),
                 latencyMs = aimiWallClockMs() - started,
             )
         }
@@ -157,7 +158,7 @@ Rules:
             TpoLlmResult(
                 verdict = finalVerdict,
                 confidence = confidence,
-                rationale = json.optStringCompat("rationale").take(240),
+                rationale = json.optStringCompat("rationale").takeWholeChars(240),
                 competingHypothesis = competing,
                 latencyMs = latencyMs,
             )

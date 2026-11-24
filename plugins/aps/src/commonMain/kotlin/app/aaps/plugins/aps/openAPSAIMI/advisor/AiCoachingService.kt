@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.resources.TextResolver
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.advisor.data.AdvisorHistoryRepository
@@ -205,7 +206,7 @@ class AiCoachingService @Inject constructor(
             // 2. Quota (429) OR still-overloaded after retries → fallback to the resilient flash alias (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest" // Durable flash alias (current GA)
-                aapsLogger.warn(LTag.AIMI, "[AIMI_GEMINI] ⚠️ $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                aapsLogger.warn(LTag.AIMI, "[AIMI_GEMINI] ⚠️ $primaryModel failed (${e.message?.takeWholeChars(80)}). Fallback to $fallbackModel")
                 return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e // Re-throw other errors

@@ -3,6 +3,7 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 import app.aaps.core.interfaces.concurrent.aapsIoDispatcher
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt1
@@ -103,7 +104,7 @@ class AIMILLMPhysioAnalyzerMTR @Inject constructor(
             // 2. Quota (429) OR still-overloaded (503) after retries → flash fallback (also retried).
             if (LlmHttpRetry.isQuota(e) || LlmHttpRetry.isTransient(e)) {
                 val fallbackModel = "gemini-flash-latest"
-                aapsLogger.warn(LTag.APS, "[$TAG] Physio: $primaryModel failed (${e.message?.take(80)}). Fallback to $fallbackModel")
+                aapsLogger.warn(LTag.APS, "[$TAG] Physio: $primaryModel failed (${e.message?.takeWholeChars(80)}). Fallback to $fallbackModel")
                 return LlmHttpRetry.withTransientRetry(aapsLogger) { executeGeminiRequest(apiKey, prompt, fallbackModel) }
             }
             throw e

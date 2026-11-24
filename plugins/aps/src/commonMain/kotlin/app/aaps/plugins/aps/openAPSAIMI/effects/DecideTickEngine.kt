@@ -1,6 +1,7 @@
 package app.aaps.plugins.aps.openAPSAIMI.effects
 
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.utils.takeWholeChars
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -27,7 +28,7 @@ internal fun <TDecision> decideDetermineBasalTickEngine(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        finalResult.addConsoleError("AIMI export failed, decision kept: ${e::class.simpleName}: ${e.message?.take(200).orEmpty()}")
+        finalResult.addConsoleError("AIMI export failed, decision kept: ${e::class.simpleName}: ${e.message?.takeWholeChars(200).orEmpty()}")
     }
     return finalResult
 }

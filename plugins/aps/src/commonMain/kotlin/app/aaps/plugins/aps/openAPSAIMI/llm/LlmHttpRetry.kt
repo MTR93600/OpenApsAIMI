@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.llm
 
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.plugins.aps.openAPSAIMI.aimiWaitMs
 
 /**
@@ -80,7 +81,7 @@ object LlmHttpRetry {
                 attempt++
                 if (attempt >= maxAttempts || !isTransient(e)) throw e
                 val backoffMs = baseDelayMs shl (attempt - 1) // 700, 1400, 2800 …
-                aapsLogger.warn(LTag.AIMI, "[$TAG] Transient LLM error (attempt $attempt/$maxAttempts) — retry in ${backoffMs}ms: ${e.message?.take(140)}")
+                aapsLogger.warn(LTag.AIMI, "[$TAG] Transient LLM error (attempt $attempt/$maxAttempts) — retry in ${backoffMs}ms: ${e.message?.takeWholeChars(140)}")
                 if (!wait(backoffMs)) throw e
             }
         }

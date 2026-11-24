@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.orchestration
 
 import app.aaps.core.interfaces.aps.APSResult
 import app.aaps.core.interfaces.aps.RT
+import app.aaps.core.interfaces.utils.takeWholeChars
 import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 
 /**
@@ -45,7 +46,7 @@ object AimiLoopTickRecovery {
         consoleError: List<String>?,
     ): RT {
         val errName = error::class.simpleName ?: "Throwable"
-        val msg = error.message?.take(200).orEmpty()
+        val msg = error.message?.takeWholeChars(200).orEmpty()
         val phase = AimiLoopTelemetry.currentLoopPhase
         val location = primaryAimiFrame(error)
         val phaseHint = phase.safeHoldHint()
