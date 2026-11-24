@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.ports
 
 import app.aaps.plugins.aps.openAPSAIMI.compose.AimiBehaviorRuntimeProfile
 import app.aaps.plugins.aps.openAPSAIMI.physio.HealthContextSnapshot
+import app.aaps.plugins.aps.openAPSAIMI.physio.NocturnalHeartRate
 import app.aaps.plugins.aps.openAPSAIMI.context.ContextIntent
 import app.aaps.core.interfaces.aps.AutosensResult
 import app.aaps.core.interfaces.aps.CurrentTemp
@@ -223,6 +224,13 @@ interface AimiHealthContext {
      * "stand down", never a number to replace. Default null, so a source without it changes nothing.
      */
     fun awakeRestingHeartRateBpm(): Int? = null
+
+    /**
+     * The heart rate of the last night against the same device's usual night, or null when it was
+     * not measured yet. Information only: no dosing decision reads it. Default null, so a source
+     * without it changes nothing.
+     */
+    fun nocturnalHeartRate(): NocturnalHeartRate.Report? = null
 }
 
 /**

@@ -71,6 +71,13 @@ class HealthContextRepository @Inject constructor(
          */
         private const val AWAKE_RESTING_REFRESH_MS = 60 * 60 * 1000L
         /**
+         * How often the night heart rate is measured again. The night only changes once a day, so
+         * once an hour is enough to pick up the new night soon after 06:00 and to catch late uploads.
+         */
+        private const val NOCTURNAL_REFRESH_MS = 60 * 60 * 1000L
+        /** Longest reading duration trusted to place a reading at the middle of its period. */
+        private const val MAX_READING_DURATION_MS = 60 * 60 * 1000L
+        /**
          * How old a step record may be and still describe the moment of a heart-rate reading.
          *
          * `SC.steps15min` at time T counts the steps of `[T-15 min, T]`, so a record 14 minutes older
@@ -138,6 +145,9 @@ class HealthContextRepository @Inject constructor(
     private val awakeRestingRef = AtomicReference<Int?>(null)
     private val awakeRestingMeasuredAtMs = AtomicReference(0L)
     private val awakeRestingInFlight = AtomicBoolean(false)
+    private val nocturnalRef = AtomicReference<NocturnalHeartRate.Report?>(null)
+    private val nocturnalMeasuredAtMs = AtomicReference(0L)
+    private val nocturnalInFlight = AtomicBoolean(false)
     
     /**
      * Fetches and builds the current Health Snapshot.
@@ -399,12 +409,75 @@ class HealthContextRepository @Inject constructor(
     }
 
     /**
-     * Pairs each heart-rate reading with the step count of that moment, when one is known.
+     * The heart rate of the last night against the same device's usual night, or null until the
+     * first measurement lands. See [NocturnalHeartRate].
+     *
+     * Information only: nothing in the dosing path reads it. Like [awakeRestingHeartRateBpm] it is
+     * measured on a background scope and served from memory, so this call never touches the database.
+     */
+    override fun nocturnalHeartRate(): NocturnalHeartRate.Report? {
+        refreshNocturnalHeartRateAsync()
+        return nocturnalRef.load()
+    }
+
+    private fun refreshNocturnalHeartRateAsync() {
+        val now = aimiWallClockMs()
+        val measuredAt = nocturnalMeasuredAtMs.load()
+        if (measuredAt != 0L && now - measuredAt in 0..NOCTURNAL_REFRESH_MS) return
+        if (!nocturnalInFlight.compareAndSet(false, true)) return
+        ioScope.launch {
+            try {
+                val windowStart = now - NocturnalHeartRate.HISTORY_DAYS * 24 * 60 * 60 * 1000L
+                val heartRates = persistenceLayer.getHeartRatesFromTimeToTime(windowStart, now)
+                val steps = persistenceLayer.getStepsCountFromTimeToTime(windowStart, now)
+                val samples = pairWithSteps(heartRates, steps).map { (hr, steps15) ->
+                    NocturnalHeartRate.Sample(
+                        // The stored time is the END of the reading's period; its middle says
+                        // better which slot of the night it belongs to.
+                        timestampMs = hr.timestamp - hr.duration.coerceIn(0L, MAX_READING_DURATION_MS) / 2,
+                        bpm = hr.beatsPerMinute,
+                        device = hr.device,
+                        stepsLast15m = steps15,
+                    )
+                }
+                val report = NocturnalHeartRate.report(samples, now, TimeZone.currentSystemDefault())
+                nocturnalRef.store(report)
+                nocturnalMeasuredAtMs.store(aimiWallClockMs())
+                aapsLogger.info(
+                    LTag.APS,
+                    "[$TAG] night HR (info only): night=${report.night} device=${report.device} " +
+                        "covered=${report.coveredMinutes}min bpm=${report.bpm?.let(NocturnalHeartRate::round1)} " +
+                        "baseline=${report.baselineBpm?.let(NocturnalHeartRate::round1)} nights=${report.baselineNights} " +
+                        "delta=${report.deltaBpm?.let(NocturnalHeartRate::round1)} from ${samples.size} readings",
+                )
+            } catch (e: Exception) {
+                // Information only, so the last report is simply kept and the next hour tries again.
+                aapsLogger.warn(LTag.APS, "[$TAG] night HR measurement failed, keeping the last report", e)
+                nocturnalMeasuredAtMs.store(aimiWallClockMs())
+            } finally {
+                nocturnalInFlight.store(false)
+            }
+        }
+    }
+
+    /** Each heart-rate reading with its step count of that moment. See [pairWithSteps]. */
+    private fun buildAwakeSamples(heartRates: List<HR>, steps: List<SC>): List<AwakeRestingHeartRate.Sample> =
+        pairWithSteps(heartRates, steps).map { (hr, steps15) ->
+            AwakeRestingHeartRate.Sample(
+                timestampMs = hr.timestamp,
+                bpm = hr.beatsPerMinute,
+                stepsLast15m = steps15,
+            )
+        }
+
+    /**
+     * Pairs each heart-rate reading with the 15-minute step count of that moment, or null when no
+     * step record is recent enough. The readings come back sorted by time.
      *
      * Both lists come from the same database the loop reads its live heart rate from, so the baseline
      * is measured on exactly the signal it will be compared against.
      */
-    private fun buildAwakeSamples(heartRates: List<HR>, steps: List<SC>): List<AwakeRestingHeartRate.Sample> {
+    private fun pairWithSteps(heartRates: List<HR>, steps: List<SC>): List<Pair<HR, Int?>> {
         val stepsByTime = steps.sortedBy { it.timestamp }
         val heartRatesByTime = heartRates.sortedBy { it.timestamp }
         var stepsIndex = 0
@@ -416,11 +489,7 @@ class HealthContextRepository @Inject constructor(
             }
             val candidate = stepsByTime.getOrNull(stepsIndex)
                 ?.takeIf { it.timestamp <= hr.timestamp && hr.timestamp - it.timestamp <= STEPS_MATCH_WINDOW_MS }
-            AwakeRestingHeartRate.Sample(
-                timestampMs = hr.timestamp,
-                bpm = hr.beatsPerMinute,
-                stepsLast15m = candidate?.steps15min,
-            )
+            hr to candidate?.steps15min
         }
     }
 

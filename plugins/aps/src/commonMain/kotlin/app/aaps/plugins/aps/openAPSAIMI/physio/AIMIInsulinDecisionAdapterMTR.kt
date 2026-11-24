@@ -657,6 +657,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // Heart
         val hrvStr = if (snapshot.hrvRmssd > 0) "${snapshot.hrvRmssd.toInt()}ms" else "--"
         sb.append("\n❤️ Heart: HR ${snapshot.hrNow} | RHR ${snapshot.rhrResting} | HRV $hrvStr")
+        sb.append("\n").append(NocturnalHeartRate.statusLine(repo.nocturnalHeartRate()))
         
         // Sleep
         if (snapshot.sleepDebtMinutes > 0) {
