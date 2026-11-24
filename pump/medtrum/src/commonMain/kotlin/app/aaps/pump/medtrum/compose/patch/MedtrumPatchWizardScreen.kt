@@ -26,6 +26,8 @@ import app.aaps.core.ui.compose.pump.WizardScreen
 import app.aaps.core.ui.compose.pump.WizardStepLayout
 import app.aaps.core.ui.compose.siteRotation.SiteLocationWizardStep
 import app.aaps.core.ui.compose.stringResource
+import app.aaps.pump.medtrum.compose.leaveQuestionFor
+import app.aaps.pump.medtrum.compose.LeaveQuestion
 import app.aaps.pump.medtrum.MedtrumStrings
 import app.aaps.pump.medtrum.code.PatchStep
 import app.aaps.pump.medtrum.compose.steps.ActivateState
@@ -72,14 +74,20 @@ fun MedtrumPatchWizardScreen(
         if (step == PatchStep.COMPLETE || step == PatchStep.CANCEL) onClose()
     }
 
+    // The same question as the Android wizard: a deactivation asks about the deactivation, and the first
+    // and last deactivation pages leave at once. See leaveQuestionFor.
+    val leaveQuestion = step?.let { leaveQuestionFor(it) } ?: LeaveQuestion.ACTIVATION
+    val deactivation = leaveQuestion == LeaveQuestion.DEACTIVATION
+
     WizardScreen(
         currentStep = step,
         totalSteps = progress.second,
         currentStepIndex = progress.first,
         canGoBack = step in stepsThatMayBeLeft,
         onBack = { model.cancel() },
-        cancelDialogTitle = stringResource(MedtrumStrings.change_patch_label),
-        cancelDialogText = stringResource(MedtrumStrings.cancel_sure),
+        cancelDialogTitle = stringResource(if (deactivation) MedtrumStrings.step_deactivate else MedtrumStrings.change_patch_label),
+        cancelDialogText = stringResource(if (deactivation) MedtrumStrings.cancel_deactivation_sure else MedtrumStrings.cancel_sure),
+        askBeforeLeaving = leaveQuestion != LeaveQuestion.NONE,
         title = step?.let { stringResource(titleOf(it)) } ?: "",
         setToolbarConfig = setToolbarConfig,
         stepContent = { current, onCancel ->
