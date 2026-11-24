@@ -36,7 +36,8 @@ val generateDashStrings = tasks.register<GenerateKeyStringsTask>("generateDashSt
 kotlin {
     android {
         namespace = "app.aaps.pump.omnipod.dashctl"
-        compileSdk = Versions.compileSdk
+        // 37.1 like the convention plugins: Compose 1.13 AARs refuse 37.0 (checkAarMetadata).
+        compileSdk { version = release(Versions.compileSdk) { minorApiLevel = Versions.compileSdkMinor } }
         minSdk = Versions.minSdk
         compilerOptions { jvmTarget.set(Versions.jvmTarget) }
     }

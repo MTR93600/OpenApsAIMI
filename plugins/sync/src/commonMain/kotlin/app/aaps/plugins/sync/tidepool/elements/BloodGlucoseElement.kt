@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.sync.tidepool.utils.NameUuid
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.put
+import kotlin.math.round
 
 class BloodGlucoseElement(therapyEvent: TE, dateUtil: DateUtil, profileUtil: ProfileUtil) :
     BaseElement(therapyEvent.timestamp, NameUuid.fromName("AAPS-bg" + therapyEvent.timestamp), dateUtil) {
@@ -19,8 +20,10 @@ class BloodGlucoseElement(therapyEvent: TE, dateUtil: DateUtil, profileUtil: Pro
     init {
         type = "smbg"
         subType = "manual"
+        // Rounded, half-even as AAPS shows it. toInt() cut the decimals off: 11.6 mmol/L is 208.98 mg/dL,
+        // stored as 208, which Tidepool showed back as 11.5
         value = if (therapyEvent.glucose != null)
-            profileUtil.convertToMgdl(therapyEvent.glucose!!, therapyEvent.glucoseUnit).toInt()
+            round(profileUtil.convertToMgdl(therapyEvent.glucose!!, therapyEvent.glucoseUnit)).toInt()
         else 0
     }
 

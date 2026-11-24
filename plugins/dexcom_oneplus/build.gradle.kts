@@ -11,7 +11,8 @@ plugins {
 kotlin {
     android {
         namespace = "app.aaps.plugins.dexcomoneplus"
-        compileSdk = Versions.compileSdk
+        // 37.1 like the convention plugins: Compose 1.13 AARs refuse 37.0 (checkAarMetadata).
+        compileSdk { version = release(Versions.compileSdk) { minorApiLevel = Versions.compileSdkMinor } }
         minSdk = Versions.minSdk
         // Creates the androidHostTest compilation. isReturnDefaultValues and
         // isIncludeAndroidResources are restated from test-module-dependencies, which a

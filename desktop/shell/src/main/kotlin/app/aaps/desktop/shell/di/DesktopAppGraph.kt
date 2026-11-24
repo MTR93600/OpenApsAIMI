@@ -64,7 +64,6 @@ import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.search.BuiltInSearchables
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
-import dev.zacsweers.metro.Includes
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metrox.viewmodel.MetroViewModelMultibindings
@@ -102,6 +101,13 @@ import java.io.File
  *
  * The pattern to follow for the first group is `app.aaps.ios.shell.missing`: nothing returns a
  * plausible value, and nothing is silent.
+ *
+ * [CoreObjectsGraph] is a plain binding container rather than a contributed one, so every graph has
+ * to name it. It holds the QuickWizard / QuickWizardEntry / BolusWizard cycle, broken with deferred
+ * providers - the same shape `AppRootGraph` and `IosAppGraph` use. [ClientGraphBindings] is the same
+ * idea: the bindings iOS and desktop both need, in one place rather than copied into each shell. Not
+ * contributed, because Android provides the same ones. Both are objects, so they go in
+ * `bindingContainers`: Metro calls their `@Provides` directly and needs no instance.
  */
 /*
  * `OpenAPSAIMIPlugin` is excluded on purpose. It moved to commonMain so that iOS can share it, and
@@ -143,7 +149,8 @@ import java.io.File
         RemoteControlViewModel::class,
         TidepoolViewModel::class,
         TpoBoostController::class
-    ]
+    ],
+    bindingContainers = [CoreObjectsGraph::class, ClientGraphBindings::class]
 )
 interface DesktopAppGraph : MetroViewModelMultibindings {
 
@@ -242,23 +249,4 @@ interface DesktopAppGraph : MetroViewModelMultibindings {
     @Provides
     @SingleIn(AppScope::class)
     fun repository(): AppRepository = JvmAppDatabaseBuilder().provideAppRepository(File(DesktopFolders.data, "aaps-desktop.db").absolutePath)
-
-    /**
-     * [CoreObjectsGraph] is a plain binding container rather than a contributed one, so every graph
-     * has to include it by name. It holds the QuickWizard / QuickWizardEntry / BolusWizard cycle,
-     * broken with deferred providers - the same shape `AppRootGraph` and `IosAppGraph` use.
-     *
-     * [ClientGraphBindings] is the same idea: the bindings iOS and desktop both need, in one place
-     * rather than copied into each shell. Not contributed, because Android provides the same ones.
-     */
-
-
-    @DependencyGraph.Factory
-    fun interface Factory {
-
-        fun create(
-            @Includes coreObjects: CoreObjectsGraph,
-            @Includes clientBindings: ClientGraphBindings
-        ): DesktopAppGraph
-    }
 }

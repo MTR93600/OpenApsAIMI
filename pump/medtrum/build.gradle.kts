@@ -29,7 +29,8 @@ val generateMedtrumStrings = tasks.register<GenerateKeyStringsTask>("generateMed
 kotlin {
     android {
         namespace = "app.aaps.pump.medtrum"
-        compileSdk = Versions.compileSdk
+        // 37.1 like the convention plugins: Compose 1.13 AARs refuse 37.0 (checkAarMetadata).
+        compileSdk { version = release(Versions.compileSdk) { minorApiLevel = Versions.compileSdkMinor } }
         minSdk = Versions.minSdk
         androidResources { enable = true }
         withHostTest {
@@ -81,11 +82,12 @@ kotlin {
         androidMain {
             kotlin.srcDir(generateMedtrumStrings.flatMap { it.androidOutputDir })
             dependencies {
-                implementation(project.dependencies.platform(libs.androidx.compose.bom))
-                implementation(libs.androidx.compose.material3)
-                implementation(libs.androidx.compose.runtime)
+                // No androidx Compose BOM: Compose Multiplatform decides the Compose version on
+                // Android too (dev 5ee2023eaa), so the JetBrains coordinates are used here.
+                implementation(libs.jetbrains.compose.material3)
+                implementation(libs.jetbrains.compose.runtime)
                 implementation(libs.androidx.lifecycle.runtime.compose)
-                implementation(libs.androidx.compose.ui.tooling.preview)
+                implementation(libs.jetbrains.compose.ui.tooling.preview)
             }
         }
 

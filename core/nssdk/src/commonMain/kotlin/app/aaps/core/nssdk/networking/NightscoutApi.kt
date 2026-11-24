@@ -3,7 +3,6 @@ package app.aaps.core.nssdk.networking
 import app.aaps.core.nssdk.localmodel.authorization.NSAuthRole
 import app.aaps.core.nssdk.localmodel.authorization.NSAuthSubject
 import app.aaps.core.nssdk.remotemodel.LastModified
-import app.aaps.core.nssdk.remotemodel.LenientRemoteTreatmentListSerializer
 import app.aaps.core.nssdk.remotemodel.NSResponse
 import app.aaps.core.nssdk.remotemodel.RemoteCreateUpdateResponse
 import app.aaps.core.nssdk.remotemodel.RemoteDeviceStatus
@@ -23,8 +22,16 @@ import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
 import io.ktor.http.takeFrom
 import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The Nightscout API v3 endpoints, on Ktor.
@@ -145,8 +152,9 @@ internal class NightscoutApi(
 
     // ---------------------------------------------------------------- treatments
 
-    private val treatmentListSerializer =
-        NSResponse.serializer(LenientRemoteTreatmentListSerializer(onDecodeWarning))
+    // Row by row: one unreadable treatment must not lose the rest of its page, see RowByRowListSerializer.
+    // The rows left out are also reported in one warning to the NSClient log (onDecodeWarning).
+    private val treatmentListSerializer = NSResponse.serializer(ReportedTreatmentRowsSerializer(onDecodeWarning))
 
     suspend fun getTreatmentsNewerThan(createdAt: String, limit: Int) = call(HttpMethod.Get, treatmentListSerializer) {
         nsUrl("v3", "treatments") {
@@ -317,4 +325,46 @@ internal class NightscoutApi(
     /** 200 when the token has [permission], 401 when not. Needs no admin token: any token may ask about itself. */
     suspend fun checkPermission(permission: String) =
         call(HttpMethod.Get, JsonObject.serializer()) { nsUrl("v2", "authorization", "debug", "check", permission) }
+}
+
+/**
+ * Reads a treatments page with [RowByRowListSerializer], and also reports the rows it left out.
+ *
+ * The rows that could not be read are already listed in `ReadResponse.unreadable`. Here they also give one
+ * warning to [onWarning], with their count and the id of the first one, so the NSClient log shows it on
+ * every platform (Android and iOS).
+ */
+private class ReportedTreatmentRowsSerializer(
+    private val onWarning: (String) -> Unit
+) : KSerializer<List<WireRow<RemoteTreatment>>> {
+
+    private val rows = RowByRowListSerializer(RemoteTreatment.serializer())
+
+    override val descriptor: SerialDescriptor = rows.descriptor
+
+    override fun serialize(encoder: Encoder, value: List<WireRow<RemoteTreatment>>) = rows.serialize(encoder, value)
+
+    override fun deserialize(decoder: Decoder): List<WireRow<RemoteTreatment>> {
+        // Not JSON: RowByRowListSerializer refuses it with its own error
+        val json = decoder as? JsonDecoder ?: return rows.deserialize(decoder)
+        val page = json.decodeJsonElement()
+        val decoded = json.json.decodeFromJsonElement(rows, page)
+        val skipped = decoded.withIndex().filter { it.value.error != null }
+        if (skipped.isNotEmpty()) {
+            val first = skipped.first()
+            val id = identifierOf((page as? JsonArray)?.getOrNull(first.index), first.index)
+            onWarning("Treatments, documents skipped because they could not be read: ${skipped.size}. The first: $id: ${first.value.error}")
+        }
+        return decoded
+    }
+}
+
+/** The `identifier` of a treatment, else its `_id`, else its place in the page. */
+private fun identifierOf(element: JsonElement?, index: Int): String {
+    val obj = element as? JsonObject ?: return "index $index"
+    val identifier = (obj["identifier"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    if (!identifier.isNullOrEmpty()) return identifier
+    val id = (obj["_id"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    if (!id.isNullOrEmpty()) return id
+    return "index $index"
 }

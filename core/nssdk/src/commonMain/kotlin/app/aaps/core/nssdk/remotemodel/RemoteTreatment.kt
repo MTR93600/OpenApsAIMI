@@ -7,8 +7,17 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.UtcOffset
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toInstant
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /*
 * Depending on the type, different other fields are present.
@@ -52,10 +61,10 @@ internal data class RemoteTreatment(
     @SerialName("protein") @Serializable(with = WholeIntSerializer::class) val protein: Int? = null, // number... Amount of protein given.
     @SerialName("fat") @Serializable(with = WholeIntSerializer::class) val fat: Int? = null,       // number... Amount of fat given.
     @SerialName("insulin") val insulin: Double? = null,            // number... Amount of insulin, if any.
-    /** Duration in minutes */
-    @SerialName("duration") @Serializable(with = WholeLongSerializer::class) val duration: Long? = null, // number... Duration in minutes.
-    /** Duration in milliseconds */
-    @SerialName("durationInMilliseconds") @Serializable(with = WholeLongSerializer::class) val durationInMilliseconds: Long? = null, // number... Duration in milliseconds.
+    /** Duration in minutes. Read as [WholeWireDurationSerializer]: an integral decimal and "no end" both survive. */
+    @SerialName("duration") @Serializable(with = WholeWireDurationSerializer::class) val duration: Long? = null, // number... Duration in minutes.
+    /** Duration in milliseconds. [Long.MAX_VALUE] ("no end") travels through JavaScript, see [WireDurationSerializer]. */
+    @SerialName("durationInMilliseconds") @Serializable(with = WholeWireDurationSerializer::class) val durationInMilliseconds: Long? = null, // number... Duration in milliseconds.
     @SerialName("preBolus") @Serializable(with = WholeIntSerializer::class) val preBolus: Int? = null, // number... How many minutes the bolus was given before the meal started.
     @SerialName("splitNow") @Serializable(with = WholeIntSerializer::class) val splitNow: Int? = null, // number... Immediate part of combo bolus (in percent).
     @SerialName("splitExt") @Serializable(with = WholeIntSerializer::class) val splitExt: Int? = null, // number... Extended part of combo bolus (in percent).
@@ -85,7 +94,8 @@ internal data class RemoteTreatment(
     @SerialName("originalCustomizedName") val originalCustomizedName: String? = null, // string "Effective Profile Switch"
     @SerialName("originalTimeshift") @Serializable(with = WholeLongSerializer::class) val originalTimeshift: Long? = null,  // long "Effective Profile Switch"
     @SerialName("originalPercentage") @Serializable(with = WholeIntSerializer::class) val originalPercentage: Int? = null, // int "Effective Profile Switch"
-    @SerialName("originalDuration") @Serializable(with = WholeLongSerializer::class) val originalDuration: Long? = null,    // long "Effective Profile Switch", RunningMode
+    /** In milliseconds. [Long.MAX_VALUE] ("no end") travels through JavaScript, see [WireDurationSerializer]. */
+    @SerialName("originalDuration") @Serializable(with = WholeWireDurationSerializer::class) val originalDuration: Long? = null,    // long "Effective Profile Switch", RunningMode
     @SerialName("originalEnd") @Serializable(with = WholeLongSerializer::class) val originalEnd: Long? = null,              // long "Effective Profile Switch"
     @SerialName("icfg") val iCfg: RemoteICfg? = null,              // long "Effective Profile Switch"
 
@@ -196,3 +206,40 @@ private val OFFSET_AT_END = Regex("""[+-]\d{2}:?\d{2}$""")
 /** `+0200` -> `+02:00`; already-correct input is returned unchanged. */
 private fun withOffsetColon(offset: String): String =
     if (offset.contains(':')) offset else offset.substring(0, 3) + ":" + offset.substring(3)
+
+/**
+ * A duration on the Nightscout wire that keeps both rules:
+ *
+ * - [WireDurationSerializer]: "no end" ([Long.MAX_VALUE]) is written so that it survives JavaScript and
+ *   is read back as [Long.MAX_VALUE].
+ * - [WholeLongSerializer]: an integral decimal, like `"duration": 30.0` from another uploader, is read
+ *   as 30. A fraction like `30.5` is still an error, and the document is left out.
+ *
+ * An integral decimal below [JS_MAX_SAFE_INTEGER] is turned into a plain whole number first. Everything
+ * else goes to [WireDurationSerializer] unchanged, so its rules for large numbers, strings and errors
+ * stay exactly as they are.
+ */
+internal object WholeWireDurationSerializer : KSerializer<Long> {
+
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("app.aaps.core.nssdk.WholeWireDuration", PrimitiveKind.LONG)
+
+    override fun serialize(encoder: Encoder, value: Long) = WireDurationSerializer.serialize(encoder, value)
+
+    override fun deserialize(decoder: Decoder): Long {
+        if (decoder !is JsonDecoder) return WireDurationSerializer.deserialize(decoder)
+        val element = decoder.decodeJsonElement()
+        return decoder.json.decodeFromJsonElement(WireDurationSerializer, integralDecimalAsWhole(element))
+    }
+}
+
+/** `30.0` or `"30.0"` -> `30`. Any other value is returned unchanged. */
+private fun integralDecimalAsWhole(element: JsonElement): JsonElement {
+    val primitive = element as? JsonPrimitive ?: return element
+    if (primitive.content.toLongOrNull() != null) return element
+    val number = primitive.content.toDoubleOrNull() ?: return element
+    val limit = JS_MAX_SAFE_INTEGER.toDouble()
+    if (!number.isFinite() || number >= limit || number <= -limit) return element
+    val whole = number.toLong()
+    return if (whole.toDouble() == number) JsonPrimitive(whole) else element
+}

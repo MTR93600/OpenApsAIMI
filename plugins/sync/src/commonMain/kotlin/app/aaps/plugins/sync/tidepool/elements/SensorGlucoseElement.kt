@@ -5,6 +5,7 @@ import app.aaps.core.interfaces.utils.DateUtil
 import app.aaps.plugins.sync.tidepool.utils.NameUuid
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.put
+import kotlin.math.round
 
 class SensorGlucoseElement(bgReading: GV, dateUtil: DateUtil) :
     BaseElement(bgReading.timestamp, NameUuid.fromName("AAPS-cgm" + bgReading.timestamp), dateUtil) {
@@ -15,7 +16,9 @@ class SensorGlucoseElement(bgReading: GV, dateUtil: DateUtil) :
 
     init {
         this.type = "cbg"
-        value = bgReading.value.toInt()
+        // Rounded, half-even as AAPS shows it. toInt() cut the decimals off, and a source that delivers
+        // them (one that converts from mmol/L, or BG from Nightscout) was stored up to 1 mg/dL low
+        value = round(bgReading.value).toInt()
     }
 
     override fun putFields(json: JsonObjectBuilder) {

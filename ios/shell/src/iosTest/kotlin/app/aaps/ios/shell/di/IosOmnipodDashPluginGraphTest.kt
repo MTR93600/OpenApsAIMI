@@ -9,7 +9,6 @@ import app.aaps.core.ui.compose.icons.IcPluginOmnipod
 import app.aaps.core.ui.compose.preference.PreferenceSubScreenDef
 import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.pump.OmnipodDash
-import app.aaps.core.objects.di.CoreObjectsGraph
 import app.aaps.ios.shell.prefs.TestStorage
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocket
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
@@ -21,7 +20,6 @@ import app.aaps.pump.omnipod.dashctl.ios.plugin.omnipodDashIosPluginDescription
 import app.aaps.pump.omnipod.dashctl.ios.store.DashKeychainStateStore
 import app.aaps.pump.omnipod.dashctl.keys.DashBeepKey
 import app.aaps.pump.omnipod.dashctl.ui.DashOverviewContent
-import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.createGraphFactory
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -57,7 +55,7 @@ class IosOmnipodDashPluginGraphTest {
         DashKeychainStateStore().clear()
     }
 
-    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
+    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(NoCrashReporter)
 
     @Test
     fun `the graph builds the Omnipod Dash pump plugin`() {
@@ -84,7 +82,7 @@ class IosOmnipodDashPluginGraphTest {
     @Test
     fun `the app graph offers Dash in the pump driver bucket next to Medtrum`() {
         TestStorage.install()
-        val app = createGraphFactory<IosAppGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoSockets, NoCrashReporter)
+        val app = createGraphFactory<IosAppGraph.Factory>().create(NoSockets, NoCrashReporter)
 
         val plugins = app.contributedPumpDriverPlugins
         val dash = assertIs<IosOmnipodDashPlugin>(plugins[1080], "Dash under the Android key 1080")

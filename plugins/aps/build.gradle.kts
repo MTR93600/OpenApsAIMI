@@ -131,7 +131,8 @@ kotlin {
                 // Health Connect for AIMIPhysioDataRepositoryMTR's HRV/sleep/temperature/steps read path.
                 // Same story again: dropped in the KMP rewrite, restored for the same reason.
                 implementation("androidx.health.connect:connect-client:1.1.0")
-                implementation(libs.androidx.compose.ui.tooling.preview)
+                // Compose preview comes from commonMain (jetbrains ui-tooling-preview). The androidx
+                // alias is gone from the catalog since dev dropped the androidx Compose BOM.
                 implementation(libs.androidx.work.runtime)
                 // APS (it should be androidTestImplementation but it doesn't work)
                 runtimeOnly(libs.org.mozilla.rhino)
@@ -168,8 +169,7 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
                 // Compose UI tests (AutotuneScreenTest). Restated from compose-test-module-dependencies,
                 // which applies com.android.library and so cannot be used here.
-                implementation(project.dependencies.platform(libs.androidx.compose.bom))
-                implementation(libs.androidx.compose.ui.test.junit4)
+                implementation(libs.jetbrains.compose.ui.test.junit4)
                 implementation(libs.androidx.compose.ui.test.manifest)
                 implementation(libs.org.robolectric)
                 // The real org.json: isReturnDefaultValues makes the platform stub answer null rather

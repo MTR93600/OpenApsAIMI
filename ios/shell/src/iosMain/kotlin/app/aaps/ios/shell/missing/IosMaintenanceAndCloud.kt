@@ -138,11 +138,10 @@ class IosMaintenance(
             }
             // On an iPad a sheet with no anchor is a crash, not a cosmetic problem.
             sheet.popoverPresentationController?.let { popover ->
+                // `view` is never null on Kotlin/Native, so no null check here (it was only a compiler warning).
                 val anchor = host.view
                 popover.sourceView = anchor
-                if (anchor != null) {
-                    popover.sourceRect = anchor.bounds.useContents { CGRectMake(size.width / 2.0, size.height / 2.0, 0.0, 0.0) }
-                }
+                popover.sourceRect = anchor.bounds.useContents { CGRectMake(size.width / 2.0, size.height / 2.0, 0.0, 0.0) }
                 popover.permittedArrowDirections = NO_ARROW
             }
             host.presentViewController(sheet, animated = true, completion = null)

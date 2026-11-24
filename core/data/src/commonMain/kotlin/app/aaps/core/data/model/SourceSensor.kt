@@ -55,7 +55,9 @@ enum class SourceSensor(val text: String, val aliases: Set<String> = emptySet())
         setOf("Other App", "Network libre", "BlueReader", "Transmiter PL", "Blucon", "Tomato", "Rfduino", "LimiTTer", "Bubble", "Atom", "Glimp")
     ),
     LIBRE_2("Libre2", setOf("Libre2 Native")),
-    LIBRE_3("Libre3"),
+    // `Li3` is how xDrip names a Libre 3 it reads. It stays on this entry and not on
+    // [LIBRE_3_NATIVE], because only our own BLE plugin writes `AAPS-Libre3`.
+    LIBRE_3("Libre3", setOf("Li3")),
 
     /** Native BLE plugin in AAPS (not Juggluco / not xDrip). Libre 3 and Libre 3 Plus. */
     LIBRE_3_NATIVE("AAPS-Libre3"),

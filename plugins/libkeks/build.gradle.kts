@@ -12,7 +12,8 @@ plugins {
 kotlin {
     android {
         namespace = "jamorham.libkeks"
-        compileSdk = Versions.compileSdk
+        // 37.1 like the convention plugins: Compose 1.13 AARs refuse 37.0 (checkAarMetadata).
+        compileSdk { version = release(Versions.compileSdk) { minorApiLevel = Versions.compileSdkMinor } }
         minSdk = Versions.minSdk
         // Creates the androidHostTest compilation, which is what makes the golden values run
         // against the Android actuals - javax.crypto, SecureRandom and android.util.Log - and not

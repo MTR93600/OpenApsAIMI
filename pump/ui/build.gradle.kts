@@ -12,7 +12,8 @@ plugins {
 kotlin {
     android {
         namespace = "app.aaps.pump.ui"
-        compileSdk = Versions.compileSdk
+        // 37.1 like the convention plugins: Compose 1.13 AARs refuse 37.0 (checkAarMetadata).
+        compileSdk { version = release(Versions.compileSdk) { minorApiLevel = Versions.compileSdkMinor } }
         minSdk = Versions.minSdk
         compilerOptions { jvmTarget.set(Versions.jvmTarget) }
     }
@@ -40,14 +41,8 @@ kotlin {
             }
         }
 
-        androidMain {
-            dependencies {
-                api(project.dependencies.platform(libs.androidx.compose.bom))
-                api(libs.androidx.compose.material3)
-                api(libs.androidx.compose.material.icons.extended)
-                implementation(libs.androidx.compose.ui.tooling.preview)
-            }
-        }
+        // No androidMain Compose lines: dev dropped the androidx Compose BOM, and the commonMain
+        // jetbrains artifacts above already give Android the same libraries.
 
         getByName("commonTest") {
             dependencies {

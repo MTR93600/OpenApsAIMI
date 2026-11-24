@@ -3,8 +3,6 @@ package app.aaps.ios.shell.di
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.pump.defs.PumpType
 import app.aaps.core.interfaces.plugin.EnforcedState
-import app.aaps.core.objects.di.CoreObjectsGraph
-import app.aaps.shared.clientbindings.ClientGraphBindings
 import dev.zacsweers.metro.createGraphFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,7 +27,7 @@ import kotlin.test.assertTrue
  */
 class IosMedtrumPluginGraphTest {
 
-    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(CoreObjectsGraph, ClientGraphBindings, NoCrashReporter)
+    private fun graph() = createGraphFactory<IosProbeGraph.Factory>().create(NoCrashReporter)
 
     @Test
     fun `the graph builds the Medtrum pump plugin`() {

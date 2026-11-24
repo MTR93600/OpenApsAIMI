@@ -268,6 +268,7 @@ private class DeviceStatus : ProcessedDeviceStatusData {
     override var pumpData: ProcessedDeviceStatusData.PumpData? = null
     override var device: ProcessedDeviceStatusData.Device? = null
     override val uploaderMap = HashMap<String, ProcessedDeviceStatusData.Uploader>()
+    override val activeUploaders: Map<String, ProcessedDeviceStatusData.Uploader> get() = uploaderMap
     override var openAPSData = ProcessedDeviceStatusData.OpenAPSData()
     override val openApsTimestamp: Long
         get() = openApsTimestampOverride ?: if (openAPSData.clockSuggested != 0L) openAPSData.clockSuggested else -1L

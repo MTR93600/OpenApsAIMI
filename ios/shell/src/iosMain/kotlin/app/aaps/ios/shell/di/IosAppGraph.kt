@@ -76,7 +76,6 @@ import app.aaps.plugins.aps.loop.runningMode.IosRunningModeExpiryScheduler
 import app.aaps.plugins.aps.loop.runningMode.RunningModeReconciler
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.DependencyGraph
-import dev.zacsweers.metro.Includes
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metrox.viewmodel.MetroViewModelMultibindings
@@ -96,6 +95,11 @@ import kotlinx.coroutines.CoroutineScope
  * a binding iOS has no implementation for yet, logs loudly when touched, and refuses to invent an
  * answer that a screen would act on. They are listed in `_docs/ios_blockers.md` and are meant to be
  * deleted one at a time.
+ *
+ * [CoreObjectsGraph] and [ClientGraphBindings] are plain binding containers rather than contributed
+ * ones, so the graph names them - the same way `AppRootGraph` takes `CoreObjectsGraph` on Android.
+ * Both are objects, so they go in `bindingContainers`: Metro calls their `@Provides` directly and
+ * needs no instance from the factory.
  */
 /*
  * `OpenAPSAIMIPlugin` is IN this graph since 2026-10-18. It was held out while iOS could not
@@ -118,7 +122,7 @@ import kotlinx.coroutines.CoroutineScope
  * `NSClientSourcePlugin`. The follower app (AAPSClient) uses the same graph; `IosAppStartup` leaves the
  * `@APS`, `@PumpDriver` and `@NotNSClient` buckets out of its plugin list.
  */
-@DependencyGraph(AppScope::class)
+@DependencyGraph(AppScope::class, bindingContainers = [CoreObjectsGraph::class, ClientGraphBindings::class])
 interface IosAppGraph : MetroViewModelMultibindings {
 
     // Everything AapsAppRoot needs.
@@ -321,13 +325,7 @@ interface IosAppGraph : MetroViewModelMultibindings {
     @DependencyGraph.Factory
     fun interface Factory {
 
-        /**
-         * [CoreObjectsGraph] is a `@BindingContainer`, so its `@Provides` are only visible to a
-         * graph that includes it - the same way `AppRootGraph` takes it on Android.
-         */
         fun create(
-            @Includes coreObjects: CoreObjectsGraph,
-            @Includes clientBindings: ClientGraphBindings,
             /**
              * The Nightscout socket, handed in by the app because it is written in Swift.
              *

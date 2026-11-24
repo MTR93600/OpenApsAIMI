@@ -66,9 +66,13 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
-    # The suite uses about an hour. A cold TFLite 2.4.0 iossimulator-arm64
-    # source build is on top of that. The static library is cached; a hit
-    # skips the compile and still runs the 67 vectors.
+    # A run with no Kotlin/Native cache spends about 37 minutes linking the iOS test binaries, and needs
+    # 57 minutes or more in all. With 60 such runs were cut off before the end, so they never saved the
+    # cache, and the next run started cold again. A fork PR into a branch other than dev always starts
+    # cold: a PR can only read the cache of its target branch and of master.
+    # This fork also runs the AIMI suite (about an hour) and, on a cache miss, a cold TFLite 2.4.0
+    # iossimulator-arm64 source build. The static library is cached; a hit skips the compile and
+    # still runs the 67 parity vectors. So the limit here is 150, not 90.
     timeout-minutes: 150
 
     # First line: do not run inside somebody's fork. A fork PR against nightscout/AndroidAPS runs in
@@ -208,8 +212,11 @@ jobs:
           fi
 
       # Kotlin/Native downloads its own toolchain on first use; without this every run pays for it.
-      - name: Cache Kotlin/Native
-        uses: actions/cache@v4
+      # Restore and save are two steps: actions/cache saves only when the job passes, and the save
+      # step at the end runs also after a failure or a timeout.
+      - name: Restore the Kotlin/Native cache
+        id: konan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -390,3 +397,12 @@ jobs:
             plugins/dexcom_oneplus/build/test-results/iosSimulatorArm64Test/**
             pump/medtrum/build/test-results/iosSimulatorArm64Test/**
           if-no-files-found: warn
+
+      # Also after a failure or a timeout, so the next run does not start cold again. Not when the
+      # cache was found under this exact key: a key once saved cannot be saved again.
+      - name: Save the Kotlin/Native cache
+        if: always() && steps.konan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.konan
+          key: ${{ steps.konan-cache.outputs.cache-primary-key }}
