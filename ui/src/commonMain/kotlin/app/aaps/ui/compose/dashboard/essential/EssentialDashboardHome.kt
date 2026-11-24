@@ -58,6 +58,7 @@ import app.aaps.core.ui.compose.metroViewModel
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
+import app.aaps.ui.compose.dashboard.DisplayForecast
 import app.aaps.ui.compose.dashboard.glass.DashboardV2ToolAction
 import app.aaps.ui.compose.dashboard.glass.aimiContextNavigationRequest
 import app.aaps.ui.compose.dashboard.glass.GlassHomeViewModel
@@ -199,14 +200,19 @@ fun EssentialDashboardHome(
 
     // The mood, in mg/dL, with the user's own marks. The memory gives the hysteresis its previous mood.
     val toMgdl = { value: Double -> profileUtil.convertToMgdl(value, profileUtil.units) }
-    val prediction60 = EssentialSeries.prediction60(predictions, nowMs)
+    // The display forecast, not a loop curve: see DisplayForecast for why.
+    val forecast = remember(bgReadings, predictions, nowMs) {
+        DisplayForecast.build(bgReadings, predictions, nowMs) { profileUtil.fromMgdlToUnits(it) }
+    }
+    val forecast30 = forecast?.let { it.at(it.centre, DisplayForecast.HEADLINE_MINUTES) }
+    val forecast60 = forecast?.let { it.at(it.centre, DisplayForecast.HORIZON_MINUTES) }
     val moodMemory = remember { arrayOfNulls<EssentialMood>(1) }
     val mood = EssentialShapeState.classify(
         EssentialInputs(
             bgMgdl = bgInfo?.bgValue?.let(toMgdl),
             stale = bgInfo?.isOutdated ?: true,
             trend = bgInfo?.trendArrow,
-            prediction60Mgdl = prediction60?.value?.let(toMgdl),
+            prediction60Mgdl = forecast60?.value?.let(toMgdl),
             lowMgdl = toMgdl(chartConfig.lowMark),
             highMgdl = toMgdl(chartConfig.highMark),
         ),
@@ -344,9 +350,27 @@ fun EssentialDashboardHome(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 MiniValue(state.iobText, stringResource(UiStrings.essential_iob))
                 MiniValue(homeStatus.effectiveBasalText ?: unavailable, stringResource(UiStrings.essential_basal_temp))
+                val forecastLow = forecast?.let { it.at(it.low, DisplayForecast.HEADLINE_MINUTES) }
+                val forecastHigh = forecast?.let { it.at(it.high, DisplayForecast.HEADLINE_MINUTES) }
                 MiniValue(
-                    prediction60?.let { profileUtil.fromMgdlToStringWithUnits(toMgdl(it.value)) } ?: unavailable,
-                    stringResource(UiStrings.essential_prediction_60),
+                    forecast30?.let { stringResource(UiStrings.essential_forecast_value, profileUtil.fromMgdlToStringWithUnits(toMgdl(it.value))) } ?: unavailable,
+                    if (forecastLow != null && forecastHigh != null) {
+                        stringResource(
+                            UiStrings.essential_forecast_label,
+                            profileUtil.fromMgdlToStringInUnits(toMgdl(forecastLow.value)),
+                            profileUtil.fromMgdlToStringInUnits(toMgdl(forecastHigh.value)),
+                        )
+                    } else {
+                        stringResource(UiStrings.essential_forecast_label_no_range)
+                    },
+                )
+            }
+            if (forecast?.lowRisk == true) {
+                Text(
+                    stringResource(UiStrings.forecast_low_possible),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AapsTheme.generalColors.bgLow,
+                    modifier = Modifier.padding(top = AapsTheme.spacing.extraSmall),
                 )
             }
 
@@ -354,7 +378,7 @@ fun EssentialDashboardHome(
             EssentialChart(
                 data = EssentialChartData(
                     bg = bgReadings,
-                    prediction = predictions.filter { prediction60 != null && it.type == prediction60.type },
+                    forecast = forecast,
                     basal = basalData.actualBasal,
                     boluses = treatmentData.boluses,
                     lowMark = chartConfig.lowMark,

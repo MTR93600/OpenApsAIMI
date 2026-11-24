@@ -55,6 +55,7 @@ import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
+import app.aaps.ui.compose.dashboard.DisplayForecast
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -64,13 +65,14 @@ import kotlin.math.sqrt
  * The series of the chart, in the user's glucose unit, straight from `GraphViewModel` (the same data
  * Glass draws).
  *
- * @property prediction one prediction curve (the one the 60 min value comes from), or empty
+ * @property forecast the display forecast (damped trend, its range, the insulin-only low warning), or null
+ *   when there is no fresh reading. See [DisplayForecast].
  * @property scaleFloor lowest value the vertical axis always shows (40 mg/dL in the user's unit)
  * @property scaleCeiling highest value the vertical axis always shows (250 mg/dL in the user's unit)
  */
 data class EssentialChartData(
     val bg: List<BgDataPoint>,
-    val prediction: List<BgDataPoint>,
+    val forecast: DisplayForecast?,
     val basal: List<GraphDataPoint>,
     val boluses: List<BolusGraphPoint>,
     val lowMark: Double,
@@ -94,8 +96,9 @@ private val CHART_HEIGHT = 136.dp
 
 /**
  * The glucose chart in its card: quiet target band, the curve over an area in the colour of the current
- * situation, a short dotted prediction after now, delivered basal as bars at the bottom, SMB as dots
- * sized by dose. No COB.
+ * situation, the forecast after now (a shaded range around a dotted line, plus the insulin-only curve in
+ * the low colour when it warns of a low), delivered basal as bars at the bottom, SMB as dots sized by dose.
+ * No COB.
  *
  * A cursor always stands on a time, by default now, and the readout under the chart shows that time
  * (glucose, basal decided, SMB delivered). A horizontal drag moves it; on release it slides back to now.
@@ -119,11 +122,9 @@ fun EssentialChart(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val scope = rememberCoroutineScope()
     val fromMs = nowMs - rangeHours * 60L * 60L * 1000L
-    // Only the next 60 min of the prediction, in its own space after now
-    val prediction = data.prediction
-        .filter { it.timestamp in nowMs..nowMs + EssentialSeries.PREDICTION_HORIZON_MS }
-        .sortedBy { it.timestamp }
-    val toMs = nowMs + if (prediction.size > 1) EssentialSeries.PREDICTION_HORIZON_MS else 0L
+    // The forecast has its own space after now
+    val forecast = data.forecast
+    val toMs = nowMs + if (forecast != null) DisplayForecast.HORIZON_MINUTES * 60_000L else 0L
     val nowFraction = ((nowMs - fromMs).toFloat() / (toMs - fromMs)).coerceIn(0.01f, 1f)
     // Null: the cursor stands on now. While it slides back after a drag it goes through this animation.
     var scrubMs by remember { mutableStateOf<Long?>(null) }
@@ -198,7 +199,7 @@ fun EssentialChart(
             ) {
                 val bg = data.bg.filter { it.timestamp in fromMs..nowMs }.sortedBy { it.timestamp }
                 val scale = EssentialSeries.chartScale(
-                    bg.map { it.value } + prediction.map { it.value },
+                    bg.map { it.value } + forecast?.centre.orEmpty().map { it.value } + forecast?.insulinOnly.orEmpty().map { it.value },
                     data.scaleFloor,
                     data.scaleCeiling,
                 )
@@ -254,13 +255,28 @@ fun EssentialChart(
                     drawLine(zone(b), Offset(x(a.timestamp), y(a.value)), Offset(x(b.timestamp), y(b.value)), strokeWidth = 2.5.dp.toPx())
                 }
 
-                // Prediction, dotted, after now
-                if (prediction.size > 1) {
-                    val path = Path().apply {
-                        moveTo(x(prediction.first().timestamp), y(prediction.first().value))
-                        prediction.drop(1).forEach { lineTo(x(it.timestamp), y(it.value)) }
+                // Forecast after now: the range shaded, the centre dotted, and the insulin-only curve only when
+                // it warns of a low. See DisplayForecast for why these and not the loop curves.
+                if (forecast != null && forecast.centre.size > 1) {
+                    val range = Path().apply {
+                        moveTo(x(forecast.high.first().timeMs), y(forecast.high.first().value))
+                        forecast.high.drop(1).forEach { lineTo(x(it.timeMs), y(it.value)) }
+                        forecast.low.asReversed().forEach { lineTo(x(it.timeMs), y(it.value)) }
+                        close()
                     }
-                    drawPath(path, general.uamPrediction, style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))))
+                    drawPath(range, general.uamPrediction.copy(alpha = 0.18f))
+                    val centre = Path().apply {
+                        moveTo(x(forecast.centre.first().timeMs), y(forecast.centre.first().value))
+                        forecast.centre.drop(1).forEach { lineTo(x(it.timeMs), y(it.value)) }
+                    }
+                    drawPath(centre, general.uamPrediction, style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))))
+                    if (forecast.insulinOnly.isNotEmpty()) {
+                        val insulinOnly = Path().apply {
+                            moveTo(x(forecast.centre.first().timeMs), y(forecast.centre.first().value))
+                            forecast.insulinOnly.forEach { lineTo(x(it.timeMs), y(it.value)) }
+                        }
+                        drawPath(insulinOnly, general.bgLow, style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 6f))))
+                    }
                 }
 
                 // SMB on the curve, sized by dose: white, ringed in the colour of the zone

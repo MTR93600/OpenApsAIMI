@@ -17,8 +17,9 @@ import kotlin.test.assertTrue
 
 /**
  * Regression tests for [buildGlassChartState], ported from `dev_OAPSAIMI`. Covers the window filter,
- * the progress mapping at the window edges, the unit handling, the prediction anchoring with its
- * 15 minute freshness gate, the basal step series and treatment merging.
+ * the progress mapping at the window edges, the unit handling, the display forecast that replaced the raw
+ * loop curves (anchoring, 1 hour horizon, freshness gates, lowRisk), the basal step series and treatment
+ * merging.
  *
  * Units differ from `dev_OAPSAIMI` on purpose: on this branch the cache already holds display units,
  * so readings pass through and only the mg/dL axis constants are converted. The two unit tests check
@@ -34,6 +35,11 @@ class GlassChartStateMapperTest {
 
     private fun prediction(timestamp: Long, value: Double, type: BgType = BgType.IOB_PREDICTION) =
         BgDataPoint(timestamp = timestamp, value = value, range = BgRange.IN_RANGE, type = type)
+
+    /** Two readings 15 minutes apart with the same value, the last one at now: a flat, known trend. */
+    private fun flat(value: Double) = listOf(bg(NOW - 15 * 60_000L, value), bg(NOW, value))
+
+    private fun GlassChartState.series(type: PredictionType) = predictions.filter { it.type == type }
 
     private fun assertNear(expected: Float, actual: Float, tolerance: Float) =
         assertTrue(abs(expected - actual) <= tolerance, "expected $expected but was $actual")
@@ -99,16 +105,18 @@ class GlassChartStateMapperTest {
     }
 
     @Test
-    fun `prediction value passes through because the cache already holds display units`() {
+    fun `forecast stays in display units and only its fixed mg-dL range width is converted`() {
         val result = build(
-            bgReadings = listOf(bg(NOW, 8.0)),
+            bgReadings = flat(8.0),
             mgdlToDisplayUnits = { it / 18.0 },
-            predictions = listOf(prediction(NOW + 3_600_000L, 6.5)),
         )
 
-        assertEquals(2, result.predictions.size)
-        assertEquals(8f, result.predictions[0].value)
-        assertEquals(6.5f, result.predictions[1].value)
+        val centre = result.series(PredictionType.CENTRE)
+        val high = result.series(PredictionType.HIGH_EDGE)
+        assertEquals(8f, centre.first().value)
+        assertNear(8f, centre.last().value, 0.001f)
+        // 41 mg/dL half width at 60 minutes, converted to mmol/L. Not 8 + 41: that would be mg/dL on a mmol axis.
+        assertNear((8.0 + 41.0 / 18.0).toFloat(), high.last().value, 0.001f)
     }
 
     @Test
@@ -210,11 +218,11 @@ class GlassChartStateMapperTest {
     }
 
     @Test
-    fun `IOB prediction outside the 2 hour horizon is excluded`() {
+    fun `IOB prediction outside the 1 hour horizon is excluded`() {
         val result = build(
             iobPredictionPoints = listOf(
                 GraphDataPoint(timestamp = NOW, value = 2.0),
-                GraphDataPoint(timestamp = NOW + 3 * 3_600_000L, value = 0.0),
+                GraphDataPoint(timestamp = NOW + 90 * 60_000L, value = 0.0),
             ),
         )
 
@@ -223,68 +231,117 @@ class GlassChartStateMapperTest {
     }
 
     @Test
-    fun `predictions outside the 2 hour horizon are excluded and progress is 0 at now and 1 at horizon end`() {
-        val result = build(
-            // A fresh reading is required for predictions to render at all.
-            bgReadings = listOf(bg(NOW, 120.0)),
-            predictions = listOf(
-                prediction(NOW, 120.0),
-                prediction(NOW + 3_600_000L, 100.0),
-                prediction(NOW + 2 * 3_600_000L, 90.0),
-                prediction(NOW + 3 * 3_600_000L, 80.0),
-            ),
-        )
+    fun `forecast goes 1 hour ahead and progress is 0 at now and 1 at the horizon end`() {
+        val result = build(bgReadings = flat(120.0))
 
-        assertEquals(3, result.predictions.size)
-        assertEquals(0f, result.predictions[0].progress)
-        assertEquals(1f, result.predictions[2].progress)
-        assertNear(6f / 8f, result.historyFraction, 0.001f)
+        val centre = result.series(PredictionType.CENTRE)
+        // The anchor at now, then one point every 5 minutes up to 60 minutes.
+        assertEquals(13, centre.size)
+        assertEquals(0f, centre.first().progress)
+        assertEquals(1f, centre.last().progress)
+        assertNear(6f / 7f, result.historyFraction, 0.001f)
     }
 
     @Test
-    fun `prediction line is anchored to the last BG reading so it starts where the history line ends`() {
+    fun `the raw loop curves are not drawn and the display forecast is drawn instead`() {
         val result = build(
-            bgReadings = listOf(bg(NOW, 145.0)),
-            predictions = listOf(prediction(NOW + 3_600_000L, 100.0)),
-        )
-
-        // 2 points: the synthetic anchor at progress=0 (value = last BG reading), then the real prediction.
-        assertEquals(2, result.predictions.size)
-        assertEquals(0f, result.predictions[0].progress)
-        assertEquals(145f, result.predictions[0].value)
-        assertTrue(result.predictions[1].progress > 0f)
-    }
-
-    @Test
-    fun `every prediction type gets its own anchor`() {
-        val result = build(
-            bgReadings = listOf(bg(NOW, 145.0)),
+            bgReadings = flat(120.0),
             predictions = listOf(
-                prediction(NOW + 3_600_000L, 100.0, BgType.IOB_PREDICTION),
-                prediction(NOW + 3_600_000L, 160.0, BgType.COB_PREDICTION),
+                prediction(NOW + 30 * 60_000L, 300.0, BgType.UAM_PREDICTION),
+                prediction(NOW + 30 * 60_000L, 290.0, BgType.COB_PREDICTION),
+                prediction(NOW + 30 * 60_000L, 280.0, BgType.ZT_PREDICTION),
+                prediction(NOW + 30 * 60_000L, 110.0, BgType.IOB_PREDICTION),
             ),
         )
 
-        val anchors = result.predictions.filter { it.progress == 0f }
-        assertEquals(setOf(PredictionType.IOB, PredictionType.COB), anchors.map { it.type }.toSet())
-        assertTrue(anchors.all { it.value == 145f })
+        assertEquals(
+            setOf(PredictionType.CENTRE, PredictionType.LOW_EDGE, PredictionType.HIGH_EDGE),
+            result.predictions.map { it.type }.toSet(),
+        )
+        // Flat readings: the centre stays at 120, nothing follows the loop curves.
+        assertTrue(result.series(PredictionType.CENTRE).all { abs(it.value - 120f) < 0.001f })
+        assertTrue(result.predictions.none { it.value >= 280f })
     }
 
     @Test
-    fun `a real prediction landing exactly at progress 0 is replaced by the anchor and not duplicated`() {
+    fun `every forecast series is anchored to the last BG reading at progress 0`() {
+        // Rising, and the last reading is 4 minutes old: the anchor still sits exactly at now.
         val result = build(
-            bgReadings = listOf(bg(NOW, 145.0)),
+            bgReadings = listOf(bg(NOW - 19 * 60_000L, 130.0), bg(NOW - 4 * 60_000L, 145.0)),
+            predictions = listOf(prediction(NOW + 30 * 60_000L, 60.0)),
+        )
+
+        PredictionType.entries.forEach { type ->
+            val points = result.series(type)
+            assertTrue(points.size >= 2, "$type has ${points.size} points")
+            assertEquals(1, points.count { it.progress == 0f }, "$type anchors")
+            assertEquals(0f, points.first().progress)
+            assertEquals(145f, points.first().value)
+            assertTrue(points.drop(1).all { it.progress > 0f })
+        }
+        // The trend goes on after the anchor.
+        assertTrue(result.series(PredictionType.CENTRE)[1].value > 145f)
+    }
+
+    @Test
+    fun `a forecast point exactly at now is replaced by the anchor and not duplicated`() {
+        // The reading is at now, so the first forecast point is at now too.
+        val result = build(bgReadings = flat(145.0))
+
+        PredictionType.entries.filter { it != PredictionType.INSULIN_ONLY }.forEach { type ->
+            assertEquals(1, result.series(type).count { it.progress == 0f })
+        }
+    }
+
+    @Test
+    fun `the range is drawn around the centre and is wider at the horizon end`() {
+        val result = build(bgReadings = flat(120.0))
+
+        val low = result.series(PredictionType.LOW_EDGE)
+        val high = result.series(PredictionType.HIGH_EDGE)
+        assertEquals(low.size, high.size)
+        assertNear(120f - 41f, low.last().value, 0.001f)
+        assertNear(120f + 41f, high.last().value, 0.001f)
+        assertTrue(high[1].value - low[1].value < high.last().value - low.last().value)
+    }
+
+    @Test
+    fun `insulin only curve under 70 sets lowRisk and is drawn`() {
+        val result = build(
+            bgReadings = flat(120.0),
             predictions = listOf(
-                // Lands exactly at progress=0 with a value that DIFFERS from the last BG reading.
-                prediction(NOW, 130.0),
-                prediction(NOW + 3_600_000L, 100.0),
+                prediction(NOW + 30 * 60_000L, 60.0),
+                prediction(NOW + 90 * 60_000L, 40.0),
             ),
         )
 
-        val atProgressZero = result.predictions.filter { it.progress == 0f }
-        assertEquals(1, atProgressZero.size)
-        assertEquals(145f, atProgressZero.single().value)
-        assertEquals(2, result.predictions.size)
+        assertTrue(result.lowRisk)
+        val insulinOnly = result.series(PredictionType.INSULIN_ONLY)
+        // The anchor and the point at 30 minutes. The point past the 1 hour horizon is left out.
+        assertEquals(2, insulinOnly.size)
+        assertEquals(120f, insulinOnly[0].value)
+        assertNear(0.5f, insulinOnly[1].progress, 0.001f)
+        assertEquals(60f, insulinOnly[1].value)
+    }
+
+    @Test
+    fun `insulin only curve that stays above 70 gives no lowRisk and is not drawn`() {
+        val result = build(
+            bgReadings = flat(120.0),
+            predictions = listOf(prediction(NOW + 30 * 60_000L, 90.0)),
+        )
+
+        assertFalse(result.lowRisk)
+        assertTrue(result.series(PredictionType.INSULIN_ONLY).isEmpty())
+        assertTrue(result.series(PredictionType.CENTRE).isNotEmpty())
+    }
+
+    @Test
+    fun `no reading gives no forecast and no lowRisk`() {
+        val result = build(predictions = listOf(prediction(NOW + 30 * 60_000L, 50.0)))
+
+        assertTrue(result.predictions.isEmpty())
+        assertFalse(result.lowRisk)
     }
 
     @Test
@@ -299,14 +356,25 @@ class GlassChartStateMapperTest {
     }
 
     @Test
-    fun `a reading exactly 15 minutes old is still fresh`() {
+    fun `a reading exactly 15 minutes old still gets the connector but no forecast`() {
         val result = build(
             bgReadings = listOf(bg(NOW - 15 * 60_000L, 145.0)),
-            predictions = listOf(prediction(NOW + 3_600_000L, 100.0)),
+            predictions = listOf(prediction(NOW + 30 * 60_000L, 50.0)),
         )
 
+        // The history connector keeps its 15 minute window.
         assertEquals(2, result.bgReadings.size)
-        assertEquals(2, result.predictions.size)
+        // The forecast has its own 10 minute limit, see DisplayForecast.MAX_READING_AGE_MS.
+        assertTrue(result.predictions.isEmpty())
+        assertFalse(result.lowRisk)
+    }
+
+    @Test
+    fun `a reading exactly 10 minutes old still gets a forecast`() {
+        val result = build(bgReadings = listOf(bg(NOW - 10 * 60_000L, 145.0)))
+
+        assertTrue(result.series(PredictionType.CENTRE).isNotEmpty())
+        assertEquals(145f, result.series(PredictionType.CENTRE).first().value)
     }
 
     @Test
@@ -314,13 +382,14 @@ class GlassChartStateMapperTest {
         // 20 minutes old: past the 15-minute freshness window (sensor dropout / stale data).
         val result = build(
             bgReadings = listOf(bg(NOW - 20 * 60_000L, 145.0)),
-            predictions = listOf(prediction(NOW + 3_600_000L, 100.0)),
+            predictions = listOf(prediction(NOW + 30 * 60_000L, 50.0)),
         )
 
         // No synthetic connector, only the one real, stale reading.
         assertEquals(1, result.bgReadings.size)
-        // Predictions are suppressed entirely rather than rendered from an untrustworthy anchor.
+        // The forecast is suppressed entirely rather than rendered from an untrustworthy anchor.
         assertTrue(result.predictions.isEmpty())
+        assertFalse(result.lowRisk)
     }
 
     @Test
@@ -394,18 +463,6 @@ class GlassChartStateMapperTest {
 
         assertEquals(1, result.basalReadings.size)
         assertEquals(0f, result.basalReadings[0].progress)
-    }
-
-    @Test
-    fun `unrecognized BgType predictions are silently dropped`() {
-        val result = build(
-            predictions = listOf(
-                prediction(NOW, 120.0, BgType.REGULAR),
-                prediction(NOW, 120.0, BgType.BUCKETED),
-            ),
-        )
-
-        assertTrue(result.predictions.isEmpty())
     }
 
     private companion object {

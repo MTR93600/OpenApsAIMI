@@ -103,6 +103,7 @@
     <string name="dashboard_glass_activity_value" comment="%1$s=step count today e.g. 4200, %2$s=heart rate in bpm e.g. 72. Example: 4200 · 72 bpm">%1$s · %2$s bpm</string>
     <string name="dashboard_glass_tools_label">Tools</string>
     <string name="dashboard_glass_stats_button" comment="Short button label that opens the statistics screen">Stats</string>
+    <string name="forecast_low_possible" comment="Short note under the glucose chart. Shown when the curve of active insulin alone goes low within one hour. A possibility, not an alarm.">Low possible if nothing more is absorbed</string>
     <string name="dashboard_glass_delta" comment="Glucose change. %1$s=signed change in the user unit. Example: Δ +5">Δ %1$s</string>
     <string name="dashboard_glass_tir_empty" comment="TIR = time in range. Shown early in the day, when there is not enough data yet.">TIR --</string>
     <string name="dashboard_glass_tir_value" comment="TIR = time in range today. %1$s=percent. Example: TIR 78%">TIR %1$s</string>
@@ -829,7 +830,9 @@
     <string name="overview_second_sensor_switch_error">Something went wrong during the switch. Open the sensor status screen and check which sensor is in use.</string>
 
     <!-- Dashboard skin Essential -->
-    <string name="essential_prediction_60">In 60 min</string>
+    <string name="essential_forecast_value" comment="%1$s = forecast glucose with its unit. Example: ≈ 175 mg/dL">≈ %1$s</string>
+    <string name="essential_forecast_label" comment="Label under the forecast value. %1$s = low end, %2$s = high end of the likely range, glucose numbers without the unit. Example: In 30 min (150–200)">In 30 min (%1$s–%2$s)</string>
+    <string name="essential_forecast_label_no_range">In 30 min</string>
     <string name="essential_iob">IOB</string>
     <string name="essential_basal_temp">Basal</string>
     <string name="essential_target">Target</string>

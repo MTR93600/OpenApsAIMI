@@ -71,6 +71,7 @@ class GlassOverviewContentTest {
     /** The notification sheet shows the time of each notification; the app provides this. */
     private val dateUtil: DateUtil = mock { on { timeString(any<Long>()) } doReturn "14:05" }
     private var notifications by mutableStateOf<List<AapsNotification>>(emptyList())
+    private var chartState by mutableStateOf(GlassChartState())
     /** The sheets read the chosen home (Glass here) and the dark mode, as in the app. */
     private val preferences: Preferences = mock {
         on { observe(StringKey.GeneralDashboardSkin) } doReturn MutableStateFlow("glass")
@@ -97,7 +98,7 @@ class GlassOverviewContentTest {
                 CompositionLocalProvider(LocalGlassHeroCommands provides commands, LocalDateUtil provides dateUtil, LocalPreferences provides preferences) {
                     GlassOverviewContent(
                         state = GlassUiState(currentBg = "123", deltaText = "Δ +2", loopStatusText = "Closed Loop", stepsText = "4200", hrText = "72"),
-                        chartState = GlassChartState(),
+                        chartState = chartState,
                         isDark = true,
                         nowMs = 0L,
                         onSelectRange = {},
@@ -186,6 +187,16 @@ class GlassOverviewContentTest {
         compose.onNodeWithText("Charts").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("IOB chart").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(listOf(false), iobChartChanges) }
+    }
+
+    /** The insulin-only curve going low is shown as one line of text under the chart, and only then. */
+    @Test
+    fun lowPossibleTextFollowsLowRisk() {
+        setContent()
+        compose.onNodeWithText("Low possible if nothing more is absorbed").assertDoesNotExist()
+        chartState = GlassChartState(lowRisk = true)
+        compose.waitForIdle()
+        compose.onNodeWithText("Low possible if nothing more is absorbed").performScrollTo().assertIsDisplayed()
     }
 
     @Test

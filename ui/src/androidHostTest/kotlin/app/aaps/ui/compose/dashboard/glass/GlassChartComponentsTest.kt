@@ -39,8 +39,14 @@ class GlassChartComponentsTest {
             TreatmentPoint(progress = 0.45f, isCarb = false, label = "3.00 U", timestamp = 2_000L),
         ),
         predictions = listOf(
-            PredictionPoint(progress = 0f, value = 142f, type = PredictionType.IOB),
-            PredictionPoint(progress = 1f, value = 110f, type = PredictionType.IOB),
+            PredictionPoint(progress = 0f, value = 142f, type = PredictionType.CENTRE),
+            PredictionPoint(progress = 1f, value = 130f, type = PredictionType.CENTRE),
+            PredictionPoint(progress = 0f, value = 142f, type = PredictionType.LOW_EDGE),
+            PredictionPoint(progress = 1f, value = 89f, type = PredictionType.LOW_EDGE),
+            PredictionPoint(progress = 0f, value = 142f, type = PredictionType.HIGH_EDGE),
+            PredictionPoint(progress = 1f, value = 171f, type = PredictionType.HIGH_EDGE),
+            PredictionPoint(progress = 0f, value = 142f, type = PredictionType.INSULIN_ONLY),
+            PredictionPoint(progress = 1f, value = 62f, type = PredictionType.INSULIN_ONLY),
         ),
         iobPredictions = listOf(
             IobReadingPoint(progress = 0f, iob = 1.25f),
@@ -49,7 +55,7 @@ class GlassChartComponentsTest {
         basalReadings = listOf(BasalReadingPoint(progress = 0f, rateUh = 0.8f), BasalReadingPoint(progress = 0.6f, rateUh = 1.6f)),
         profileBasalReadings = listOf(BasalReadingPoint(progress = 0f, rateUh = 0.8f)),
         maxBasalRateUh = 1.6f,
-        historyFraction = 0.75f,
+        historyFraction = 6f / 7f,
         currentBgValue = 142f,
         currentIob = 1.25f,
     )

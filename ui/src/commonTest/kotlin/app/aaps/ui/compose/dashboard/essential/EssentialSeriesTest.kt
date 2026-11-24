@@ -1,8 +1,5 @@
 package app.aaps.ui.compose.dashboard.essential
 
-import app.aaps.core.interfaces.overview.graph.BgDataPoint
-import app.aaps.core.interfaces.overview.graph.BgRange
-import app.aaps.core.interfaces.overview.graph.BgType
 import app.aaps.core.interfaces.overview.graph.BolusGraphPoint
 import app.aaps.core.interfaces.overview.graph.BolusType
 import app.aaps.core.interfaces.overview.graph.GraphDataPoint
@@ -14,28 +11,6 @@ class EssentialSeriesTest {
 
     private val now = 1_800_000_000_000L
     private val minute = 60_000L
-
-    private fun point(minutes: Long, value: Double, type: BgType) = BgDataPoint(now + minutes * minute, value, BgRange.IN_RANGE, type)
-
-    @Test
-    fun prediction_prefers_uam_then_iob_then_zt() {
-        val all = listOf(point(60, 150.0, BgType.IOB_PREDICTION), point(60, 190.0, BgType.UAM_PREDICTION), point(60, 120.0, BgType.ZT_PREDICTION))
-        assertEquals(190.0, EssentialSeries.prediction60(all, now)?.value)
-        assertEquals(150.0, EssentialSeries.prediction60(all.filter { it.type != BgType.UAM_PREDICTION }, now)?.value)
-        assertEquals(120.0, EssentialSeries.prediction60(all.filter { it.type == BgType.ZT_PREDICTION }, now)?.value)
-    }
-
-    @Test
-    fun prediction_never_uses_cob() {
-        assertNull(EssentialSeries.prediction60(listOf(point(60, 200.0, BgType.COB_PREDICTION)), now))
-    }
-
-    @Test
-    fun prediction_takes_the_nearest_point_within_5_minutes() {
-        val curve = listOf(point(55, 160.0, BgType.UAM_PREDICTION), point(62, 170.0, BgType.UAM_PREDICTION))
-        assertEquals(170.0, EssentialSeries.prediction60(curve, now)?.value)
-        assertNull(EssentialSeries.prediction60(listOf(point(40, 160.0, BgType.UAM_PREDICTION)), now))
-    }
 
     @Test
     fun basal_is_the_step_in_force() {

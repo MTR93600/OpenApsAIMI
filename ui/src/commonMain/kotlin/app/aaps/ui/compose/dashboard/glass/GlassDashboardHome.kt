@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,6 +48,7 @@ import app.aaps.core.interfaces.source.CgmWarmupStatus
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.StringNonKey
 import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalClientRole
 import app.aaps.core.ui.compose.LocalDateUtil
 import app.aaps.core.ui.compose.LocalDecimalFormatter
@@ -324,6 +326,16 @@ internal fun GlassOverviewContent(
                 formatValue = formatBgValue,
                 isDark = isDark,
             )
+            // The insulin-only curve goes low within the hour: a labelled possibility under the chart,
+            // never an alarm (see DisplayForecast.lowRisk).
+            if (chartState.lowRisk) {
+                Text(
+                    text = stringResource(UiStrings.forecast_low_possible),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AapsTheme.generalColors.bgLow,
+                    modifier = Modifier.padding(horizontal = AapsTheme.spacing.extraSmall),
+                )
+            }
             // Can be turned off in Personalize, so the home fits on a small phone without scrolling.
             if (showIobChart) {
                 IobChartCard(

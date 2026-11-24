@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.aaps.core.interfaces.InterfacesStrings
 import app.aaps.core.ui.CoreUiStrings
+import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.stringResource
 import app.aaps.ui.UiStrings
 import kotlinx.datetime.TimeZone
@@ -105,6 +106,10 @@ internal fun BgChartCard(
     var selectedTreatment by remember { mutableStateOf<TreatmentPoint?>(null) }
     val textMeasurer = rememberTextMeasurer()
     val timeZone = TimeZone.currentSystemDefault()
+    // Forecast colours from the app theme: the centre and its range share one colour, the insulin-only
+    // curve uses the low colour because it is only drawn when it goes low.
+    val forecastColor = AapsTheme.generalColors.uamPrediction
+    val forecastLowColor = AapsTheme.generalColors.bgLow
 
     // When new data arrives, reset the drag back to the current reading
     LaunchedEffect(readings) {
@@ -382,42 +387,42 @@ internal fun BgChartCard(
                     }
                 }
 
-                // 5b. BG predictions (extend past "now" into the fixed prediction horizon)
+                // 5b. Glucose forecast (extends past "now" into the one hour forecast horizon): the range as a
+                // soft filled area, the centre as a dashed line, and the insulin-only curve as a thin dashed
+                // line only when it is present (it is filled only when it goes low).
                 if (predictions.isNotEmpty()) {
-                    fun predictionColor(type: PredictionType): Color = when (type) {
-                        PredictionType.IOB   -> Color(0xFF64B5F6)
-                        PredictionType.COB   -> Color(0xFFFFB74D)
-                        PredictionType.A_COB -> Color(0xFFFFB74D).copy(alpha = 0.5f)
-                        PredictionType.UAM   -> Color(0xFFE6D39A)
-                        PredictionType.ZT    -> Color(0xFF4DD4D4)
+                    val byType = predictions.groupBy { it.type }.mapValues { (_, points) -> points.sortedBy { it.progress } }
+                    val lowEdge = byType[PredictionType.LOW_EDGE].orEmpty()
+                    val highEdge = byType[PredictionType.HIGH_EDGE].orEmpty()
+                    if (lowEdge.size >= 2 && highEdge.size >= 2) {
+                        val rangePath = Path().apply {
+                            moveTo(predictionX(highEdge.first().progress), mapY(highEdge.first().value))
+                            highEdge.drop(1).forEach { lineTo(predictionX(it.progress), mapY(it.value)) }
+                            lowEdge.asReversed().forEach { lineTo(predictionX(it.progress), mapY(it.value)) }
+                            close()
+                        }
+                        drawPath(path = rangePath, color = forecastColor.copy(alpha = if (isDark) 0.22f else 0.18f))
                     }
 
-                    predictions.groupBy { it.type }.forEach { (type, points) ->
-                        val sorted = points.sortedBy { it.progress }
-                        if (sorted.size >= 2) {
-                            for (i in 1 until sorted.size) {
-                                val prev = sorted[i - 1]
-                                val curr = sorted[i]
-                                drawLine(
-                                    color = predictionColor(type),
-                                    start = Offset(predictionX(prev.progress), mapY(prev.value)),
-                                    end = Offset(predictionX(curr.progress), mapY(curr.value)),
-                                    // Same 6f width as the solid history curve above, so the dashed line
-                                    // reads as a continuation of the same stroke, not a thinner overlay.
-                                    strokeWidth = 6f,
-                                    cap = StrokeCap.Round,
-                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
-                                )
-                            }
-                        }
-                        sorted.forEach { point ->
-                            drawCircle(
-                                color = predictionColor(type),
-                                radius = 4f,
-                                center = Offset(predictionX(point.progress), mapY(point.value))
+                    fun dashedLine(points: List<PredictionPoint>, color: Color, width: Float, dash: FloatArray) {
+                        for (i in 1 until points.size) {
+                            val prev = points[i - 1]
+                            val curr = points[i]
+                            drawLine(
+                                color = color,
+                                start = Offset(predictionX(prev.progress), mapY(prev.value)),
+                                end = Offset(predictionX(curr.progress), mapY(curr.value)),
+                                strokeWidth = width,
+                                cap = StrokeCap.Round,
+                                pathEffect = PathEffect.dashPathEffect(dash)
                             )
                         }
                     }
+
+                    // Same 6f width as the solid history curve above, so the dashed centre reads as a
+                    // continuation of the same stroke, not a thinner overlay.
+                    dashedLine(byType[PredictionType.CENTRE].orEmpty(), forecastColor, 6f, floatArrayOf(8f, 6f))
+                    dashedLine(byType[PredictionType.INSULIN_ONLY].orEmpty(), forecastLowColor, 2.5f, floatArrayOf(6f, 6f))
                 }
 
                 // 6. Hour labels on the X-axis (aligned with the IOB chart)

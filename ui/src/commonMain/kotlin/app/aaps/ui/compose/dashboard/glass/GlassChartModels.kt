@@ -8,7 +8,12 @@ data class TreatmentPoint(val progress: Float, val isCarb: Boolean, val label: S
  *  last one) — a step series, not a smooth curve. Same window-relative `progress` scale as [BgReadingPoint]. */
 data class BasalReadingPoint(val progress: Float, val rateUh: Float)
 
-enum class PredictionType { IOB, COB, A_COB, UAM, ZT }
+/**
+ * The series of the display forecast drawn after "now", see `DisplayForecast`. [CENTRE] is the forecast
+ * line, [LOW_EDGE] and [HIGH_EDGE] are the two edges of its range (drawn as one filled area), and
+ * [INSULIN_ONLY] is the insulin-only curve, present only when it goes low within the horizon.
+ */
+enum class PredictionType { CENTRE, LOW_EDGE, HIGH_EDGE, INSULIN_ONLY }
 data class PredictionPoint(val progress: Float, val value: Float, val type: PredictionType)
 
 /**
@@ -17,7 +22,8 @@ data class PredictionPoint(val progress: Float, val value: Float, val type: Pred
  * user's display unit (mg/dL or mmol/L), never raw mg/dL — so the chart never needs its own unit conversion;
  * only display TEXT formatting is the caller's job, via BgChartCard's `formatValue` callback.
  * `axisMinValue`/`axisHeadroom` are also display-unit space, same rule as `lowLine`/`highLine`.
- * `predictions`' `progress` is on a SEPARATE 0..1 scale (0 = now, 1 = end of the fixed prediction horizon),
+ * `predictions` hold the display forecast (not the raw loop curves). Their `progress` is on a SEPARATE 0..1
+ * scale (0 = now, 1 = end of the fixed one hour forecast horizon),
  * NOT the same window-relative scale as `bgReadings`/`treatments` — `historyFraction` is what a renderer
  * uses to place both scales on one chart width (history occupies `[0, historyFraction]`, predictions
  * occupy `[historyFraction, 1]` of the total chart width).
@@ -27,6 +33,9 @@ data class GlassChartState(
     val iobReadings: List<IobReadingPoint> = emptyList(),
     val treatments: List<TreatmentPoint> = emptyList(),
     val predictions: List<PredictionPoint> = emptyList(),
+    /** True when the insulin-only curve goes under 70 mg/dL within the forecast horizon. The screen shows a
+     *  short text for it. A labelled possibility, never an alarm, see `DisplayForecast.lowRisk`. */
+    val lowRisk: Boolean = false,
     /** Projected IOB decay assuming no further treatments — same anchor-to-boundary continuity as
      *  [predictions], see `buildGlassChartState`. */
     val iobPredictions: List<IobReadingPoint> = emptyList(),
