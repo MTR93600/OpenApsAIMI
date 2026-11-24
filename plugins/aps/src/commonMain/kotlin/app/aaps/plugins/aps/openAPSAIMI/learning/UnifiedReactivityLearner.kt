@@ -191,12 +191,24 @@ class UnifiedReactivityLearner @Inject constructor(
     }
     
     /**
+     * True on a day after an elevated night (`NocturnalHeartRate.isElevated`, behind its switch). Set
+     * by the loop on each tick before the factor is read. While true, the short-term factor's distance
+     * from neutral - it follows the last two hours of glucose, up after highs, down after a low -
+     * counts [ReactivityDaypart.NIGHT_ALERT_EXTRA_SHORT_WEIGHT] more. It never moves the dose by
+     * itself: a short-term factor at 1.0 gives the same result either way.
+     */
+    @Volatile
+    var nightHeartRateAlert: Boolean = false
+
+    /**
      * Retourne le facteur combiné (40% global, 30% court terme, 30% segment horaire).
+     * After an elevated night the short-term part counts 50 % instead of 30 %. See [nightHeartRateAlert].
      */
     fun getCombinedFactor(hourOfDay: Int = currentHourOfDay()): Double {
         val daypart = ReactivityDaypart.fromHour(hourOfDay)
         val segment = segmentFactors[daypart] ?: globalFactor
-        return ReactivityDaypart.combineFactors(globalFactor, shortTermFactor, segment)
+        val extra = if (nightHeartRateAlert) ReactivityDaypart.NIGHT_ALERT_EXTRA_SHORT_WEIGHT else 0.0
+        return ReactivityDaypart.combineFactors(globalFactor, shortTermFactor, segment, extra)
     }
 
     fun segmentFactorFor(hourOfDay: Int): Double {

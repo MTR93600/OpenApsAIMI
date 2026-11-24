@@ -2,7 +2,9 @@ package app.aaps.plugins.aps.openAPSAIMI.physio
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -243,7 +245,7 @@ class NocturnalHeartRateTest {
         val samples = (22..23).flatMap { night(it, 54.0) } + night(24, 58.0)
 
         assertEquals(
-            "🌙 Night HR: 58.0 bpm | usual night after 5 nights (2/5) | Garmin-Watchface, 6.0 h | info only",
+            "🌙 Night HR: 58.0 bpm | usual night after 5 nights (2/5) | Garmin-Watchface, 6.0 h | no effect on dosing",
             NocturnalHeartRate.statusLine(NocturnalHeartRate.report(samples, morning, zone)),
         )
     }
@@ -251,16 +253,125 @@ class NocturnalHeartRateTest {
     @Test
     fun `status line with a usual night shows the signed difference`() {
         val higher = (19..23).flatMap { night(it, 54.0) } + night(24, 58.0)
-        val lower = (19..23).flatMap { night(it, 54.0) } + night(24, 51.5)
+        val lower = (19..23).flatMap { night(it, 54.0) } + night(24, 51.0)
 
         assertEquals(
-            "🌙 Night HR: 58.0 bpm (+4.0 vs usual 54.0, 5 nights) | Garmin-Watchface, 6.0 h | info only",
+            "🌙 Night HR: 58.0 bpm (+4.0 vs usual 54.0, 2.0 SD, 5 nights) | Garmin-Watchface, 6.0 h | no effect on dosing",
             NocturnalHeartRate.statusLine(NocturnalHeartRate.report(higher, morning, zone)),
         )
         assertEquals(
-            "🌙 Night HR: 51.5 bpm (-2.5 vs usual 54.0, 5 nights) | Garmin-Watchface, 6.0 h | info only",
+            "🌙 Night HR: 51.0 bpm (-3.0 vs usual 54.0, -1.5 SD, 5 nights) | Garmin-Watchface, 6.0 h | no effect on dosing",
             NocturnalHeartRate.statusLine(NocturnalHeartRate.report(lower, morning, zone)),
         )
+    }
+
+    @Test
+    fun `status line says when the night acts on the dose`() {
+        val samples = (19..23).flatMap { night(it, 54.0) } + night(24, 62.0)
+
+        assertEquals(
+            "🌙 Night HR: 62.0 bpm (+8.0 vs usual 54.0, 4.0 SD, 5 nights) | Garmin-Watchface, 6.0 h | " +
+                "ELEVATED: short-term reactivity weighs more until 23:00",
+            NocturnalHeartRate.statusLine(NocturnalHeartRate.report(samples, morning, zone), elevated = true),
+        )
+    }
+
+    // --- spread and alert -------------------------------------------------------------------------
+
+    /** Seven earlier nights, days 17 to 23, with the given values. */
+    private fun sevenNights(vararg bpm: Double): List<NocturnalHeartRate.Sample> =
+        bpm.toList().mapIndexed { index, value -> night(17 + index, value) }.flatten()
+
+    @Test
+    fun `the spread is the robust standard deviation of the earlier nights`() {
+        // Median 54. Absolute deviations 2 2 1 0 1 2 0 -> median 1 -> 1.4826 bpm, below the 2 bpm floor.
+        val calm = NocturnalHeartRate.report(sevenNights(52.0, 56.0, 53.0, 54.0, 55.0, 52.0, 54.0) + night(24, 58.0), morning, zone)
+        // Median 54. Absolute deviations 4 4 3 0 3 4 0 -> median 3 -> 4.4478 bpm.
+        val noisy = NocturnalHeartRate.report(sevenNights(50.0, 58.0, 51.0, 54.0, 57.0, 50.0, 54.0) + night(24, 58.0), morning, zone)
+
+        assertEquals(NocturnalHeartRate.MIN_SPREAD_BPM, calm.spreadBpm)
+        assertEquals(2.0, calm.zScore)
+        assertEquals(4.4478, noisy.spreadBpm!!, 1e-9)
+        assertEquals(0.9, NocturnalHeartRate.round1(noisy.zScore!!))
+    }
+
+    @Test
+    fun `no spread without a baseline`() {
+        val report = NocturnalHeartRate.report(night(24, 58.0), morning, zone)
+
+        assertNull(report.spreadBpm)
+        assertNull(report.zScore)
+    }
+
+    private val calmWeek = sevenNights(54.0, 54.0, 55.0, 53.0, 54.0, 54.0, 55.0)
+
+    @Test
+    fun `a night well above a calm usual night is elevated`() {
+        val report = NocturnalHeartRate.report(calmWeek + night(24, 59.0), morning, zone)
+
+        assertEquals(5.0, report.deltaBpm)
+        assertTrue(NocturnalHeartRate.isElevated(report, morning, zone))
+    }
+
+    @Test
+    fun `a rise under four beats is not elevated even with a small spread`() {
+        val report = NocturnalHeartRate.report(calmWeek + night(24, 57.5), morning, zone)
+
+        assertFalse(NocturnalHeartRate.isElevated(report, morning, zone))
+    }
+
+    @Test
+    fun `a rise inside a noisy usual night is not elevated`() {
+        val noisyWeek = sevenNights(48.0, 60.0, 50.0, 54.0, 58.0, 49.0, 59.0)
+        val report = NocturnalHeartRate.report(noisyWeek + night(24, 60.0), morning, zone)
+
+        assertEquals(6.0, report.deltaBpm)
+        assertFalse(NocturnalHeartRate.isElevated(report, morning, zone))
+    }
+
+    @Test
+    fun `a lower night is never elevated`() {
+        val report = NocturnalHeartRate.report(calmWeek + night(24, 46.0), morning, zone)
+
+        assertFalse(NocturnalHeartRate.isElevated(report, morning, zone))
+    }
+
+    @Test
+    fun `six earlier nights are not enough for an alert`() {
+        val sixNights = (18..23).flatMap { night(it, 54.0) }
+        val report = NocturnalHeartRate.report(sixNights + night(24, 62.0), morning, zone)
+
+        assertEquals(6, report.baselineNights)
+        assertFalse(NocturnalHeartRate.isElevated(report, morning, zone))
+    }
+
+    @Test
+    fun `the alert ends at eleven in the evening`() {
+        val samples = calmWeek + night(24, 62.0)
+
+        assertTrue(NocturnalHeartRate.isElevated(NocturnalHeartRate.report(samples, at(24, 22, 59), zone), at(24, 22, 59), zone))
+        assertFalse(NocturnalHeartRate.isElevated(NocturnalHeartRate.report(samples, at(24, 23), zone), at(24, 23), zone))
+    }
+
+    @Test
+    fun `a report about an older night gives no alert`() {
+        val report = NocturnalHeartRate.report(calmWeek + night(24, 62.0), morning, zone)
+
+        // The same report read the next day, before a new one was measured.
+        assertFalse(NocturnalHeartRate.isElevated(report, at(25, 9), zone))
+    }
+
+    @Test
+    fun `before six the running night gives no alert`() {
+        val samples = calmWeek + night(24, 62.0)
+
+        // Before 06:00 the report is about the night of day 23, which is not today.
+        assertFalse(NocturnalHeartRate.isElevated(NocturnalHeartRate.report(samples, at(24, 5), zone), at(24, 5), zone))
+    }
+
+    @Test
+    fun `no report gives no alert`() {
+        assertFalse(NocturnalHeartRate.isElevated(null, morning, zone))
     }
 
     @Test

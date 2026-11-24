@@ -967,6 +967,16 @@ enum class BooleanKey(
         title = KeysStrings.pref_title_aimi_physio_hrv_data_enable,
         summary = KeysStrings.pref_summary_aimi_physio_hrv_data_enable,
     ),
+    /**
+     * On: after a night whose heart rate is clearly above the usual night, the short-term part of the
+     * reactivity learner weighs more for the day, so AIMI follows the glucose more closely, up or down.
+     * Off: the night heart rate is shown and logged only. See `NocturnalHeartRate`.
+     */
+    AimiPhysioNightHrEnable(
+        "aimi_physio_night_hr_enable", true,
+        title = KeysStrings.pref_title_aimi_physio_night_hr_enable,
+        summary = KeysStrings.pref_summary_aimi_physio_night_hr_enable,
+    ),
     AimiPhysioLLMAnalysisEnable("aimi_physio_llm_enable", false, title = KeysStrings.pref_title_aimi_physio_llm_analysis_enable),
 
     /**

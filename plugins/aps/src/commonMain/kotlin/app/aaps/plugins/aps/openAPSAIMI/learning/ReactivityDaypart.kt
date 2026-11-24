@@ -20,6 +20,14 @@ enum class ReactivityDaypart(
         const val GLOBAL_WEIGHT = 0.40
         const val SHORT_WEIGHT = 0.30
         const val SEGMENT_WEIGHT = 0.30
+
+        /**
+         * Extra weight given to the short-term factor's distance from neutral on a day after an
+         * elevated night (see `NocturnalHeartRate.isElevated`). The short-term factor follows the last
+         * two hours of glucose in both directions, so this makes AIMI follow what the glucose shows,
+         * whichever way that is: the short-term part then counts 50 % instead of 30 %.
+         */
+        const val NIGHT_ALERT_EXTRA_SHORT_WEIGHT = 0.20
         const val SHRINKAGE_K = 50.0
         const val EXERCISE_HYPO_AMPLIFIER = 1.5
         const val FACTOR_MIN = 0.5
@@ -33,6 +41,23 @@ enum class ReactivityDaypart(
         fun combineFactors(global: Double, short: Double, segment: Double): Double {
             return (global * GLOBAL_WEIGHT + short * SHORT_WEIGHT + segment * SEGMENT_WEIGHT)
                 .coerceIn(FACTOR_MIN, FACTOR_MAX)
+        }
+
+        /**
+         * Like [combineFactors], plus [extraShortWeight] times the distance of the short-term factor
+         * from neutral (1.0).
+         *
+         * Only that distance is amplified, not the short-term factor itself. Moving weight from the
+         * global and segment factors to the short-term one would pull the result toward 1.0 even
+         * when the last two hours say nothing, and so change the dose in a direction the glucose did
+         * not choose. Here a short-term factor at 1.0 gives exactly [combineFactors], and the sign of
+         * the change is always the sign of the short-term factor's own move. With 0.0 it gives exactly
+         * [combineFactors].
+         */
+        fun combineFactors(global: Double, short: Double, segment: Double, extraShortWeight: Double): Double {
+            val usual = combineFactors(global, short, segment)
+            if (extraShortWeight == 0.0) return usual
+            return (usual + extraShortWeight * (short - 1.0)).coerceIn(FACTOR_MIN, FACTOR_MAX)
         }
 
         /** Bayesian shrinkage of segment evidence toward the day-global factor. */

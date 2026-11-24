@@ -7,6 +7,7 @@ import app.aaps.core.data.model.SC
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.aps.openAPSAIMI.aimiLocalHour
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
@@ -412,12 +413,22 @@ class HealthContextRepository @Inject constructor(
      * The heart rate of the last night against the same device's usual night, or null until the
      * first measurement lands. See [NocturnalHeartRate].
      *
-     * Information only: nothing in the dosing path reads it. Like [awakeRestingHeartRateBpm] it is
-     * measured on a background scope and served from memory, so this call never touches the database.
+     * Like [awakeRestingHeartRateBpm] it is measured on a background scope and served from memory, so
+     * this call never touches the database. Until the first measurement lands it is null, and
+     * [nightHeartRateAlert] is false: the dose stays as it was.
      */
     override fun nocturnalHeartRate(): NocturnalHeartRate.Report? {
         refreshNocturnalHeartRateAsync()
         return nocturnalRef.load()
+    }
+
+    /**
+     * True when the switch is on and the last night is elevated ([NocturnalHeartRate.isElevated]).
+     * Read by the reactivity learner on each tick, and shown in the physio status.
+     */
+    override fun nightHeartRateAlert(): Boolean {
+        if (!preferences.get(BooleanKey.AimiPhysioNightHrEnable)) return false
+        return NocturnalHeartRate.isElevated(nocturnalHeartRate(), aimiWallClockMs(), TimeZone.currentSystemDefault())
     }
 
     private fun refreshNocturnalHeartRateAsync() {
@@ -445,13 +456,18 @@ class HealthContextRepository @Inject constructor(
                 nocturnalMeasuredAtMs.store(aimiWallClockMs())
                 aapsLogger.info(
                     LTag.APS,
-                    "[$TAG] night HR (info only): night=${report.night} device=${report.device} " +
+                    "[$TAG] night HR: night=${report.night} device=${report.device} " +
                         "covered=${report.coveredMinutes}min bpm=${report.bpm?.let(NocturnalHeartRate::round1)} " +
                         "baseline=${report.baselineBpm?.let(NocturnalHeartRate::round1)} nights=${report.baselineNights} " +
-                        "delta=${report.deltaBpm?.let(NocturnalHeartRate::round1)} from ${samples.size} readings",
+                        "delta=${report.deltaBpm?.let(NocturnalHeartRate::round1)} " +
+                        "z=${report.zScore?.let(NocturnalHeartRate::round1)} " +
+                        "elevated=${NocturnalHeartRate.isElevated(report, now, TimeZone.currentSystemDefault())} " +
+                        "from ${samples.size} readings",
                 )
             } catch (e: Exception) {
-                // Information only, so the last report is simply kept and the next hour tries again.
+                // The last report is kept and the next hour tries again. It can only describe last
+                // night, so keeping it for one more hour cannot carry an old alert into a new day:
+                // isElevated checks the date of the night.
                 aapsLogger.warn(LTag.APS, "[$TAG] night HR measurement failed, keeping the last report", e)
                 nocturnalMeasuredAtMs.store(aimiWallClockMs())
             } finally {

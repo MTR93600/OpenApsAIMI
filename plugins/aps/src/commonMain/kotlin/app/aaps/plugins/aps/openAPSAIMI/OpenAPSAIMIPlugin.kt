@@ -1404,6 +1404,8 @@ open class OpenAPSAIMIPlugin  @Inject constructor(
                 val combDelta = ((gsData?.delta ?: 0.0) + predictedDelta) / 2.0
                 val isConfirmedHighRise = (gsData?.glucose ?: 0.0) > 150.0 && combDelta > 1.5 && accel > 0.4
 
+                unifiedReactivityLearner.nightHeartRateAlert =
+                    runCatching { healthContextRepository.nightHeartRateAlert() }.getOrDefault(false)
                 unifiedReactivityLearner.processIfNeeded(isConfirmedHighRise)
                 var brainFactor = unifiedReactivityLearner.getCombinedFactor()
                 val bgNow = gsData?.glucose ?: 0.0

@@ -6508,6 +6508,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         work.consoleLog.add("  └ combined: ${aimiFmt3(basalLearner.getMultiplier())}")
 
         // 🎯 Process UnifiedReactivityLearner
+        // An elevated night gives the glucose-driven short-term factor more weight today. Set before
+        // any read of the combined factor in this tick. See NocturnalHeartRate.
+        unifiedReactivityLearner.nightHeartRateAlert = physioAdapter.nightHeartRateAlert()
         unifiedReactivityLearner.processIfNeeded()
 
         // 📊 Expose UnifiedReactivityLearner state in rT for visibility
@@ -6517,6 +6520,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             work.consoleLog.add("  │ shortTermFactor: ${aimiFmt3(analysis.shortTermFactor)}")
             work.consoleLog.add("  │ segmentFactor (${analysis.segmentDaypart.name}): ${aimiFmt3(analysis.segmentFactor)}")
             work.consoleLog.add("  │ combinedFactor: ${aimiFmt3(unifiedReactivityLearner.getCombinedFactor(work.hourOfDay))}")
+            if (unifiedReactivityLearner.nightHeartRateAlert) {
+                work.consoleLog.add("  │ nightHR: ELEVATED -> short-term part counts 50% (follows the last 2 h of glucose)")
+            }
             work.consoleLog.add("  │ TIR 70-180: ${analysis.tir70_180.toInt()}%")
             work.consoleLog.add("  │ CV%: ${analysis.cv_percent.toInt()}%")
             work.consoleLog.add("  │ Hypo count (24h): ${analysis.hypo_count}")

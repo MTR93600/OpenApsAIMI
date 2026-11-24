@@ -1,5 +1,6 @@
 package app.aaps.plugins.aps.openAPSAIMI.physio
 
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.time.Instant
 import kotlinx.datetime.DatePeriod
@@ -20,9 +21,18 @@ import kotlinx.datetime.toLocalDateTime
  * every one of them writes heart rate into the AAPS heart-rate table. So this works with any
  * device that feeds that table: the Garmin watch face, a Wear OS watch, Health Connect, Apple Health.
  *
- * **Information only.** Nothing in the dosing path reads this value. It is shown in the physio
- * status and written to the log, so it can be checked against real nights before anyone decides to
- * use it.
+ * ## What it changes in the dose
+ *
+ * The night says *that* something changed, not *which way*: an infection that starts makes a person
+ * need more insulin, alcohol or a hard effort the day before make them need less. So the night does
+ * not choose a direction. On a day after an **elevated** night ([isElevated]), the short-term part of
+ * `UnifiedReactivityLearner` - the part that follows the last two hours of glucose, up after highs,
+ * down after a low - gets more weight, until [ALERT_END_HOUR]. The glucose chooses the direction; the
+ * night only says to listen to it more closely. Everything else is shown and logged only.
+ *
+ * An elevated night must be rare to mean something, so the rule asks a lot: at least
+ * [MIN_ALERT_BASELINE_NIGHTS] earlier nights of the same device, at least [MIN_ALERT_DELTA_BPM] above
+ * the usual night, and at least [MIN_ALERT_Z] times the usual night-to-night spread.
  *
  * ## The rules, and why each one is here
  *
@@ -74,6 +84,28 @@ object NocturnalHeartRate {
     /** Fewest earlier nights of the same device before there is a baseline. */
     const val MIN_BASELINE_NIGHTS: Int = 5
 
+    /** Fewest earlier nights of the same device before a night may count as elevated. */
+    const val MIN_ALERT_BASELINE_NIGHTS: Int = 7
+
+    /** Smallest rise over the usual night, in bpm, that may count as elevated. */
+    const val MIN_ALERT_DELTA_BPM: Double = 4.0
+
+    /** Smallest rise, in units of the usual night-to-night spread, that may count as elevated. */
+    const val MIN_ALERT_Z: Double = 2.0
+
+    /**
+     * Smallest spread used, in bpm. A device whose nights were all within one beat would otherwise
+     * turn a 4 bpm night into a huge score. Two beats is about the night-to-night noise of a wrist
+     * sensor.
+     */
+    const val MIN_SPREAD_BPM: Double = 2.0
+
+    /** Converts a median absolute deviation into a standard deviation for normal data. */
+    private const val MAD_TO_SD: Double = 1.4826
+
+    /** First local hour at which the alert of the day ends: the evening, before the next night. */
+    const val ALERT_END_HOUR: Int = 23
+
     /** How many days of heart-rate history a caller must load: the baseline nights and the last one. */
     const val HISTORY_DAYS: Int = BASELINE_NIGHTS + 2
 
@@ -103,6 +135,8 @@ object NocturnalHeartRate {
      * @param baselineBpm the usual night heart rate of the same device, or null when there are fewer
      *   than [MIN_BASELINE_NIGHTS] earlier nights, or when [bpm] is null.
      * @param baselineNights how many earlier nights of that device were found (at most [BASELINE_NIGHTS]).
+     * @param spreadBpm the usual night-to-night spread of that device (robust standard deviation, at
+     *   least [MIN_SPREAD_BPM]), or null when there is no baseline.
      */
     data class Report(
         val night: LocalDate,
@@ -111,11 +145,20 @@ object NocturnalHeartRate {
         val bpm: Double?,
         val baselineBpm: Double?,
         val baselineNights: Int,
+        val spreadBpm: Double? = null,
     ) {
 
         /** Night minus baseline, in bpm. Positive means a faster heart than usual. Null when either is missing. */
         val deltaBpm: Double?
             get() = if (bpm != null && baselineBpm != null) bpm - baselineBpm else null
+
+        /** [deltaBpm] in units of [spreadBpm]. Null when either is missing. */
+        val zScore: Double?
+            get() {
+                val delta = deltaBpm ?: return null
+                val spread = spreadBpm ?: return null
+                return delta / spread
+            }
     }
 
     /**
@@ -158,6 +201,9 @@ object NocturnalHeartRate {
             .filter { it.key < lastNight }
             .mapNotNull { (_, devices) -> devices[device]?.let(::nightValue) }
         val baseline = if (bpm != null && earlierNights.size >= MIN_BASELINE_NIGHTS) median(earlierNights) else null
+        val spread = baseline?.let { center ->
+            maxOf(MAD_TO_SD * median(earlierNights.map { abs(it - center) }), MIN_SPREAD_BPM)
+        }
 
         return Report(
             night = lastNight,
@@ -166,14 +212,35 @@ object NocturnalHeartRate {
             bpm = bpm,
             baselineBpm = baseline,
             baselineNights = earlierNights.size,
+            spreadBpm = spread,
         )
     }
 
     /**
-     * The night heart rate line of the physio status. Says "info only" because no decision reads it,
-     * and says why when there is no value, so a missing number is never mistaken for a normal night.
+     * True when [report] is about the night that ended this morning, it is clearly above the usual
+     * night of the same device, and the day is not over yet ([ALERT_END_HOUR]).
+     *
+     * Every condition must hold. A report that is missing, about an older night, built on too few
+     * earlier nights, or only a little above normal gives false, which leaves the dose as it was.
      */
-    fun statusLine(report: Report?): String {
+    fun isElevated(report: Report?, nowMs: Long, zone: TimeZone): Boolean {
+        if (report == null) return false
+        val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone)
+        if (report.night != now.date) return false
+        if (now.hour < NIGHT_END_HOUR || now.hour >= ALERT_END_HOUR) return false
+        if (report.baselineNights < MIN_ALERT_BASELINE_NIGHTS) return false
+        val delta = report.deltaBpm ?: return false
+        val z = report.zScore ?: return false
+        return delta >= MIN_ALERT_DELTA_BPM && z >= MIN_ALERT_Z
+    }
+
+    /**
+     * The night heart rate line of the physio status. Says whether the night acts on the dose today,
+     * and says why when there is no value, so a missing number is never mistaken for a normal night.
+     *
+     * @param elevated what [isElevated] answered for the same report.
+     */
+    fun statusLine(report: Report?, elevated: Boolean = false): String {
         val prefix = "🌙 Night HR"
         if (report == null) return "$prefix: -- (not measured yet)"
         val hours = round1(report.coveredMinutes / 60.0)
@@ -185,16 +252,22 @@ object NocturnalHeartRate {
             }
         val value = "$prefix: ${round1(bpm)} bpm"
         val details = "${report.device}, ${hours} h"
+        val tail = if (elevated) {
+            "ELEVATED: short-term reactivity weighs more until ${ALERT_END_HOUR}:00"
+        } else {
+            "no effect on dosing"
+        }
         val baseline = report.baselineBpm
         val delta = report.deltaBpm
         return if (baseline == null || delta == null) {
             "$value | usual night after ${MIN_BASELINE_NIGHTS} nights " +
-                "(${report.baselineNights}/${MIN_BASELINE_NIGHTS}) | $details | info only"
+                "(${report.baselineNights}/${MIN_BASELINE_NIGHTS}) | $details | $tail"
         } else {
             val roundedDelta = round1(delta)
             val sign = if (roundedDelta > 0.0) "+" else ""
-            "$value ($sign$roundedDelta vs usual ${round1(baseline)}, " +
-                "${report.baselineNights} nights) | $details | info only"
+            val z = report.zScore?.let { "${round1(it)} SD, " } ?: ""
+            "$value ($sign$roundedDelta vs usual ${round1(baseline)}, $z" +
+                "${report.baselineNights} nights) | $details | $tail"
         }
     }
 

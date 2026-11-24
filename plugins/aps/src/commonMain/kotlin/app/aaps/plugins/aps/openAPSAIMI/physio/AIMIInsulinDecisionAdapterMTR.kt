@@ -97,6 +97,9 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
     /** The awake resting heart rate, or null when not measured. See [AimiHealthContext.awakeRestingHeartRateBpm]. */
     fun awakeRestingHeartRateBpm(): Int? = repo.awakeRestingHeartRateBpm()
 
+    /** See [AimiHealthContext.nightHeartRateAlert]. */
+    fun nightHeartRateAlert(): Boolean = repo.nightHeartRateAlert()
+
     fun getLatestSnapshot(): HealthContextSnapshot {
         return repo.getLastSnapshot()
     }
@@ -657,7 +660,7 @@ class AIMIInsulinDecisionAdapterMTR @Inject constructor(
         // Heart
         val hrvStr = if (snapshot.hrvRmssd > 0) "${snapshot.hrvRmssd.toInt()}ms" else "--"
         sb.append("\n❤️ Heart: HR ${snapshot.hrNow} | RHR ${snapshot.rhrResting} | HRV $hrvStr")
-        sb.append("\n").append(NocturnalHeartRate.statusLine(repo.nocturnalHeartRate()))
+        sb.append("\n").append(NocturnalHeartRate.statusLine(repo.nocturnalHeartRate(), repo.nightHeartRateAlert()))
         
         // Sleep
         if (snapshot.sleepDebtMinutes > 0) {

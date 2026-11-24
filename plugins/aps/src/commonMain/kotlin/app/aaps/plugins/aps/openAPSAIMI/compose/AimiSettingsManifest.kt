@@ -498,6 +498,8 @@ internal object AimiSettingsManifest {
         // Step S3b: wired (owner decision 2026-11-15). On by default; off keeps the reading out of AIMI.
         AimiSettingEntry(BooleanKey.AimiPhysioSleepDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         AimiSettingEntry(BooleanKey.AimiPhysioHRVDataEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
+        // Owner decision 2026-11-24: on by default. Acts only after a rare elevated night.
+        AimiSettingEntry(BooleanKey.AimiPhysioNightHrEnable, AimiSettingsLevel.ADVANCED, AimiBehaviorFamilyId.Physio, AimiSettingsWriter.USER),
         // Added during the KMP work and never classified until the manifest tests came back. None has a
         // switch on any screen yet, so all three are in REACHABILITY_DEBT.
         // Off by default, newer path, feeds the HRV insulin multiplier: EXPERT.

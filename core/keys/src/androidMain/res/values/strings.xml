@@ -710,6 +710,8 @@
     <string name="pref_title_aimi_physio_sleep_data_enable">Use sleep data</string>
     <string name="pref_summary_aimi_physio_sleep_data_enable">On: AIMI uses the sleep from your watch (sleep debt, poor night) and can give a little less insulin after a bad night. Off: sleep data is ignored.</string>
     <string name="pref_title_aimi_physio_hrv_data_enable">Use heart rate variability (HRV)</string>
+    <string name="pref_title_aimi_physio_night_hr_enable">React to an unusual night heart rate</string>
+    <string name="pref_summary_aimi_physio_night_hr_enable">On: after a night with a heart rate clearly above your usual night, AIMI follows your glucose more closely for the rest of the day, in both directions. Off: the night heart rate is only shown.</string>
     <string name="pref_summary_aimi_physio_hrv_data_enable">On: AIMI uses the HRV from your watch to detect stress or fatigue, which can change the insulin dose a little. Off: HRV is ignored.</string>
     <string name="pref_title_aimi_physio_llm_analysis_enable">AIMI physio LLM analysis enable</string>
     <string name="pref_title_aimi_hrv_baseline_per_night">AIMI HRV baseline per night</string>

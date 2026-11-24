@@ -582,7 +582,7 @@ internal object AimiSettingsScreens {
         // Step S3b: they act with the assistant off too (the tree and the snapshot read the readings).
         fields(
             AimiSettingsSectionId.PhysioDataUse, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.ADVANCED,
-            BooleanKey.AimiPhysioSleepDataEnable, BooleanKey.AimiPhysioHRVDataEnable,
+            BooleanKey.AimiPhysioSleepDataEnable, BooleanKey.AimiPhysioHRVDataEnable, BooleanKey.AimiPhysioNightHrEnable,
         ),
         fields(
             AimiSettingsSectionId.PhysioSources, AimiSettingsContentId.CardPhysio, AimiSettingsLevel.EXPERT,

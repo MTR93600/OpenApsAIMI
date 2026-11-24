@@ -227,10 +227,15 @@ interface AimiHealthContext {
 
     /**
      * The heart rate of the last night against the same device's usual night, or null when it was
-     * not measured yet. Information only: no dosing decision reads it. Default null, so a source
-     * without it changes nothing.
+     * not measured yet. Default null, so a source without it changes nothing.
      */
     fun nocturnalHeartRate(): NocturnalHeartRate.Report? = null
+
+    /**
+     * True on a day after an elevated night, when its switch is on. See `NocturnalHeartRate.isElevated`.
+     * Default false, so a source without it leaves the dose as it was.
+     */
+    fun nightHeartRateAlert(): Boolean = false
 }
 
 /**

@@ -48,6 +48,17 @@ class UnifiedReactivityLearnerGuardTest : TestBase() {
     }
 
     @Test
+    fun `the night alert alone does not move the combined factor`() {
+        val learner = buildLearner()
+        val usual = learner.getCombinedFactor(9)
+
+        learner.nightHeartRateAlert = true
+
+        // A fresh learner has a neutral short-term factor, so the alert has nothing to amplify.
+        assertThat(learner.getCombinedFactor(9)).isEqualTo(usual)
+    }
+
+    @Test
     fun `a second analyzeLast24h call while a refresh is in flight does not start a second refresh`() {
         val callCount = AtomicInteger(0)
         val enteredLatch = CountDownLatch(1)

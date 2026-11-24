@@ -155,6 +155,7 @@ aimi_physio_hc_permissions_compose|ApsIntentKey|false
 aimi_physio_hrv_enable|BooleanKey|true
 aimi_physio_last_update_ms|LongNonKey|false
 aimi_physio_llm_enable|BooleanKey|true
+aimi_physio_night_hr_enable|BooleanKey|true
 aimi_physio_pattern_catalog_info|ApsIntentKey|false
 aimi_physio_sleep_enable|BooleanKey|true
 aimi_pkpd_learned_state_generation|LongNonKey|true
