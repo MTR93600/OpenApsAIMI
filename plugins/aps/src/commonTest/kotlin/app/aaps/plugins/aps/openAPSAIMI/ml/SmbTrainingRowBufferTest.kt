@@ -348,4 +348,55 @@ class SmbTrainingRowBufferTest {
         assertEquals("", cols[enrichedHeaders.indexOf("smbOriginOwner")])
         assertEquals("", cols[enrichedHeaders.indexOf("smbModelU")])
     }
+
+    // -- A row with a time in the future must not hold the queue ---------------------------------
+
+    private val minute = 60_000L
+    private val t0 = 1_800_000_000_000L
+
+    private fun bufferWith(vararg timestamps: Long) = SmbTrainingRowBuffer().apply {
+        timestamps.forEachIndexed { i, ts -> enqueue(timestampMs = ts, valuesHead = "row$i", valuesTail = "tail") }
+    }
+
+    @Test
+    fun `a row from the future at the head no longer holds the rows behind it`() {
+        // The clock went back one hour after the first row was queued.
+        val buffer = bufferWith(t0 + 60 * minute, t0, t0 + 4 * minute)
+
+        val written = buffer.drainWritableRows(nowMs = t0 + 50 * minute)
+
+        assertEquals(listOf("row0", "row1", "row2"), written.map { it.substringBefore(',') })
+        assertEquals(0, buffer.pendingCount())
+    }
+
+    @Test
+    fun `a row from the future leaves at once with an empty outcome`() {
+        val buffer = bufferWith(t0 + 60 * minute)
+        buffer.fillRealisedOutcomes(nowMs = t0, observedBg = 120.0)
+
+        val written = buffer.drainWritableRows(nowMs = t0)
+
+        assertEquals(1, written.size)
+        // The outcome column is the fifth of the six added at the end, and it stays empty.
+        assertEquals("", written.single().split(",").takeLast(6)[4])
+    }
+
+    @Test
+    fun `rows still in their window stay and older rows behind them leave`() {
+        // Out of order: a recent row first, then an old one.
+        val buffer = bufferWith(t0 + 40 * minute, t0)
+
+        val written = buffer.drainWritableRows(nowMs = t0 + 50 * minute)
+
+        assertEquals(listOf("row1"), written.map { it.substringBefore(',') })
+        assertEquals(1, buffer.pendingCount())
+    }
+
+    @Test
+    fun `a row a little ahead of now is normal jitter and waits`() {
+        val buffer = bufferWith(t0 + 2 * minute)
+
+        assertTrue(buffer.drainWritableRows(nowMs = t0).isEmpty())
+        assertEquals(1, buffer.pendingCount())
+    }
 }

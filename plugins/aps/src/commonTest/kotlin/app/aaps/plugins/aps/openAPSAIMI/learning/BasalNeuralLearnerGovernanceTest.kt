@@ -216,4 +216,28 @@ class BasalNeuralLearnerGovernanceTest {
         assertNear(1.0098, basalFactor())
         assertNear(1.0485, aggressivenessFactor())
     }
+
+    // ---- a sample from a clock that went back gets no outcome ----
+
+    @Test
+    fun aSampleStampedInTheFutureIsDroppedAndGetsNoOutcome() {
+        val now = 1_800_000_000_000L
+        val minute = 60_000L
+        // One normal sample 30 min old, one stamped 2 h ahead (the clock went back after it was taken).
+        learner.seedUnrealisedGovernanceSamplesForTesting(listOf(now - 30 * minute, now + 120 * minute))
+
+        learner.fillRealisedOutcomes(nowMs = now, observedBg = 140.0)
+
+        assertEquals(listOf(now - 30 * minute to true), learner.governanceSamplesForTesting())
+    }
+
+    @Test
+    fun aSampleAFewMinutesAheadIsKeptAsJitter() {
+        val now = 1_800_000_000_000L
+        learner.seedUnrealisedGovernanceSamplesForTesting(listOf(now + 2 * 60_000L))
+
+        learner.fillRealisedOutcomes(nowMs = now, observedBg = 140.0)
+
+        assertEquals(listOf(now + 2 * 60_000L to false), learner.governanceSamplesForTesting())
+    }
 }

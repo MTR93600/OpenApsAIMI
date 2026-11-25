@@ -6,6 +6,7 @@ import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.plugins.aps.openAPSAIMI.TrainingConfig
 import app.aaps.plugins.aps.openAPSAIMI.aimiWallClockMs
+import app.aaps.plugins.aps.openAPSAIMI.ml.AimiSmbTrainingSchedule
 import app.aaps.plugins.aps.openAPSAIMI.ml.NeuralModelTrainer
 import app.aaps.plugins.aps.openAPSAIMI.ml.SmbRefinementFeatureSchema
 import app.aaps.plugins.aps.openAPSAIMI.ml.TrainingCircuitBreaker
@@ -135,7 +136,15 @@ class BasalMlTrainingCoordinator @Inject constructor(
             log.debug(LTag.AIMI, "$TAG: circuit breaker open — skip")
             return TrainingOutcome.SKIPPED
         }
-        if (!bootstrapNeeded && now - lastTrainMs.load() < TRAIN_INTERVAL_MS) {
+        // A last training time in the future (the phone clock went back) would hold both gates below
+        // until the clock caught up, so no basal training for that long. The SMB trainer already reads
+        // its times this way; the same rule is used here.
+        val lastTrain = AimiSmbTrainingSchedule.sanitizeTimestamp(lastTrainMs.load(), now)
+        if (lastTrain != lastTrainMs.load()) {
+            log.warn(LTag.AIMI, "$TAG: last training time ${lastTrainMs.load()} is in the future (now $now), it is ignored")
+            lastTrainMs.store(lastTrain)
+        }
+        if (!bootstrapNeeded && now - lastTrain < TRAIN_INTERVAL_MS) {
             log.debug(LTag.AIMI, "$TAG: rate limit — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -167,7 +176,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         // STALE_TRAINING_MS since the last completed attempt, force one anyway: BASAL_MIN_ROWS/T3C_MIN_ROWS
         // below still require a minimum corpus, so this cannot train on too little data, only on data that
         // grew slower than expected.
-        val trainingIsStale = now - lastTrainMs.load() > STALE_TRAINING_MS
+        val trainingIsStale = now - lastTrain > STALE_TRAINING_MS
         if (!bootstrapNeeded && !trainingIsStale && newRows < MIN_NEW_ROWS) {
             log.debug(LTag.AIMI, "$TAG: only $newRows new rows (need $MIN_NEW_ROWS) — skip")
             return TrainingOutcome.SKIPPED

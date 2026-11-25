@@ -97,6 +97,23 @@ class BasalMlTrainingCoordinatorTest : TestBase() {
     }
 
     @Test
+    fun aLastTrainingTimeInTheFutureDoesNotHoldTraining() = runBlocking {
+        // The phone clock went back three days after the last training. That time is now "in the
+        // future", and the rate limit used to hold every training until the clock caught up.
+        File(tempDir, "basal_adaptive_weights.json").writeText("{}")
+        val stateFile = File(tempDir, "basal_ml_training_state.json")
+        val threeDaysAhead = aimiWallClockMs() + 3L * 24 * 60 * 60_000L
+        stateFile.writeText("""{"lastTrainMs":$threeDaysAhead,"rowsAtLastTrain":110}""")
+
+        val log = CapturingLogger()
+        val freshCoordinator = BasalMlTrainingCoordinator(storage, learner, log)
+        freshCoordinator.runScheduledTraining()
+
+        assertThat(log.debugMessages.any { it.contains("rate limit") }).isFalse()
+        assertThat(log.debugMessages.any { it.contains("label set") }).isTrue()
+    }
+
+    @Test
     fun bootstrapIsNotBlockedByMinNewRowsWhenNoWeightsExistYet() = runBlocking {
         // No basal_adaptive_weights.json here (bootstrapNeeded = true). rowsAtLastTrain is set high enough
         // that newRows would be far below MIN_NEW_ROWS under the steady-state gate, simulating a persisted
