@@ -427,4 +427,127 @@ class DashActivationTest {
         state.overwriteForTest { it.copy(reportedPodStatus = PodStatus.RUNNING_BELOW_MIN_VOLUME) }
         assertTrue(state.isActivatedAndRunning)
     }
+
+    // -- A NAK is never a done step (Trio does the same) ------------------------------------------
+
+    private fun isCommand(type: CommandType): (ByteArray) -> Boolean = { it[6] == type.value }
+
+    @Test
+    fun `a lost SetUniqueId answer then a NAK to the repeat still activates the pod with the fixed values`() = runTest {
+        val rig = pairedRig()
+        rig.pod.loseAnswerOf = isCommand(CommandType.SET_UNIQUE_ID)
+        assertFailsWith<DashActivationException> { rig.activation().activatePart1(lowReservoir) }
+        assertEquals(ActivationProgress.GOT_POD_VERSION, rig.state.activationProgress)
+
+        // The pod already has its unique id: it refuses the repeat.
+        rig.pod.nakOf = isCommand(CommandType.SET_UNIQUE_ID)
+        rig.activateAll()
+
+        assertEquals(ActivationProgress.COMPLETED, rig.state.activationProgress)
+        assertEquals(52.toShort(), rig.state.firstPrimeBolusVolume)
+        assertEquals(10.toShort(), rig.state.secondPrimeBolusVolume)
+        assertEquals(8.toShort(), rig.state.primePulseRate)
+        assertEquals(80.toShort(), rig.state.podLifeInHours)
+        assertEquals(1, rig.model.primes)
+        assertEquals(1, rig.model.cannulaInsertions)
+    }
+
+    @Test
+    fun `a NAK to SetUniqueId on a pod that did not take it stores nothing`() = runTest {
+        // The pod refuses SetUniqueId the first time it is sent.
+        val fresh = pairedRig()
+        fresh.pod.nakOf = isCommand(CommandType.SET_UNIQUE_ID)
+
+        assertFailsWith<DashActivationException> { fresh.activation().activatePart1(lowReservoir) }
+
+        assertEquals(ActivationProgress.GOT_POD_VERSION, fresh.state.activationProgress)
+        assertNull(fresh.state.firstPrimeBolusVolume)
+        assertEquals(0, fresh.model.primes)
+    }
+
+    @Test
+    fun `a NAK to an activation alert stops and the alert is sent again`() = runTest {
+        val rig = pairedRig()
+        rig.pod.nakOf = isCommand(CommandType.PROGRAM_ALERTS)
+
+        assertFailsWith<DashActivationException> { rig.activation().activatePart1(lowReservoir) }
+        assertEquals(ActivationProgress.SET_UNIQUE_ID, rig.state.activationProgress)
+        assertEquals(0, rig.model.primes)
+
+        rig.activateAll()
+
+        assertEquals(ActivationProgress.COMPLETED, rig.state.activationProgress)
+        // Low reservoir twice (the refused one and the repeat), lump of coal, expiration alerts.
+        assertEquals(4, rig.pod.types().count { it == CommandType.PROGRAM_ALERTS.value })
+    }
+
+    @Test
+    fun `a stored SetUniqueId without prime values primes with the fixed values`() = runTest {
+        val stuck = pairedRig()
+        stuck.pod.loseAnswerOf = isCommand(CommandType.SET_UNIQUE_ID)
+        assertFailsWith<DashActivationException> { stuck.activation().activatePart1(lowReservoir) }
+        // As an older version or recoverActivationFromPodStatus left it: the step done, no values.
+        stuck.state.updateActivationProgress(ActivationProgress.SET_UNIQUE_ID)
+        assertNull(stuck.state.firstPrimeBolusVolume)
+
+        stuck.activation().activatePart1(lowReservoir)
+
+        assertEquals(ActivationProgress.PHASE_1_COMPLETED, stuck.state.activationProgress)
+        assertEquals(1, stuck.model.primes)
+    }
+
+    @Test
+    fun `a pod further on than the stored progress is not primed again`() = runTest {
+        val rig = pairedRig()
+        rig.activation().activatePart1(lowReservoir)
+        assertEquals(1, rig.model.primes)
+        // A lost progress write: the phone is back at GOT_POD_VERSION, without the prime values.
+        rig.state.overwriteForTest {
+            it.copy(activationProgress = ActivationProgress.GOT_POD_VERSION, firstPrimeBolusVolume = null, secondPrimeBolusVolume = null, primePulseRate = null)
+        }
+        rig.pod.nakOf = isCommand(CommandType.SET_UNIQUE_ID)
+
+        assertFailsWith<DashActivationException> { rig.activation().activatePart1(lowReservoir) }
+
+        // The progress comes from the pod (CLUTCH_DRIVE_ENGAGED), and no second prime went.
+        assertEquals(ActivationProgress.PRIME_COMPLETED, rig.state.activationProgress)
+        assertEquals(1, rig.model.primes)
+        rig.activation().activatePart1(lowReservoir)
+        rig.activation().activatePart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+        assertEquals(ActivationProgress.COMPLETED, rig.state.activationProgress)
+        assertEquals(1, rig.model.primes)
+        assertEquals(1, rig.model.cannulaInsertions)
+    }
+
+    @Test
+    fun `a basal program taken before a NAK to its repeat counts as done`() = runTest {
+        val rig = pairedRig()
+        rig.activation().activatePart1(lowReservoir)
+        val isBasal: (ByteArray) -> Boolean = { it[6] == CommandType.PROGRAM_INSULIN.value && !FakeActivationPod.isBolus(it) }
+        rig.pod.loseAnswerOf = isBasal
+        assertFailsWith<DashActivationException> {
+            rig.activation().activatePart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+        }
+        rig.pod.nakOf = isBasal
+
+        rig.activation().activatePart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+
+        assertEquals(ActivationProgress.COMPLETED, rig.state.activationProgress)
+        assertEquals(1, rig.model.basalPrograms)
+        assertEquals(1, rig.model.cannulaInsertions)
+    }
+
+    @Test
+    fun `a basal program refused on a pod without one stops the activation`() = runTest {
+        val rig = pairedRig()
+        rig.activation().activatePart1(lowReservoir)
+        rig.pod.nakOf = { it[6] == CommandType.PROGRAM_INSULIN.value && !FakeActivationPod.isBolus(it) }
+
+        assertFailsWith<DashActivationException> {
+            rig.activation().activatePart2(program, userConfiguredExpirationReminderHours = 4, userConfiguredExpirationAlarmHours = 7)
+        }
+
+        assertEquals(ActivationProgress.PHASE_1_COMPLETED, rig.state.activationProgress)
+        assertEquals(0, rig.model.cannulaInsertions)
+    }
 }

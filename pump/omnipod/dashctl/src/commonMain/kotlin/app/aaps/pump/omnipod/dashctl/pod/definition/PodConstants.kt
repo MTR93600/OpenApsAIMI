@@ -19,5 +19,17 @@ class PodConstants {
 
         // Reservoir units alert threshold
         const val DEFAULT_MAX_RESERVOIR_ALERT_THRESHOLD: Short = 20
+
+        /**
+         * What every Dash pod reports in its answer to SetUniqueId: the prime bolus (52 pulses, 2.6 U),
+         * the cannula bolus (10 pulses, 0.5 U), one prime pulse per second (8 eighths of a second) and
+         * the pulse rate. Trio (OmnipodKit `Pod.primeUnits`, `Pod.cannulaInsertionUnits`,
+         * `Pod.secondsPerPrimePulse`) always uses these fixed values. Used only when that answer was
+         * lost, see `DashActivation`.
+         */
+        const val DASH_FIRST_PRIME_PULSES: Short = 52
+        const val DASH_SECOND_PRIME_PULSES: Short = 10
+        const val DASH_PRIME_PULSE_RATE: Short = 8
+        const val DASH_PULSE_RATE: Short = 16
     }
 }

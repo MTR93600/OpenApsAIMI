@@ -80,6 +80,7 @@ import app.aaps.pump.omnipod.dashctl.pod.definition.DeliveryStatus
 import app.aaps.pump.omnipod.dashctl.pod.definition.PodConstants
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.response.DefaultStatusResponse
+import app.aaps.pump.omnipod.dashctl.pod.response.NakResponse
 import app.aaps.pump.omnipod.dashctl.pod.response.Response
 import app.aaps.pump.omnipod.dashctl.session.DashActiveCommand
 import app.aaps.pump.omnipod.dashctl.session.DashAlertSettings
@@ -90,6 +91,7 @@ import app.aaps.pump.omnipod.dashctl.session.DashExpirationAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashLastBolus
 import app.aaps.pump.omnipod.dashctl.session.DashLowReservoirAlertSettings
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
+import app.aaps.pump.omnipod.dashctl.session.DashPodStateNotSavedException
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateUnknownException
 import app.aaps.pump.omnipod.dashctl.session.DashResolvedCommand
 import app.aaps.pump.omnipod.dashctl.util.mapProfileToBasalProgram
@@ -636,7 +638,7 @@ class IosDashPump(
             // stored only after the bytes went. A stop or a send error in between would leave no mark,
             // and the next try would give that bolus a second time.
             val sent = sendCommand(build, beforeSend = { beforeSend() })
-            return DashExchange(sent.reachedRadio, sent.error)
+            return DashExchange(sent.reachedRadio, sent.error, nak = sent.response is NakResponse)
         }
 
         /** The link may have dropped during the prime or the cannula wait; the activation holds the command lock. */
@@ -2360,7 +2362,14 @@ class IosDashPump(
             aapsLogger.error(LTag.PUMPBTCOMM, "Command not sent: another command is still open (${stateManager.activeCommand})")
             return SentCommand(reachedRadio = false, error = "another command is still open, nothing sent")
         }
-        beforeSend(command)
+        try {
+            beforeSend(command)
+        } catch (e: DashPodStateNotSavedException) {
+            // The open command or its "sent" mark is not on disk: no byte may go. The command is open
+            // and not sent in memory; the caller closes it as not sent.
+            aapsLogger.error(LTag.PUMPBTCOMM, "Command not sent: ${e.message}")
+            return SentCommand(reachedRadio = false, error = "the pod state could not be saved on the phone, nothing sent")
+        }
         val sendResult = try {
             s.sendCommand(command)
         } catch (e: Exception) {

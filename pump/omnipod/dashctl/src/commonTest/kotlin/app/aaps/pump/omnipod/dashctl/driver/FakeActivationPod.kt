@@ -4,6 +4,7 @@ import app.aaps.pump.omnipod.dashctl.comm.session.ResponseUtil
 import app.aaps.pump.omnipod.dashctl.parity.parityHex
 import app.aaps.pump.omnipod.dashctl.pod.command.base.Command
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
+import app.aaps.pump.omnipod.dashctl.pod.response.NakResponse
 import app.aaps.pump.omnipod.dashctl.session.DashPodState
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateCodec
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
@@ -70,6 +71,9 @@ class FakeActivationPod(
      */
     var nakStatus = false
 
+    /** The pod answers the next command that matches with a NAK, without taking it. Cleared when used. */
+    var nakOf: ((ByteArray) -> Boolean)? = null
+
     override fun send(build: (uniqueId: Int, sequence: Short) -> Command, beforeSend: () -> Unit): DashExchange {
         val uniqueId = state.uniqueId ?: return DashExchange(false, "no unique id")
         val command = build(uniqueId.toInt(), state.messageSequenceNumber.toShort())
@@ -83,7 +87,9 @@ class FakeActivationPod(
             }
         }
         sent += bytes
-        val answer = if (nakStatus && bytes[6] == STATUS) parityHex(NAK_RESPONSE) else model.answer(bytes)
+        val nakThis = nakOf?.let { it(bytes) } == true
+        if (nakThis) nakOf = null
+        val answer = if ((nakStatus && bytes[6] == STATUS) || nakThis) parityHex(NAK_RESPONSE) else model.answer(bytes)
         state.increaseMessageSequenceNumber()
         loseAnswerOf?.let {
             if (it(bytes)) {
@@ -92,8 +98,9 @@ class FakeActivationPod(
             }
         }
         state.increaseMessageSequenceNumber()
-        state.updateFromResponse(ResponseUtil.parseResponse(answer), nowMs())
-        return DashExchange(true, null)
+        val response = ResponseUtil.parseResponse(answer)
+        state.updateFromResponse(response, nowMs())
+        return DashExchange(true, null, nak = response is NakResponse)
     }
 
     /** The command types the pod got. */

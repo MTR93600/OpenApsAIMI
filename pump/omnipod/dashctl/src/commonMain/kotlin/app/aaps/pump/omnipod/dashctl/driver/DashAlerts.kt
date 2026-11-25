@@ -39,6 +39,10 @@ object DashAlerts {
         )
     )
 
+    /** The timer of an alert: the whole minutes of [delayMs], or 0 for a negative delay (the alert is then off). */
+    private fun timerTrigger(delayMs: Long): AlertTrigger.TimerTrigger =
+        AlertTrigger.TimerTrigger(if (delayMs < 0) 0 else DashActivation.wholeMinutes(delayMs).toShort())
+
     /**
      * Android `OmnipodDashPumpPlugin.updateAlertConfiguration`: the low reservoir alert, the user
      * expiration reminder, the expiration alarm and the imminent expiration alarm, in that order and
@@ -46,9 +50,11 @@ object DashAlerts {
      *
      * @param podLifeLeftMs from now to the expiry of the pod (Android `Duration.between(now, expiry)`).
      *
-     * Ported as Android (reported): a delay that comes out negative is logged and the alert is still
-     * sent with it. Android builds a failure result there but drops it (no `return`), so the negative
-     * number of minutes goes to the pod. Minutes are whole minutes as Java `Duration.toMinutes`.
+     * Deliberate difference from Android: a timer alert whose delay comes out negative (its time is
+     * already past, late in the life of the pod) is sent turned off, with a delay of 0, as Trio does.
+     * Android logs it and still sends the negative minutes. The pod reads them as an unsigned 16-bit
+     * number, so -60 min becomes about 45 days: the alert would never sound, or the pod could refuse
+     * the command. Minutes are whole minutes as Java `Duration.toMinutes`.
      */
     fun updateAlertConfigurations(settings: DashAlertSettings, podLifeLeftMs: Long, logger: AAPSLogger): List<AlertConfiguration> {
         val expiration = settings.expiration
@@ -78,28 +84,28 @@ object DashAlerts {
             ),
             AlertConfiguration(
                 AlertType.USER_SET_EXPIRATION,
-                enabled = expiration.reminderEnabled,
+                enabled = expiration.reminderEnabled && expiryReminderDelayMs >= 0,
                 durationInMinutes = 0,
                 autoOff = false,
-                AlertTrigger.TimerTrigger(DashActivation.wholeMinutes(expiryReminderDelayMs).toShort()),
+                timerTrigger(expiryReminderDelayMs),
                 BeepType.FOUR_TIMES_BIP_BEEP,
                 BeepRepetitionType.EVERY_MINUTE_AND_EVERY_15_MIN
             ),
             AlertConfiguration(
                 AlertType.EXPIRATION,
-                enabled = expiration.alarmEnabled,
+                enabled = expiration.alarmEnabled && expiryAlarmDelayMs >= 0,
                 durationInMinutes = ((expiration.alarmHours - 1) * MINUTES_PER_HOUR).toShort(),
                 autoOff = false,
-                AlertTrigger.TimerTrigger(DashActivation.wholeMinutes(expiryAlarmDelayMs).toShort()),
+                timerTrigger(expiryAlarmDelayMs),
                 BeepType.FOUR_TIMES_BIP_BEEP,
                 BeepRepetitionType.XXX3
             ),
             AlertConfiguration(
                 AlertType.EXPIRATION_IMMINENT,
-                enabled = expiration.alarmEnabled,
+                enabled = expiration.alarmEnabled && expiryImminentDelayMs >= 0,
                 durationInMinutes = 0,
                 autoOff = false,
-                AlertTrigger.TimerTrigger(DashActivation.wholeMinutes(expiryImminentDelayMs).toShort()),
+                timerTrigger(expiryImminentDelayMs),
                 BeepType.FOUR_TIMES_BIP_BEEP,
                 BeepRepetitionType.XXX3
             )

@@ -84,6 +84,8 @@ class DashKeychainStateStore(
         keychainStore(encode(state))
     }
 
+    override fun saveChecked(state: DashPodState): Boolean = keychainStore(encode(state))
+
     override fun clear() {
         keychainDelete()
     }
@@ -105,17 +107,18 @@ class DashKeychainStateStore(
         status to (CFBridgingRelease(result.value) as? NSData)?.toByteArray()
     }
 
-    private fun keychainStore(bytes: ByteArray) {
+    /** Writes [bytes] to the Keychain item. False when the Keychain refused it (logged). */
+    private fun keychainStore(bytes: ByteArray): Boolean {
         val data = bytes.toNSData()
         val update = mapOf<Any?, Any?>(
             kSecValueData to data,
             kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         )
         val updated = SecItemUpdate(itemQuery().toCFDictionary(), update.toCFDictionary())
-        if (updated == errSecSuccess) return
+        if (updated == errSecSuccess) return true
         if (updated != errSecItemNotFound) {
             aapsLogger?.error(LTag.PUMP, "Dash: the pod state was not saved in the Keychain (update status $updated)")
-            return
+            return false
         }
         val attributes = itemQuery() + mapOf<Any?, Any?>(
             kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
@@ -124,7 +127,9 @@ class DashKeychainStateStore(
         val added = SecItemAdd(attributes.toCFDictionary(), null)
         if (added != errSecSuccess) {
             aapsLogger?.error(LTag.PUMP, "Dash: the pod state was not saved in the Keychain (add status $added)")
+            return false
         }
+        return true
     }
 
     private fun keychainDelete(): Boolean =

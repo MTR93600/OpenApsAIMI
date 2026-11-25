@@ -7,7 +7,9 @@ import app.aaps.pump.omnipod.dashctl.pod.command.insulin.program.BolusShortInsul
 import app.aaps.pump.omnipod.dashctl.pod.definition.ProgramReminder
 import app.aaps.pump.omnipod.dashctl.pod.util.MessageUtil
 import app.aaps.pump.omnipod.dashctl.pod.util.PodByteBuffer
+import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 // NOT SUPPORTED: extended bolus
 class ProgramBolusCommand private constructor(
@@ -68,8 +70,11 @@ class ProgramBolusCommand private constructor(
 
         fun setNumberOfUnits(numberOfUnits: Double): Builder {
             require(numberOfUnits > 0.0) { "Number of units should be greater than zero" }
-            require((numberOfUnits * 1000).toInt() % 50 == 0) { "Number of units must be dividable by 0.05" }
-            this.numberOfUnits = (numberOfUnits * 100).toInt() / 100.0
+            // Round, not cut: 16.15 * 1000 is 16149.99..., which a cut made 16149, so a bolus of 16.15 U was refused.
+            // Same fix as the Android copy in pump/omnipod/common (commit dec98d6397), with a closer check.
+            // Checked on the step itself, so an amount just off it (0.0749 U) is still refused.
+            require(abs(numberOfUnits * 20 - (numberOfUnits * 20).roundToInt()) < 1e-6) { "Number of units must be dividable by 0.05" }
+            this.numberOfUnits = (numberOfUnits * 100).roundToInt() / 100.0
             return this
         }
 

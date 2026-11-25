@@ -27,6 +27,17 @@ interface DashPodStateStore {
     /** Persists [state], replacing any previously stored state. */
     fun save(state: DashPodState)
 
+    /**
+     * [save], and whether the state is really stored. A store that can fail to write (the iOS
+     * Keychain) overrides it; the default is for a store that cannot fail, as the memory stores of the
+     * tests. [DashPodStateManager] writes with this, so it can refuse to send insulin while what it
+     * knows about the pod is not on disk.
+     */
+    fun saveChecked(state: DashPodState): Boolean {
+        save(state)
+        return true
+    }
+
     /** Deletes any stored state. */
     fun clear()
 }
@@ -54,3 +65,11 @@ sealed interface DashPodStateRead {
  */
 class DashPodStateUnknownException(reason: String) :
     IllegalStateException("The stored pod state cannot be read ($reason). Nothing is written and nothing is sent to the pod.")
+
+/**
+ * A delivery command was about to be sent while the last write of the pod state failed, and a new
+ * try failed too. Nothing is sent: if the app were killed now, the open command, the sequence number
+ * or the session counter would come back older than what the pod has seen.
+ */
+class DashPodStateNotSavedException :
+    IllegalStateException("The pod state could not be saved on the phone. Nothing is sent to the pod.")

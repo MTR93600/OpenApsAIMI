@@ -49,8 +49,8 @@ import kotlinx.datetime.offsetAt
  * LTK between pairing and the next store would leave a paired pod the PDM can no
  * longer talk to.
  *
- * Not thread-safe: callers must serialize access (the BLE manager drives all
- * calls from its own sequencing).
+ * Thread-safe for writes: every change of the state holds one lock (see [lock]). A read sees the
+ * last whole state, never a half-written one.
  */
 class DashPodStateManager(
     private val store: DashPodStateStore,
@@ -61,14 +61,25 @@ class DashPodStateManager(
     private val deviceTimeZone: () -> TimeZone = { TimeZone.currentSystemDefault() },
 ) {
 
-    /** Serializes [reloadIfUnknown]: the status checker and the queue may both try at once. */
-    private val readLock = AapsLock()
+    /**
+     * Serializes every change of [state] and [reloadIfUnknown]. The queue thread is not the only
+     * writer: the "Silence" button of a pod alert and the status checker of the plugin change the
+     * state too. Without the lock, a change made from an old copy of the state could undo another one
+     * made at the same time (an open command, the sequence number), in memory and in the Keychain.
+     * Reentrant, so a write may call another one.
+     */
+    private val lock = AapsLock()
 
     /** Why the stored state could not be read, or null when it is known. See [isStateKnown]. */
     @Volatile
     private var unreadableReason: String? = null
 
+    @Volatile
     private var state: DashPodState = readStored() ?: DashPodState()
+
+    /** True when the last write of [state] did not reach the store. See [DashPodStateNotSavedException]. */
+    @Volatile
+    private var lastSaveFailed = false
 
     /**
      * False when the store could not read what it holds ([DashPodStateRead.Unreadable]): on the
@@ -97,7 +108,7 @@ class DashPodStateManager(
      */
     fun reloadIfUnknown(): Boolean {
         if (unreadableReason == null) return true
-        return readLock.withLock {
+        return lock.withLock {
             if (unreadableReason == null) return@withLock true
             val stored = readStored()
             if (unreadableReason == null) state = stored ?: DashPodState()
@@ -317,8 +328,10 @@ class DashPodStateManager(
 
     /** Android setter `lastBasalCorrectionTime`: the 2 minutes cooldown starts at [timeMs]. Persists. */
     fun updateLastBasalCorrectionTime(timeMs: Long) {
-        state = state.copy(lastBasalCorrectionTime = timeMs)
-        persist()
+        lock.withLock {
+            state = state.copy(lastBasalCorrectionTime = timeMs)
+            persist()
+        }
     }
 
     /**
@@ -333,22 +346,24 @@ class DashPodStateManager(
      *   5 minutes ago (the zero temp basal of a bolus).
      */
     fun needsBasalCorrection(nowMs: Long): Boolean {
-        val correctionThreshold = -PodConstants.POD_PULSE_BOLUS_UNITS / 2
-        if (!isActivationCompleted) return false
-        if (isSuspended || isPodKaput) return false
-        state.lastBasalCorrectionTime?.let { if (nowMs - it < BASAL_CORRECTION_COOLDOWN_MS) return false }
-        val drift = basalDrift(state)
-        if (drift >= PodConstants.POD_PULSE_BOLUS_UNITS * 2 || drift <= -PodConstants.POD_PULSE_BOLUS_UNITS * 2) {
-            state = state.copy(basalExpected = basalDelivered(state))
-            persist()
-            return false
+        return lock.withLock {
+            val correctionThreshold = -PodConstants.POD_PULSE_BOLUS_UNITS / 2
+            if (!isActivationCompleted) return false
+            if (isSuspended || isPodKaput) return false
+            state.lastBasalCorrectionTime?.let { if (nowMs - it < BASAL_CORRECTION_COOLDOWN_MS) return false }
+            val drift = basalDrift(state)
+            if (drift >= PodConstants.POD_PULSE_BOLUS_UNITS * 2 || drift <= -PodConstants.POD_PULSE_BOLUS_UNITS * 2) {
+                state = state.copy(basalExpected = basalDelivered(state))
+                persist()
+                return false
+            }
+            if (drift > correctionThreshold) return false
+            if (state.tempBasal?.rate == 0.0) {
+                val timeSinceLastBolus = state.lastBolus?.startTimeMs?.let { nowMs - it }
+                if (timeSinceLastBolus == null || timeSinceLastBolus >= RECENT_BOLUS_MS) return false
+            }
+            return true
         }
-        if (drift > correctionThreshold) return false
-        if (state.tempBasal?.rate == 0.0) {
-            val timeSinceLastBolus = state.lastBolus?.startTimeMs?.let { nowMs - it }
-            if (timeSinceLastBolus == null || timeSinceLastBolus >= RECENT_BOLUS_MS) return false
-        }
-        return true
     }
 
     // -- Pod time zone (ported from OmnipodDashPodStateManagerImpl) -------------------------------
@@ -374,8 +389,10 @@ class DashPodStateManager(
      * now, its offset now, and now. Persists.
      */
     fun updateTimeZone(nowMs: Long) {
-        state = state.copy(timeZoneOffsetMs = deviceOffsetMs(nowMs), timeZoneId = deviceTimeZone().id, timeZoneUpdatedMs = nowMs)
-        persist()
+        lock.withLock {
+            state = state.copy(timeZoneOffsetMs = deviceOffsetMs(nowMs), timeZoneId = deviceTimeZone().id, timeZoneUpdatedMs = nowMs)
+            persist()
+        }
     }
 
     /**
@@ -457,9 +474,11 @@ class DashPodStateManager(
     }
 
     private fun clearUntrackedBolusMark() {
-        if (state.untrackedBolusToRecordAt == null) return
-        state = state.copy(untrackedBolusToRecordAt = null)
-        persist()
+        lock.withLock {
+            if (state.untrackedBolusToRecordAt == null) return
+            state = state.copy(untrackedBolusToRecordAt = null)
+            persist()
+        }
     }
 
     /** Android `successfulConnectionAttemptsAfterRetries`. */
@@ -472,14 +491,18 @@ class DashPodStateManager(
 
     /** Android `incrementSuccessfulConnectionAttemptsAfterRetries`. Persists (Android stores it with the next write). */
     fun incrementSuccessfulConnectionAttemptsAfterRetries() {
-        state = state.copy(successfulConnectionAttemptsAfterRetries = state.successfulConnectionAttemptsAfterRetries + 1)
-        persist()
+        lock.withLock {
+            state = state.copy(successfulConnectionAttemptsAfterRetries = state.successfulConnectionAttemptsAfterRetries + 1)
+            persist()
+        }
     }
 
     /** Android `incrementFailedConnectionsAfterRetries`. Persists. */
     fun incrementFailedConnectionsAfterRetries() {
-        state = state.copy(failedConnectionsAfterRetries = state.failedConnectionsAfterRetries + 1)
-        persist()
+        lock.withLock {
+            state = state.copy(failedConnectionsAfterRetries = state.failedConnectionsAfterRetries + 1)
+            persist()
+        }
     }
 
     /** Android `connectionSuccessRatio`: worked / (worked + failed), 0 before the first try. */
@@ -499,10 +522,12 @@ class DashPodStateManager(
      * pod did not confirm it), and once when an answer was read.
      */
     fun increaseMessageSequenceNumber() {
-        state = state.copy(
-            messageSequenceNumber = (state.messageSequenceNumber + 1) and DashPodState.MESSAGE_SEQ_MAX
-        )
-        persist()
+        lock.withLock {
+            state = state.copy(
+                messageSequenceNumber = (state.messageSequenceNumber + 1) and DashPodState.MESSAGE_SEQ_MAX
+            )
+            persist()
+        }
     }
 
     /**
@@ -511,8 +536,10 @@ class DashPodStateManager(
      * once the session is established.
      */
     fun increaseEapAkaSequenceNumber(): ByteArray {
-        state = state.copy(eapAkaSequenceNumber = state.eapAkaSequenceNumber + 1)
-        return EapSqn(state.eapAkaSequenceNumber).value
+        return lock.withLock {
+            state = state.copy(eapAkaSequenceNumber = state.eapAkaSequenceNumber + 1)
+            return EapSqn(state.eapAkaSequenceNumber).value
+        }
     }
 
     /**
@@ -521,13 +548,17 @@ class DashPodStateManager(
      * one above it.
      */
     fun updateEapAkaSequenceNumber(sequenceNumber: Long) {
-        state = state.copy(eapAkaSequenceNumber = sequenceNumber)
-        persist()
+        lock.withLock {
+            state = state.copy(eapAkaSequenceNumber = sequenceNumber)
+            persist()
+        }
     }
 
     /** Persists the (previously increased) EAP-AKA sequence number. */
     fun commitEapAkaSequenceNumber() {
-        persist()
+        lock.withLock {
+            persist()
+        }
     }
 
     /**
@@ -541,11 +572,13 @@ class DashPodStateManager(
      * way then never switches to another pod in range; the user discards the pod first ([reset]).
      */
     fun updateBluetoothAddress(address: String) {
-        val stored = state.bluetoothAddress
-        if (stored == address) return
-        check(stored == null) { "Trying to set Bluetooth Address to $address, but it is already set to $stored" }
-        state = state.copy(bluetoothAddress = address)
-        persist()
+        lock.withLock {
+            val stored = state.bluetoothAddress
+            if (stored == address) return
+            check(stored == null) { "Trying to set Bluetooth Address to $address, but it is already set to $stored" }
+            state = state.copy(bluetoothAddress = address)
+            persist()
+        }
     }
 
     /**
@@ -553,15 +586,17 @@ class DashPodStateManager(
      * unique id and resets the EAP-AKA sequence number to 1. Persists immediately.
      */
     fun updateFromPairing(uniqueId: Long, ltk: ByteArray) {
-        require(ltk.size == DashPodState.LTK_SIZE) {
-            "LTK has to be ${DashPodState.LTK_SIZE} bytes long"
+        lock.withLock {
+            require(ltk.size == DashPodState.LTK_SIZE) {
+                "LTK has to be ${DashPodState.LTK_SIZE} bytes long"
+            }
+            state = state.copy(
+                uniqueId = uniqueId,
+                ltk = ltk.copyOf(),
+                eapAkaSequenceNumber = 1L
+            )
+            persist()
         }
-        state = state.copy(
-            uniqueId = uniqueId,
-            ltk = ltk.copyOf(),
-            eapAkaSequenceNumber = 1L
-        )
-        persist()
     }
 
     /**
@@ -572,15 +607,37 @@ class DashPodStateManager(
      * @param nowMs the wall clock now (Android `System.currentTimeMillis()`).
      */
     fun updateFromVersionResponse(response: VersionResponse, nowMs: Long) {
-        state = state.copy(
-            bleVersion = SoftwareVersion(response.bleVersionMajor, response.bleVersionMinor, response.bleVersionInterim),
-            firmwareVersion = SoftwareVersion(response.firmwareVersionMajor, response.firmwareVersionMinor, response.firmwareVersionInterim),
-            reportedPodStatus = response.podStatus,
-            lotNumber = response.lotNumber,
-            podSequenceNumber = response.podSequenceNumber,
-            lastUpdatedSystemMs = nowMs,
-        )
-        persist()
+        lock.withLock {
+            state = state.copy(
+                bleVersion = SoftwareVersion(response.bleVersionMajor, response.bleVersionMinor, response.bleVersionInterim),
+                firmwareVersion = SoftwareVersion(response.firmwareVersionMajor, response.firmwareVersionMinor, response.firmwareVersionInterim),
+                reportedPodStatus = response.podStatus,
+                lotNumber = response.lotNumber,
+                podSequenceNumber = response.podSequenceNumber,
+                lastUpdatedSystemMs = nowMs,
+            )
+            persist()
+        }
+    }
+
+    /**
+     * The answer to SetUniqueId was lost, and the pod shows that it took the command (UID_SET or later).
+     * That answer is the only one that carries the prime values and the pod life, so without them the
+     * prime could never be sent (and the expiry alarms not set) and the pod would be lost. Every Dash pod
+     * reports the same values (pod life 80 h, [PodConstants.MAX_POD_LIFETIME]), so the fixed ones are
+     * used, as Trio always does. Values the pod did report are kept.
+     */
+    fun useDefaultPrimeValues() {
+        lock.withLock {
+            state = state.copy(
+                pulseRate = state.pulseRate ?: PodConstants.DASH_PULSE_RATE,
+                primePulseRate = state.primePulseRate ?: PodConstants.DASH_PRIME_PULSE_RATE,
+                firstPrimeBolusVolume = state.firstPrimeBolusVolume ?: PodConstants.DASH_FIRST_PRIME_PULSES,
+                secondPrimeBolusVolume = state.secondPrimeBolusVolume ?: PodConstants.DASH_SECOND_PRIME_PULSES,
+                podLifeInHours = state.podLifeInHours ?: PodConstants.MAX_POD_LIFETIME.inWholeHours.toShort(),
+            )
+            persist()
+        }
     }
 
     /**
@@ -592,21 +649,23 @@ class DashPodStateManager(
      * @param nowMs the wall clock now (Android `System.currentTimeMillis()`).
      */
     fun updateFromSetUniqueIdResponse(response: SetUniqueIdResponse, nowMs: Long) {
-        state = state.copy(
-            pulseRate = response.pumpRate,
-            primePulseRate = response.primePumpRate,
-            firstPrimeBolusVolume = response.numberOfEngagingClutchDrivePulses,
-            secondPrimeBolusVolume = response.numberOfPrimePulses,
-            podLifeInHours = response.podExpirationTimeInHours,
-            bleVersion = SoftwareVersion(response.bleVersionMajor, response.bleVersionMinor, response.bleVersionInterim),
-            firmwareVersion = SoftwareVersion(response.firmwareVersionMajor, response.firmwareVersionMinor, response.firmwareVersionInterim),
-            reportedPodStatus = response.podStatus,
-            lotNumber = response.lotNumber,
-            podSequenceNumber = response.podSequenceNumber,
-            uniqueId = response.uniqueIdReceivedInCommand,
-            lastUpdatedSystemMs = nowMs,
-        )
-        persist()
+        lock.withLock {
+            state = state.copy(
+                pulseRate = response.pumpRate,
+                primePulseRate = response.primePumpRate,
+                firstPrimeBolusVolume = response.numberOfEngagingClutchDrivePulses,
+                secondPrimeBolusVolume = response.numberOfPrimePulses,
+                podLifeInHours = response.podExpirationTimeInHours,
+                bleVersion = SoftwareVersion(response.bleVersionMajor, response.bleVersionMinor, response.bleVersionInterim),
+                firmwareVersion = SoftwareVersion(response.firmwareVersionMajor, response.firmwareVersionMinor, response.firmwareVersionInterim),
+                reportedPodStatus = response.podStatus,
+                lotNumber = response.lotNumber,
+                podSequenceNumber = response.podSequenceNumber,
+                uniqueId = response.uniqueIdReceivedInCommand,
+                lastUpdatedSystemMs = nowMs,
+            )
+            persist()
+        }
     }
 
     /**
@@ -634,20 +693,24 @@ class DashPodStateManager(
      * change it. An alarm status does not set the activation time, as Android.
      */
     fun updateFromAlarmStatus(response: AlarmStatusResponse, nowMs: Long) {
-        val updated = statusApplied(DashPodStatus.of(response, nowMs))
-        state = if (updated.alarmType == null) {
-            updated.copy(alarmType = response.alarmType, pdmRef = response.pdmRef, faultTimeMs = faultTimeOf(response, nowMs))
-        } else {
-            updated
+        lock.withLock {
+            val updated = statusApplied(DashPodStatus.of(response, nowMs))
+            state = if (updated.alarmType == null) {
+                updated.copy(alarmType = response.alarmType, pdmRef = response.pdmRef, faultTimeMs = faultTimeOf(response, nowMs))
+            } else {
+                updated
+            }
+            persist()
         }
-        persist()
     }
 
     /** Android setter `alarmSynced`: the plugin showed and recorded the fault. Persists. */
     fun updateAlarmSynced(synced: Boolean) {
-        if (state.alarmSynced == synced) return
-        state = state.copy(alarmSynced = synced)
-        persist()
+        lock.withLock {
+            if (state.alarmSynced == synced) return
+            state = state.copy(alarmSynced = synced)
+            persist()
+        }
     }
 
     /**
@@ -662,12 +725,14 @@ class DashPodStateManager(
      * status read finds the pod kaput and the bolus not ended.
      */
     fun completeBolusOnPodKaput(): DashLastBolus? {
-        if (!isPodKaput) return null
-        val bolus = state.lastBolus?.takeIf { !it.deliveryComplete } ?: return null
-        val ended = bolus.copy(deliveryComplete = true)
-        state = state.copy(lastBolus = ended)
-        persist()
-        return ended
+        return lock.withLock {
+            if (!isPodKaput) return null
+            val bolus = state.lastBolus?.takeIf { !it.deliveryComplete } ?: return null
+            val ended = bolus.copy(deliveryComplete = true)
+            state = state.copy(lastBolus = ended)
+            persist()
+            return ended
+        }
     }
 
     /**
@@ -675,9 +740,11 @@ class DashPodStateManager(
      * pod runs its basal program, so the stored temp basal is dropped. Persists.
      */
     fun clearTempBasal() {
-        if (state.tempBasal == null) return
-        state = state.copy(tempBasal = null)
-        persist()
+        lock.withLock {
+            if (state.tempBasal == null) return
+            state = state.copy(tempBasal = null)
+            persist()
+        }
     }
 
     // -- Alerts (ported from OmnipodDashPodStateManagerImpl) ----------------------
@@ -689,44 +756,56 @@ class DashPodStateManager(
      * [DashPodState.acknowledgedAlerts]).
      */
     fun addAcknowledgedAlert(alert: AlertType) {
-        require(alert != AlertType.UNKNOWN) { "an unknown alert has no slot to silence" }
-        if (alert in state.acknowledgedAlerts) return
-        state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts + alert)
-        persist()
+        lock.withLock {
+            require(alert != AlertType.UNKNOWN) { "an unknown alert has no slot to silence" }
+            if (alert in state.acknowledgedAlerts) return
+            state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts + alert)
+            persist()
+        }
     }
 
     /** [alert] leaves [acknowledgedAlerts]. Persists. */
     fun forgetAcknowledgedAlert(alert: AlertType) {
-        if (alert !in state.acknowledgedAlerts) return
-        state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts - alert)
-        persist()
+        lock.withLock {
+            if (alert !in state.acknowledgedAlerts) return
+            state = state.copy(acknowledgedAlerts = state.acknowledgedAlerts - alert)
+            persist()
+        }
     }
 
     /** Every alert not in [stillActive] leaves [acknowledgedAlerts]: the pod no longer reports it. Persists. */
     fun forgetAcknowledgedAlertsExcept(stillActive: Set<AlertType>) {
-        val kept = state.acknowledgedAlerts intersect stillActive
-        if (kept == state.acknowledgedAlerts) return
-        state = state.copy(acknowledgedAlerts = kept)
-        persist()
+        lock.withLock {
+            val kept = state.acknowledgedAlerts intersect stillActive
+            if (kept == state.acknowledgedAlerts) return
+            state = state.copy(acknowledgedAlerts = kept)
+            persist()
+        }
     }
 
     /** Android setter `suspendAlertsEnabled`. Persists. */
     fun updateSuspendAlertsEnabled(enabled: Boolean) {
-        if (state.suspendAlertsEnabled == enabled) return
-        state = state.copy(suspendAlertsEnabled = enabled)
-        persist()
+        lock.withLock {
+            if (state.suspendAlertsEnabled == enabled) return
+            state = state.copy(suspendAlertsEnabled = enabled)
+            persist()
+        }
     }
 
     /** Android `updateExpirationAlertSettings`. Persists. */
     fun updateExpirationAlertSettings(settings: DashExpirationAlertSettings) {
-        state = state.copy(expirationAlertSettings = settings)
-        persist()
+        lock.withLock {
+            state = state.copy(expirationAlertSettings = settings)
+            persist()
+        }
     }
 
     /** Android `updateLowReservoirAlertSettings`. Persists. */
     fun updateLowReservoirAlertSettings(settings: DashLowReservoirAlertSettings) {
-        state = state.copy(lowReservoirAlertSettings = settings)
-        persist()
+        lock.withLock {
+            state = state.copy(lowReservoirAlertSettings = settings)
+            persist()
+        }
     }
 
     /**
@@ -744,12 +823,14 @@ class DashPodStateManager(
      * activation sent, see `DashActivation`). Persists.
      */
     fun updateActivationProgress(progress: ActivationProgress, basalProgram: BasalProgram? = null) {
-        state = state.copy(
-            activationProgress = progress,
-            activationStepInFlight = null,
-            basalProgram = basalProgram?.let { BasalProgram(it.segments) } ?: state.basalProgram,
-        )
-        persist()
+        lock.withLock {
+            state = state.copy(
+                activationProgress = progress,
+                activationStepInFlight = null,
+                basalProgram = basalProgram?.let { BasalProgram(it.segments) } ?: state.basalProgram,
+            )
+            persist()
+        }
     }
 
     /**
@@ -758,16 +839,23 @@ class DashPodStateManager(
      * status before it sends this bolus again. See [DashPodState.activationStepInFlight].
      */
     fun markActivationStepSent(step: ActivationProgress) {
-        require(step in DashPodState.STEPS_WITH_A_BOLUS) { "Only the prime and the cannula insertion are marked" }
-        state = state.copy(activationStepInFlight = step)
-        persist()
+        lock.withLock {
+            require(step in DashPodState.STEPS_WITH_A_BOLUS) { "Only the prime and the cannula insertion are marked" }
+            val previous = state
+            state = state.copy(activationStepInFlight = step)
+            // On disk before the bytes go, or the bolus is not sent: without the mark, an app killed
+            // after the write would send the prime or the cannula bolus again.
+            persistOrRefuse(previous)
+        }
     }
 
     /** The write failed before any byte left: the pod cannot have the bolus of the step in flight. */
     fun clearActivationStepInFlight() {
-        if (state.activationStepInFlight == null) return
-        state = state.copy(activationStepInFlight = null)
-        persist()
+        lock.withLock {
+            if (state.activationStepInFlight == null) return
+            state = state.copy(activationStepInFlight = null)
+            persist()
+        }
     }
 
     /**
@@ -812,6 +900,7 @@ class DashPodStateManager(
      *   so the caller cannot change the stored one (`BasalProgram.addSegment`).
      * @throws DashCommandNotConfirmedException while another command is open: the pod may have taken
      *   it, and sending a new one (a retried bolus) could deliver twice. Ask for a status first.
+     * @throws DashPodStateNotSavedException when the state cannot be saved: nothing may be sent then.
      */
     fun createActiveCommand(
         kind: DashCommandKind,
@@ -823,41 +912,51 @@ class DashPodStateManager(
         basalProgram: BasalProgram? = null,
         basalCorrection: Boolean = false,
     ): DashActiveCommand {
-        state.activeCommand?.let {
-            throw DashCommandNotConfirmedException("Trying to send a command and the last command was not confirmed: $it")
+        return lock.withLock {
+            state.activeCommand?.let {
+                throw DashCommandNotConfirmedException("Trying to send a command and the last command was not confirmed: $it")
+            }
+            requireSaved()
+            val command = DashActiveCommand(
+                sequence = state.messageSequenceNumber,
+                kind = kind,
+                historyId = historyId,
+                statusCountAtCreation = state.statusResponseCount,
+                requestedBolusUnits = requestedBolusUnits,
+                tempBasalRate = tempBasalRate,
+                tempBasalMinutes = tempBasalMinutes,
+                createdAtMs = createdAtMs,
+                basalProgram = basalProgram?.let { BasalProgram(it.segments) },
+                basalCorrection = basalCorrection,
+            )
+            val previous = state
+            state = state.copy(activeCommand = command)
+            persistOrRefuse(previous)
+            return command
         }
-        val command = DashActiveCommand(
-            sequence = state.messageSequenceNumber,
-            kind = kind,
-            historyId = historyId,
-            statusCountAtCreation = state.statusResponseCount,
-            requestedBolusUnits = requestedBolusUnits,
-            tempBasalRate = tempBasalRate,
-            tempBasalMinutes = tempBasalMinutes,
-            createdAtMs = createdAtMs,
-            basalProgram = basalProgram?.let { BasalProgram(it.segments) },
-            basalCorrection = basalCorrection,
-        )
-        state = state.copy(activeCommand = command)
-        persist()
-        return command
     }
 
     /**
      * The bytes of the active command are about to go. Called before the write: a crash in the middle
      * then leaves "maybe sent", which needs a status, and never "not sent", which would allow a resend.
+     * Throws [DashPodStateNotSavedException] when that mark cannot be saved: the bytes must not go then.
      */
     fun markActiveCommandSent() {
-        val command = state.activeCommand ?: return
-        state = state.copy(activeCommand = command.copy(sent = true))
-        persist()
+        lock.withLock {
+            val command = state.activeCommand ?: return
+            val previous = state
+            state = state.copy(activeCommand = command.copy(sent = true))
+            persistOrRefuse(previous)
+        }
     }
 
     /** The write failed before any byte left: the pod cannot have the command. */
     fun markActiveCommandNotSent() {
-        val command = state.activeCommand ?: return
-        state = state.copy(activeCommand = command.copy(sent = false))
-        persist()
+        lock.withLock {
+            val command = state.activeCommand ?: return
+            state = state.copy(activeCommand = command.copy(sent = false))
+            persist()
+        }
     }
 
     /** What is known now about the active command. */
@@ -918,59 +1017,61 @@ class DashPodStateManager(
      *   CANCEL_BOLUS.
      */
     fun resolveActiveCommand(nowMs: Long): DashResolvedCommand {
-        val command = state.activeCommand
-        val confirmation = commandConfirmation()
-        if (!confirmation.isFinal) return DashResolvedCommand(confirmation, command)
-        var lastBolus = state.lastBolus
-        var endedBolus: DashLastBolus? = null
-        var basalProgram = state.basalProgram
-        var tempBasal = state.tempBasal
-        if (command != null && confirmation == DashCommandConfirmation.SUCCESS) {
-            when (command.kind) {
-                DashCommandKind.BOLUS      -> command.requestedBolusUnits?.let {
-                    val created = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs, basalCorrection = command.basalCorrection)
-                    val faultStatus = state.podStatus?.takeIf { isPodKaput }
-                    lastBolus = if (faultStatus != null) updateLastBolusFromStatus(created, faultStatus.bolusPulsesRemaining) else created
-                }
-
-                DashCommandKind.TEMP_BASAL -> {
-                    val rate = command.tempBasalRate
-                    val minutes = command.tempBasalMinutes
-                    if (rate != null && minutes != null) {
-                        tempBasal = DashTempBasal(startTimeMs = command.createdAtMs ?: nowMs, rate = rate, durationInMinutes = minutes)
+        return lock.withLock {
+            val command = state.activeCommand
+            val confirmation = commandConfirmation()
+            if (!confirmation.isFinal) return DashResolvedCommand(confirmation, command)
+            var lastBolus = state.lastBolus
+            var endedBolus: DashLastBolus? = null
+            var basalProgram = state.basalProgram
+            var tempBasal = state.tempBasal
+            if (command != null && confirmation == DashCommandConfirmation.SUCCESS) {
+                when (command.kind) {
+                    DashCommandKind.BOLUS      -> command.requestedBolusUnits?.let {
+                        val created = newLastBolus(it, nowMs, historyId = command.historyId, createdAtMs = command.createdAtMs, basalCorrection = command.basalCorrection)
+                        val faultStatus = state.podStatus?.takeIf { isPodKaput }
+                        lastBolus = if (faultStatus != null) updateLastBolusFromStatus(created, faultStatus.bolusPulsesRemaining) else created
                     }
-                }
 
-                DashCommandKind.STOP_TEMP_BASAL -> tempBasal = null
+                    DashCommandKind.TEMP_BASAL -> {
+                        val rate = command.tempBasalRate
+                        val minutes = command.tempBasalMinutes
+                        if (rate != null && minutes != null) {
+                            tempBasal = DashTempBasal(startTimeMs = command.createdAtMs ?: nowMs, rate = rate, durationInMinutes = minutes)
+                        }
+                    }
 
-                DashCommandKind.STOP_BOLUS -> lastBolus?.let {
-                    endedBolus = if (it.deliveryComplete) it else it.copy(deliveryComplete = true)
-                    lastBolus = endedBolus
-                }
+                    DashCommandKind.STOP_TEMP_BASAL -> tempBasal = null
 
-                DashCommandKind.SUSPEND_DELIVERY,
-                DashCommandKind.STOP_ALL,
-                DashCommandKind.DEACTIVATE -> {
-                    lastBolus?.takeIf { !it.deliveryComplete }?.let {
-                        endedBolus = it.copy(deliveryComplete = true)
+                    DashCommandKind.STOP_BOLUS -> lastBolus?.let {
+                        endedBolus = if (it.deliveryComplete) it else it.copy(deliveryComplete = true)
                         lastBolus = endedBolus
                     }
-                    tempBasal = null
+
+                    DashCommandKind.SUSPEND_DELIVERY,
+                    DashCommandKind.STOP_ALL,
+                    DashCommandKind.DEACTIVATE -> {
+                        lastBolus?.takeIf { !it.deliveryComplete }?.let {
+                            endedBolus = it.copy(deliveryComplete = true)
+                            lastBolus = endedBolus
+                        }
+                        tempBasal = null
+                    }
+
+                    DashCommandKind.BASAL_PROGRAM -> basalProgram = command.basalProgram
+
+                    DashCommandKind.RESUME_DELIVERY -> {
+                        basalProgram = command.basalProgram
+                        tempBasal = null
+                    }
+
+                    else                       -> Unit
                 }
-
-                DashCommandKind.BASAL_PROGRAM -> basalProgram = command.basalProgram
-
-                DashCommandKind.RESUME_DELIVERY -> {
-                    basalProgram = command.basalProgram
-                    tempBasal = null
-                }
-
-                else                       -> Unit
             }
+            state = state.copy(activeCommand = null, lastBolus = lastBolus, basalProgram = basalProgram, tempBasal = tempBasal)
+            persist()
+            return DashResolvedCommand(confirmation, command, endedBolus)
         }
-        state = state.copy(activeCommand = null, lastBolus = lastBolus, basalProgram = basalProgram, tempBasal = tempBasal)
-        persist()
-        return DashResolvedCommand(confirmation, command, endedBolus)
     }
 
     /**
@@ -979,8 +1080,10 @@ class DashPodStateManager(
      * `lastUpdatedSystem`.
      */
     fun updateFromStatus(status: DashPodStatus) {
-        state = statusApplied(status)
-        persist()
+        lock.withLock {
+            state = statusApplied(status)
+            persist()
+        }
     }
 
     /**
@@ -989,15 +1092,17 @@ class DashPodStateManager(
      * activation. An alarm status does not set it, as on Android.
      */
     fun updateFromDefaultStatus(status: DashPodStatus) {
-        val untracked = untrackedBolusIn(status)
-        val applied = statusApplied(status)
-        val updated = if (untracked == null) applied else applied.copy(lastBolus = untracked, untrackedBolusToRecordAt = untracked.createdAtMs)
-        state = if (updated.activationTime == null) {
-            updated.copy(activationTime = status.receivedAtMs - status.minutesSinceActivation * MS_PER_MINUTE)
-        } else {
-            updated
+        lock.withLock {
+            val untracked = untrackedBolusIn(status)
+            val applied = statusApplied(status)
+            val updated = if (untracked == null) applied else applied.copy(lastBolus = untracked, untrackedBolusToRecordAt = untracked.createdAtMs)
+            state = if (updated.activationTime == null) {
+                updated.copy(activationTime = status.receivedAtMs - status.minutesSinceActivation * MS_PER_MINUTE)
+            } else {
+                updated
+            }
+            persist()
         }
-        persist()
     }
 
     /**
@@ -1081,10 +1186,12 @@ class DashPodStateManager(
      * so all of it is left. Replaces the bolus before.
      */
     fun createLastBolus(requestedUnits: Double, nowMs: Long, historyId: Long = 0L, createdAtMs: Long? = null, basalCorrection: Boolean = false): DashLastBolus {
-        val bolus = newLastBolus(requestedUnits, nowMs, historyId, createdAtMs, basalCorrection)
-        state = state.copy(lastBolus = bolus)
-        persist()
-        return bolus
+        return lock.withLock {
+            val bolus = newLastBolus(requestedUnits, nowMs, historyId, createdAtMs, basalCorrection)
+            state = state.copy(lastBolus = bolus)
+            persist()
+            return bolus
+        }
     }
 
     /**
@@ -1093,18 +1200,22 @@ class DashPodStateManager(
      * already ended is returned as it is.
      */
     fun markLastBolusComplete(): DashLastBolus? {
-        val bolus = state.lastBolus ?: return null
-        if (bolus.deliveryComplete) return bolus
-        val ended = bolus.copy(deliveryComplete = true)
-        state = state.copy(lastBolus = ended)
-        persist()
-        return ended
+        return lock.withLock {
+            val bolus = state.lastBolus ?: return null
+            if (bolus.deliveryComplete) return bolus
+            val ended = bolus.copy(deliveryComplete = true)
+            state = state.copy(lastBolus = ended)
+            persist()
+            return ended
+        }
     }
 
     /** Tests only: puts the state of a later point (an activated pod) in place without running it. */
     internal fun overwriteForTest(transform: (DashPodState) -> DashPodState) {
-        state = transform(state)
-        persist()
+        lock.withLock {
+            state = transform(state)
+            persist()
+        }
     }
 
     /**
@@ -1114,14 +1225,46 @@ class DashPodStateManager(
      * next pod starts from a fresh state.
      */
     fun reset() {
-        state = DashPodState()
-        persist()
+        lock.withLock {
+            state = DashPodState()
+            persist()
+        }
     }
 
-    /** Writes the state. Refused while the stored state is not known ([isStateKnown]). */
+    /**
+     * Writes the state. Refused while the stored state is not known ([isStateKnown]).
+     *
+     * A write the store refuses is only noted ([lastSaveFailed]): the state in memory stays what the
+     * pod did (a sequence number it has seen must not go back). The next delivery command checks it
+     * ([requireSaved]), so no insulin is sent while the phone does not hold what it knows.
+     */
     private fun persist() {
         unreadableReason?.let { throw DashPodStateUnknownException(it) }
-        store.save(state)
+        lastSaveFailed = !store.saveChecked(state)
+    }
+
+    /**
+     * Writes the state and throws when it is not stored, putting [previous] back in memory. For the
+     * two writes that must be on disk before the bytes of a delivery command go: the open command and
+     * its "sent" mark. Without them on disk, an app killed after the write would forget a command the
+     * pod may have taken, and could send the bolus again.
+     */
+    private fun persistOrRefuse(previous: DashPodState) {
+        unreadableReason?.let { throw DashPodStateUnknownException(it) }
+        if (store.saveChecked(state) || store.saveChecked(state)) {
+            lastSaveFailed = false
+            return
+        }
+        state = previous
+        lastSaveFailed = !store.saveChecked(previous)
+        throw DashPodStateNotSavedException()
+    }
+
+    /** Throws [DashPodStateNotSavedException] when the last write failed and a new try fails too. */
+    private fun requireSaved() {
+        if (!lastSaveFailed) return
+        persist()
+        if (lastSaveFailed) throw DashPodStateNotSavedException()
     }
 
     private companion object {

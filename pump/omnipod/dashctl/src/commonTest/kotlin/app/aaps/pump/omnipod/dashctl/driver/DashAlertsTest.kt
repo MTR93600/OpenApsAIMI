@@ -82,19 +82,31 @@ class DashAlertsTest {
     }
 
     /**
-     * Ported as Android (reported): a negative delay is only logged, and the negative minutes are sent.
-     * Java `Duration.toMinutes` goes toward zero: -90.5 s is -1 min.
+     * Deliberate difference from Android: a timer whose time is past is sent turned off with a delay
+     * of 0, as Trio does. Android sends the negative minutes (-61 here), which the pod reads as about
+     * 45 days. An alert still ahead keeps its Android value.
      */
     @Test
-    fun `a negative delay is sent as Android sends it`() {
-        // 2 h - 90.5 s left, reminder 3 h before: -1 h - 90.5 s.
+    fun `an alert whose time is past is sent turned off`() {
+        // 2 h - 90.5 s left, reminder 3 h before: -1 h - 90.5 s. Alarm 7 h: 2 - 7 + 8 = 3 h - 90.5 s, still ahead.
         val alerts = DashAlerts.updateAlertConfigurations(settings(reminderHours = 3), 2 * HOUR - 90_500L, SilentPodLogger)
 
         val reminder = AlertConfiguration(
-            AlertType.USER_SET_EXPIRATION, true, 0, false, AlertTrigger.TimerTrigger((-61).toShort()),
+            AlertType.USER_SET_EXPIRATION, false, 0, false, AlertTrigger.TimerTrigger(0),
             BeepType.FOUR_TIMES_BIP_BEEP, BeepRepetitionType.EVERY_MINUTE_AND_EVERY_15_MIN
         )
         assertEquals(reminder.encoded.toParityHex(), alerts[1].encoded.toParityHex())
+        val alarm = AlertConfiguration(AlertType.EXPIRATION, true, 360, false, AlertTrigger.TimerTrigger(178), BeepType.FOUR_TIMES_BIP_BEEP, BeepRepetitionType.XXX3)
+        assertEquals(alarm.encoded.toParityHex(), alerts[2].encoded.toParityHex())
+    }
+
+    @Test
+    fun `only the timers that are past are turned off`() {
+        // 2 h after the nominal end. Reminder 9 h: past. Alarm 7 h: -2 - 7 + 8 = -1 h, past.
+        // Imminent: -2 - 1 + 8 = 5 h, still ahead. The low reservoir alert has no timer.
+        val alerts = DashAlerts.updateAlertConfigurations(settings(), -2 * HOUR, SilentPodLogger)
+
+        assertEquals(listOf(true, false, false, true), alerts.map { it.toString().contains("enabled=true") })
     }
 
     @Test

@@ -815,6 +815,36 @@ features on (`IosDashBleHost`), plus the peripheral state for the watchdog
     and a second report comes when the pod is back;
   - battery: the C00A scan with no duplicates should cost nothing in normal use (no match).
 
+### 4e. Parity check against Android and OmnipodKit (Trio), 2026-11-25
+
+A three-way comparison (Android, this iOS driver, OmnipodKit) found six points where the iOS driver
+was weaker than OmnipodKit. All six are fixed in `dashctl`, each with a test:
+
+- **A NAK is never a done activation step.** `DashActivation.step` stops on a NAK, so the step is
+  sent again on the next try. Before, as on Android, a refused alert command moved the activation on
+  and the pod ran without that alert. For the basal program a NAK is followed by a status read:
+  BASAL_PROGRAM_SET or later means an earlier copy was taken (its answer was lost).
+- **A lost SetUniqueId answer no longer loses the pod.** That answer is the only one with the prime
+  volumes, the prime pulse rate and the pod life. When it has none, a status decides. UID_SET means the
+  pod took it, and the fixed Dash values are used (`PodConstants.DASH_*`, 80 h), as OmnipodKit always
+  does. A later activation status means a progress write was lost: the progress is taken from the pod
+  and the activation stops, so it never primes twice. The prime step also falls back to the fixed
+  values when the step was stored without them.
+- **The prime and cannula "in flight" mark must be on disk** before their bytes go, like the open
+  command below.
+- **16.15 U bolus.** The Android fix `dec98d6397` (round, do not cut) is ported to the `dashctl` copy
+  of `ProgramBolusCommand`.
+- **One lock for the pod state.** Every change of `DashPodStateManager` holds one reentrant lock. The
+  "Silence" button and the status checker write from other threads than the queue.
+- **A failed Keychain write blocks insulin.** `DashPodStateStore.saveChecked` reports it. The open
+  command and its "sent" mark must be on disk before any byte goes, or nothing is sent; after any other
+  failed write, the next delivery command first tries to save again.
+- **Past alert timers are sent turned off** (`DashAlerts.updateAlertConfigurations`), as OmnipodKit
+  does. Android sends the negative minutes, which the pod reads as about 45 days.
+
+Still open, to be checked on a real pod first: a new EAP-AKA session on a link iOS kept through a
+relaunch (`DashHeldConnection.onRestored`), and a BLE heartbeat to wake the loop as OmnipodKit has.
+
 ### 5. Screens
 
 - [x] Activation and deactivation wizard, overview, in Compose Multiplatform (P3 above).

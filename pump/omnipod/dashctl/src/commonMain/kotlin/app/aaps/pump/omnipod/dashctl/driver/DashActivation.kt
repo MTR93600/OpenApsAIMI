@@ -32,8 +32,9 @@ class DashActivationException(message: String) : Exception(message)
  * @property reachedRadio false only when nothing could reach the pod (the write failed before any
  *   byte left). Then the pod cannot have the command.
  * @property error null when the answer of the pod was read.
+ * @property nak true when the answer was read and was a NAK: the pod refused the command.
  */
-class DashExchange(val reachedRadio: Boolean, val error: String?)
+class DashExchange(val reachedRadio: Boolean, val error: String?, val nak: Boolean = false)
 
 /**
  * What the activation needs from the pump. Called with the command lock of the pump held, on a
@@ -74,8 +75,18 @@ interface DashActivationPod {
  * RUNNING_ABOVE_MIN_VOLUME (CANNULA_INSERTED), then COMPLETED. Beeps are off, as all the
  * activation commands of Android (the alerts beep, as on Android: they are the pod alarms).
  *
- * As Android, the type of the answer is not checked: a NAK to a step is taken as an answer, and the
- * status check after the prime or the cannula bolus then stops the activation.
+ * Deliberate difference from Android (a pod that is lost or has no alerts): a NAK is never taken as
+ * a done step. Android takes any answer as done, so a NAK to an alert or to the basal program moved
+ * the activation on and the pod ran without that alert, and nothing told the user. Here a NAK to a
+ * step stops the activation and the step is sent again on the next try. Trio does the same. Only for
+ * the basal program a status can tell that an earlier copy was taken (BASAL_PROGRAM_SET or later), so
+ * a NAK there is followed by a status read.
+ *
+ * Deliberate difference from Android (a pod that cannot be activated): when the answer to SetUniqueId
+ * does not carry the prime values (it was lost, and the pod then answered the repeated command with a
+ * NAK), a status decides. UID_SET or later means the pod took it, and the fixed Dash prime values are
+ * used ([DashPodStateManager.useDefaultPrimeValues]), as Trio always does. Android stores the step as
+ * done without the values, and its prime then fails on every try: the pod had to be thrown away.
  *
  * Deliberate difference from Android (a bolus sent twice): the prime and the cannula bolus are
  * marked in the stored state before their bytes go ([DashPodStateManager.markActivationStepSent]),
@@ -122,7 +133,7 @@ class DashActivation(
         if (isBefore(ActivationProgress.SET_UNIQUE_ID)) {
             val lotNumber = state.lotNumber ?: throw DashActivationException("Lot number of the pod not known")
             val podSequenceNumber = state.podSequenceNumber ?: throw DashActivationException("Sequence number of the pod not known")
-            step(ActivationProgress.SET_UNIQUE_ID, "SetUniqueId") { uid, seq ->
+            val exchange = pod.send({ uid, seq ->
                 SetUniqueIdCommand.Builder()
                     .setSequenceNumber(seq)
                     .setUniqueId(uid)
@@ -130,7 +141,10 @@ class DashActivation(
                     .setPodSequenceNumber(podSequenceNumber.toInt())
                     .setInitializationTime(now())
                     .build()
-            }
+            })
+            exchange.error?.let { throw DashActivationException("SetUniqueId: $it") }
+            if (state.firstPrimeBolusVolume == null) takeSetUniqueIdFromStatus()
+            state.updateActivationProgress(ActivationProgress.SET_UNIQUE_ID)
         }
         if (lowReservoirAlertTrigger != null && isBefore(ActivationProgress.PROGRAMMED_LOW_RESERVOIR_ALERTS)) {
             val alert = AlertConfiguration(
@@ -161,6 +175,12 @@ class DashActivation(
             }
         }
         if (isBefore(ActivationProgress.PRIMING)) {
+            // A pod whose SetUniqueId was stored as done without its answer (by an older version, or
+            // by recoverActivationFromPodStatus after a crash): the pod took it, so the fixed values hold.
+            if (state.firstPrimeBolusVolume == null || state.primePulseRate == null || state.podLifeInHours == null) {
+                logger.warn(LTag.PUMP, "Activation: prime values of the pod not known, the fixed Dash values are used")
+                state.useDefaultPrimeValues()
+            }
             val pulses = state.firstPrimeBolusVolume ?: throw DashActivationException("Prime volume of the pod not known")
             val pulseRate = state.primePulseRate ?: throw DashActivationException("Prime pulse rate of the pod not known")
             bolusStep(ActivationProgress.PRIMING, "prime", pulses, pulseRate)
@@ -199,6 +219,9 @@ class DashActivation(
             val sent = BasalProgram(basalProgram.segments)
             val exchange = pod.send({ uid, seq -> basalProgramCommand(sent, uid, seq) })
             exchange.error?.let { throw DashActivationException("Basal program: $it") }
+            if (exchange.nak && !basalProgramTakenDespiteNak()) {
+                throw DashActivationException("Basal program: the pod refused the command (NAK), it is sent again on the next try")
+            }
             // Android `observeSendProgramBasalCommand`, doOnComplete: the pod runs the program in the
             // time zone of the phone now.
             state.updateTimeZone(now())
@@ -270,13 +293,53 @@ class DashActivation(
 
     private fun isBefore(progress: ActivationProgress): Boolean = state.activationProgress.isBefore(progress)
 
-    /** One command; its progress is stored once the answer was read. */
+    /** One command; its progress is stored once the answer was read and was not a NAK. */
     private fun step(progress: ActivationProgress, name: String, build: (uniqueId: Int, sequence: Short) -> Command) {
         val exchange = pod.send(build)
         exchange.error?.let { throw DashActivationException("$name: $it") }
+        if (exchange.nak) throw DashActivationException("$name: the pod refused the command (NAK), it is sent again on the next try")
         state.updateActivationProgress(progress)
     }
 
+    /**
+     * The answer to SetUniqueId had no prime values. A status decides:
+     * - UID_SET: the pod took SetUniqueId and nothing after it, so the fixed Dash values are used and
+     *   the activation goes on.
+     * - a later activation status: the pod is further on than the stored progress (a progress write
+     *   was lost). The progress is taken from the pod ([DashPodStateManager.recoverActivationFromPodStatus])
+     *   and the activation stops, so the next try goes on from there. Going on from SET_UNIQUE_ID here
+     *   would send a second prime and later a second cannula bolus.
+     * - anything else, or no status: the activation stops without storing the step, and the next try
+     *   sends SetUniqueId again.
+     */
+    private fun takeSetUniqueIdFromStatus() {
+        logger.warn(LTag.PUMP, "Activation: the answer to SetUniqueId had no prime values, reading the pod status")
+        if (!readStatus()) throw DashActivationException("SetUniqueId: no answer from the pod and no pod status, it is sent again on the next try")
+        when (val podStatus = state.reportedPodStatus) {
+            PodStatus.UID_SET -> {
+                logger.info(LTag.PUMP, "Activation: the pod took SetUniqueId (pod status $podStatus), the fixed Dash prime values are used")
+                state.useDefaultPrimeValues()
+            }
+
+            in LATER_ACTIVATION_STATUSES -> {
+                state.useDefaultPrimeValues()
+                state.recoverActivationFromPodStatus()
+                throw DashActivationException("SetUniqueId: the pod is further on (pod status $podStatus), the activation goes on from there on the next try")
+            }
+
+            else -> throw DashActivationException("SetUniqueId: the pod did not take it (pod status $podStatus), it is sent again on the next try")
+        }
+    }
+
+    /**
+     * The pod refused the basal program. If the pod took an earlier copy whose answer was lost, it may
+     * refuse the repeat: a status that shows the program set (BASAL_PROGRAM_SET or later) means it runs.
+     * Anything else stops the activation, and the program is sent again on the next try.
+     */
+    private fun basalProgramTakenDespiteNak(): Boolean {
+        if (!readStatus()) return false
+        return state.reportedPodStatus in BASAL_SET_STATUSES
+    }
     /**
      * The prime or the cannula bolus, marked before its bytes go. A write that failed before any byte
      * left clears the mark; a lost answer keeps it.
@@ -407,6 +470,17 @@ class DashActivation(
             .build()
 
     companion object {
+
+        /** Pod statuses that show the activation past SetUniqueId. */
+        private val LATER_ACTIVATION_STATUSES = setOf(
+            PodStatus.ENGAGING_CLUTCH_DRIVE, PodStatus.CLUTCH_DRIVE_ENGAGED, PodStatus.BASAL_PROGRAM_SET,
+            PodStatus.PRIMING, PodStatus.RUNNING_ABOVE_MIN_VOLUME, PodStatus.RUNNING_BELOW_MIN_VOLUME,
+        )
+
+        /** Pod statuses that show the basal program set. */
+        private val BASAL_SET_STATUSES = setOf(
+            PodStatus.BASAL_PROGRAM_SET, PodStatus.PRIMING, PodStatus.RUNNING_ABOVE_MIN_VOLUME, PodStatus.RUNNING_BELOW_MIN_VOLUME,
+        )
 
         /** `OmnipodDashManagerImpl.NONCE`: the Omnipod Dash seems to use a fixed nonce. */
         const val NONCE = 1229869870
