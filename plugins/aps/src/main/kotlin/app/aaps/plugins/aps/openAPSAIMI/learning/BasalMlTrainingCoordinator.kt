@@ -106,6 +106,9 @@ class BasalMlTrainingCoordinator @Inject constructor(
          * for almost no gain, and the heuristic fallback is the safe alternative.
          */
         internal const val MAX_BASELINE_MAE_RATIO = 0.95
+        /** A last training time more than this after "now" is from a clock that went back. Same as the SMB trainer. */
+        private const val CLOCK_SKEW_TOLERANCE_MS = 5L * 60 * 1000
+
         private const val TRAIN_INTERVAL_MS = 1L * 60 * 60 * 1000 // 1h — matches the 1h worker cadence; the MIN_NEW_ROWS gate still prevents retraining without new data
         private const val MIN_NEW_ROWS = 80L
 
@@ -171,7 +174,15 @@ class BasalMlTrainingCoordinator @Inject constructor(
             log.debug(LTag.APS, "$TAG: circuit breaker open — skip")
             return TrainingOutcome.SKIPPED
         }
-        if (!bootstrapNeeded && now - lastTrainMs.get() < TRAIN_INTERVAL_MS) {
+        // A last training time in the future (the phone clock went back) would hold both gates below
+        // until the clock caught up, so no basal training for that long. The SMB trainer already reads
+        // its times this way (AimiSmbTrainer.sanitizeTimestamp); the same rule is used here.
+        val lastTrain = lastTrainMs.get().let { if (it > now + CLOCK_SKEW_TOLERANCE_MS) 0L else it }
+        if (lastTrain != lastTrainMs.get()) {
+            log.warn(LTag.APS, "$TAG: last training time ${lastTrainMs.get()} is in the future (now $now), it is ignored")
+            lastTrainMs.set(lastTrain)
+        }
+        if (!bootstrapNeeded && now - lastTrain < TRAIN_INTERVAL_MS) {
             log.debug(LTag.APS, "$TAG: rate limit — skip")
             return TrainingOutcome.SKIPPED
         }
@@ -203,7 +214,7 @@ class BasalMlTrainingCoordinator @Inject constructor(
         // STALE_TRAINING_MS since the last completed attempt, force one anyway: BASAL_MIN_ROWS/T3C_MIN_ROWS
         // below still require a minimum corpus, so this cannot train on too little data, only on data that
         // grew slower than expected.
-        val trainingIsStale = now - lastTrainMs.get() > STALE_TRAINING_MS
+        val trainingIsStale = now - lastTrain > STALE_TRAINING_MS
         if (!bootstrapNeeded && !trainingIsStale && newRows < MIN_NEW_ROWS) {
             log.debug(LTag.APS, "$TAG: only $newRows new rows (need $MIN_NEW_ROWS) — skip")
             return TrainingOutcome.SKIPPED
