@@ -89,10 +89,24 @@ interface DashPodConnector {
  *   drop of each peripheral when the radio goes off); when it is on again the held connect is asked
  *   again;
  * - iOS started the app again and handed back the pod ([BleCentralEvent.Restored]): re-attach. The
- *   connection is wanted again and a connect is asked for the restored peripheral; CoreBluetooth
- *   answers it with a connect event (at once when the peripheral is still connected), and that
- *   makes a new link and a new session, because nothing of the old session survived the relaunch.
- *   Restored peripherals that are not this pod (an old pod) are released;
+ *   connection is wanted again. Nothing of the old session survived the relaunch, so a new link and
+ *   a new session are needed:
+ *   - when the restored pod is not connected now ([peripheralConnected] is false or not given), a
+ *     connect is asked for it at once, and its connect event makes the new link and session;
+ *   - when iOS kept the link up, that link is dropped first, as on Android, where the death of the
+ *     process closes the GATT, so every session is made on a new connection. A new EAP-AKA
+ *     challenge is never put on the link of the ended app. The cancel is sent only once Bluetooth
+ *     is on: the restore comes before the manager is powered on, and CoreBluetooth ignores commands
+ *     until then. While the drop runs no connect is asked, no set up runs (a connect event of the
+ *     restored link is ignored) and the connect watchdog does not run. A command waits in
+ *     [awaitConnection] as for any link that is not up, and nothing is sent. The drop event ends
+ *     it, and the fresh connect is asked with a start delay of [RESTORED_LINK_RECONNECT_DELAY_S],
+ *     so the pod sees a real gap. When no drop event comes within [RESTORED_LINK_DROP_FALLBACK_MS]
+ *     (only with [schedule]), the fresh connect is asked anyway; if the link really stayed up, iOS
+ *     answers at once and the set up runs on it, as before this rule;
+ *   - restored peripherals that are not this pod (an old pod) are released, also only once
+ *     Bluetooth is on, for the same reason. A release removes the peripheral from the central, so a
+ *     release that iOS ignored could not be tried again;
  * - a set up that failed ([DashConnectResult.LinkFailed] or [DashConnectResult.SessionFailed]) cancels
  *   the BLE connection, and the next held connect starts only after
  *   [FAILED_SETUP_CONNECT_DELAY_S] (iOS counts the delay itself). Without it a pod that refuses the
@@ -247,6 +261,24 @@ class DashHeldConnection(
     /** See [setFaultListener]. */
     private var faultListener: (() -> Unit)? = null
 
+    /**
+     * True while the restored link of [target], which iOS kept up, is dropped (see the class KDoc):
+     * no connect is asked and no set up runs until its drop event or the fallback timer.
+     */
+    private var dropRestoredLink = false
+
+    /** True once the cancel of the restored link was sent (only while Bluetooth is on). */
+    private var restoredCancelSent = false
+
+    /** Counts the drops of a restored link; a fallback timer acts only for the drop it was armed for. */
+    private var restoredDropGeneration = 0
+
+    /** True: the next held connect starts after [RESTORED_LINK_RECONNECT_DELAY_S] (a restored link was dropped). */
+    private var restoredGapPending = false
+
+    /** Restored peripherals to release once Bluetooth is on (see the class KDoc). */
+    private val restoredToRelease = mutableListOf<String>()
+
     override val isConnecting: Boolean
         get() = lock.withLock { wanted } && !client.hasSession()
 
@@ -301,6 +333,8 @@ class DashHeldConnection(
     override fun forget(reason: String) {
         stopHolding(reason)
         lock.withLock {
+            endRestoredDrop(releaseIfNotCancelled = true)
+            restoredGapPending = false
             target = null
             connection = null
             linkUp = false
@@ -308,6 +342,8 @@ class DashHeldConnection(
             faultReportedFor = null
             faultReadTried = false
         }
+        // Releases a restored link that iOS kept, once Bluetooth is on. Connects nothing: not wanted.
+        connectIfNeeded()
         updateFaultWatch()
     }
 
@@ -390,6 +426,11 @@ class DashHeldConnection(
         val on = state == BleAdapterState.PoweredOn
         val lost = lock.withLock {
             adapterOn = on
+            // Bluetooth off ends every link, also a restored link that was being dropped.
+            if (state == BleAdapterState.PoweredOff && dropRestoredLink) {
+                endRestoredDrop(releaseIfNotCancelled = false)
+                restoredGapPending = true
+            }
             if (on) return@withLock null
             connectAsked = false
             watchdogActive = false
@@ -409,6 +450,11 @@ class DashHeldConnection(
         val mine = lock.withLock { event.id == target }
         if (!mine) return
         if (event.connected) {
+            if (lock.withLock { dropRestoredLink }) {
+                // The restored link came up before the cancel took effect: no set up on it.
+                aapsLogger.info(LTag.PUMPBTCOMM, "Dash link up (${event.id}) ignored: the restored link is being dropped")
+                return
+            }
             lock.withLock {
                 linkUp = true
                 connectAsked = false
@@ -424,18 +470,27 @@ class DashHeldConnection(
             updateFaultWatch()
             startSetup()
         } else {
-            lock.withLock {
+            val restoredDropped = lock.withLock {
                 linkUp = false
                 connectAsked = false
+                val dropping = dropRestoredLink
+                if (dropping) {
+                    endRestoredDrop(releaseIfNotCancelled = false)
+                    restoredGapPending = true
+                }
+                dropping
             }
-            aapsLogger.info(LTag.PUMPBTCOMM, "Dash link down (${event.id}, status ${event.status})")
+            aapsLogger.info(LTag.PUMPBTCOMM, "Dash link down (${event.id}, status ${event.status})${if (restoredDropped) ": the restored link is dropped, a fresh connect follows" else ""}")
             connectIfNeeded()
             updateFaultWatch()
         }
     }
 
     private fun onRestored(ids: List<String>) {
-        val (mine, others) = lock.withLock {
+        val known = lock.withLock { target }
+        // Asked outside the lock: on iOS it reads the peripheral state on the radio queue.
+        val stillConnected = known != null && known in ids && peripheralConnected?.invoke(known) == true
+        val mine = lock.withLock {
             val id = target
             val mine = id != null && id in ids
             if (mine) {
@@ -444,12 +499,23 @@ class DashHeldConnection(
                 linkUp = false
                 connectAsked = false
                 watchdogBudgetStartMs = null
+                if (stillConnected && id == known) {
+                    // The link is dropped first, never used for a new session (see the class KDoc).
+                    dropRestoredLink = true
+                    restoredCancelSent = false
+                    restoredGapPending = false
+                }
             }
-            mine to ids.filter { it != id }
+            ids.filter { it != id && it !in restoredToRelease }.forEach { restoredToRelease += it }
+            mine
         }
-        aapsLogger.info(LTag.PUMPBTCOMM, "iOS started the app again: ${ids.size} peripheral(s), the pod is ${if (mine) "one of them" else "not one of them"}")
-        others.forEach { central.release(it) }
-        if (mine) connectIfNeeded()
+        aapsLogger.info(
+            LTag.PUMPBTCOMM,
+            "iOS started the app again: ${ids.size} peripheral(s), the pod is ${if (mine) "one of them" else "not one of them"}" +
+                if (mine && stillConnected) ", still connected: its link is dropped before a fresh one" else ""
+        )
+        // Releases the others and drops the restored link once Bluetooth is on, then connects.
+        connectIfNeeded()
         // A new process: no scan of this process runs yet (iOS may have kept the old one; starting it
         // again replaces it).
         lock.withLock { faultScanOn = false }
@@ -460,15 +526,22 @@ class DashHeldConnection(
     private fun connectIfNeeded() {
         val known = lock.withLock { adapterOn }
         val on = known ?: (central.adapterState() == BleAdapterState.PoweredOn)
+        if (on) releaseRestored()
         val ask = lock.withLock {
             val id = target
-            if (id == null || !wanted || linkUp || connectAsked || connectsRunning > 0 || !on) return@withLock null
+            if (id == null || !wanted || linkUp || connectAsked || connectsRunning > 0 || !on || dropRestoredLink) return@withLock null
             connectAsked = true
             connectGeneration++
             if (watchdogBudgetStartMs == null) watchdogBudgetStartMs = now()
             // The watchdog will watch this connect: the fault scan stops before it (see the class KDoc).
             watchdogActive = schedule != null && watchdogBudgetLeft()
-            ConnectAsk(id, if (failedSetups > 0) FAILED_SETUP_CONNECT_DELAY_S else 0, connectGeneration)
+            val delaySeconds = when {
+                failedSetups > 0   -> FAILED_SETUP_CONNECT_DELAY_S
+                restoredGapPending -> RESTORED_LINK_RECONNECT_DELAY_S
+                else               -> 0
+            }
+            restoredGapPending = false
+            ConnectAsk(id, delaySeconds, connectGeneration)
         } ?: return
         updateFaultWatch()
         // No timeout: CoreBluetooth keeps the request until the pod is in range.
@@ -488,6 +561,54 @@ class DashHeldConnection(
     }
 
     private class ConnectAsk(val id: String, val delaySeconds: Int, val generation: Int)
+
+    /**
+     * Only while Bluetooth is on: releases the restored peripherals that are not the pod, and sends
+     * the cancel of a restored link that is to be dropped, with its fallback timer (see the class KDoc).
+     */
+    private fun releaseRestored() {
+        var drop: Pair<String, Int>? = null
+        val others = lock.withLock {
+            val id = target
+            if (dropRestoredLink && !restoredCancelSent && id != null) {
+                restoredCancelSent = true
+                restoredDropGeneration++
+                drop = id to restoredDropGeneration
+            }
+            restoredToRelease.toList().also { restoredToRelease.clear() }
+        }
+        others.forEach { central.release(it) }
+        val (id, generation) = drop ?: return
+        aapsLogger.info(LTag.PUMPBTCOMM, "Dash restored link to $id dropped first: a fresh link and session follow, as on Android")
+        schedule?.invoke(RESTORED_LINK_DROP_FALLBACK_MS) { onRestoredDropTimeout(generation) }
+        central.cancel(id)
+    }
+
+    /** No drop event came for the restored link: the fresh connect is asked anyway (see the class KDoc). */
+    private fun onRestoredDropTimeout(generation: Int) {
+        val end = lock.withLock {
+            if (!dropRestoredLink || generation != restoredDropGeneration) return@withLock false
+            endRestoredDrop(releaseIfNotCancelled = false)
+            restoredGapPending = true
+            true
+        }
+        if (!end) return
+        aapsLogger.warn(LTag.PUMPBTCOMM, "Dash restored link: no drop event $RESTORED_LINK_DROP_FALLBACK_MS ms after the cancel, connecting anyway")
+        connectIfNeeded()
+        updateFaultWatch()
+    }
+
+    /**
+     * Ends the drop of a restored link. With [releaseIfNotCancelled], a link whose cancel was not sent
+     * yet (Bluetooth not on) is released later instead: the pod is no longer the target. Called with [lock].
+     */
+    private fun endRestoredDrop(releaseIfNotCancelled: Boolean) {
+        if (!dropRestoredLink) return
+        val id = target
+        if (releaseIfNotCancelled && !restoredCancelSent && id != null && id !in restoredToRelease) restoredToRelease += id
+        dropRestoredLink = false
+        restoredCancelSent = false
+    }
 
     /** True while a watchdog restart still fits in the budget. Called with [lock]. */
     private fun watchdogBudgetLeft(): Boolean {
@@ -682,6 +803,8 @@ class DashHeldConnection(
     /** A new pod (or the first one): a new [DashPodConnection]. Returns the old one to drop. Called with [lock]. */
     private fun switchTarget(peripheralId: String): Pair<String, DashPodConnection?>? {
         if (target == peripheralId) return null
+        endRestoredDrop(releaseIfNotCancelled = true)
+        restoredGapPending = false
         val old = target?.let { it to connection }
         target = peripheralId
         connection = DashPodConnection(central, peripheralId, aapsLogger, client, discoveryTimeoutMs)
@@ -736,5 +859,19 @@ class DashHeldConnection(
 
         /** OmnipodKit `eagerConnectBudgetSeconds` (40 s): how long the watchdog cancels and connects again. */
         const val CONNECT_WATCHDOG_BUDGET_MS = 40_000L
+
+        /**
+         * How long the drop of a restored link waits for its drop event (`didDisconnectPeripheral`)
+         * after the cancel. Then the fresh connect is asked anyway. If the link never dropped, iOS
+         * answers that connect at once and the set up runs on the old link: the behaviour before the
+         * drop was added, so this is the worst case.
+         */
+        const val RESTORED_LINK_DROP_FALLBACK_MS = 3_000L
+
+        /**
+         * The start delay of the fresh connect after a restored link was dropped, so the pod sees a
+         * real gap between the two links. CoreBluetooth takes only whole seconds.
+         */
+        const val RESTORED_LINK_RECONNECT_DELAY_S = 1
     }
 }

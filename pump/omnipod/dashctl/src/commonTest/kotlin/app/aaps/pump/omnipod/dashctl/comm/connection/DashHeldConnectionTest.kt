@@ -1,6 +1,9 @@
 package app.aaps.pump.omnipod.dashctl.comm.connection
 
+import app.aaps.core.interfaces.pump.ble.session.BleAdapterState
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.RESTORED_LINK_DROP_FALLBACK_MS
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.RESTORED_LINK_RECONNECT_DELAY_S
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral.Companion.POD_ID
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral.Companion.advertisement
 import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
@@ -22,7 +25,8 @@ import kotlin.test.assertTrue
  * on a held connection is in `IosDashPumpHeldConnectionTest` (iosTest).
  *
  * The worker of the link set up is a list that the test runs ([runWorker]), as the real worker runs
- * after the radio event that started it.
+ * after the radio event that started it. The timers ([schedule] of the connection) are a list too, and
+ * only a test that fires them ([fireTimers]) sees them run.
  */
 class DashHeldConnectionTest {
 
@@ -34,7 +38,13 @@ class DashHeldConnectionTest {
     private val sleeps = mutableListOf<Long>()
     private var onSleep: () -> Unit = {}
 
-    private val held = DashHeldConnection(
+    /** The timers asked, in order: delay and block. */
+    private val timers = ArrayDeque<Pair<Long, () -> Unit>>()
+
+    private val held = newHeld(client)
+
+    /** A connection as the app makes it; iOS tells if the peripheral is connected by the fake link. */
+    private fun newHeld(client: RecordingClient) = DashHeldConnection(
         central = central,
         aapsLogger = SilentPodLogger,
         client = client,
@@ -46,7 +56,33 @@ class DashHeldConnectionTest {
         },
         now = { nowMs },
         discoveryTimeoutMs = 200,
+        schedule = { ms, block -> timers.addLast(ms to block) },
+        peripheralConnected = { id -> central.linkUp && id == POD_ID },
     )
+
+    /**
+     * iOS started the app again: a new connection and a new pump with no session, the pod known
+     * from the store (as `IosDashBleHost` does). The link of before may still be up in the fake.
+     */
+    private fun relaunch(): Pair<DashHeldConnection, RecordingClient> {
+        val newClient = RecordingClient().apply { paired = true }
+        val again = newHeld(newClient)
+        again.setPod(POD_ID)
+        central.listener = again::onEvent
+        return again to newClient
+    }
+
+    /** Fires every timer, also those a timer asks. */
+    private fun fireTimers() {
+        var guard = 0
+        while (timers.isNotEmpty() && guard++ < 100) {
+            val (ms, block) = timers.removeFirst()
+            nowMs += ms
+            block()
+        }
+    }
+
+    private val freshConnect = "$POD_ID delay=$RESTORED_LINK_RECONNECT_DELAY_S"
 
     init {
         central.listener = held::onEvent
@@ -189,6 +225,7 @@ class DashHeldConnectionTest {
 
         assertEquals(listOf("OLD-POD"), central.released)
         assertEquals(listOf(POD_ID), central.connects, "the restored pod is connected again")
+        assertTrue(central.cancelled.isEmpty(), "a restored pod that is not connected has no link to drop")
         runWorker()
         assertEquals(listOf("attach 1", "session 1"), client.calls)
         assertTrue(client.hasSession())
@@ -199,18 +236,198 @@ class DashHeldConnectionTest {
     }
 
     @Test
-    fun `a restore of a pod still connected gets a new session on the same peripheral`() {
+    fun `a restore of a pod still connected drops that link first and sets up a fresh one`() {
         held.hold(POD_ID, "test")
         runWorker()
-        val first = assertNotNull(held.podConnection?.link)
-        client.attached = null // the app was started again: no session of before is known
+        val (again, newClient) = relaunch()
 
-        held.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        assertEquals(listOf(POD_ID), central.cancelled, "the restored link is dropped first")
+        assertEquals(listOf(POD_ID, freshConnect), central.connects, "then a fresh connect after a short gap")
+        assertTrue(newClient.calls.isEmpty(), "no session on the restored link")
+        assertTrue(again.isConnecting)
+        assertFalse(again.isHandshakeInProgress)
+
+        central.podComesInRange()
         runWorker()
 
-        assertEquals(listOf(POD_ID, POD_ID), central.connects)
-        assertEquals(listOf("attach 1", "session 1", "attach 2", "session 2"), client.calls)
-        assertFalse(first.isUsable, "the link of before is replaced")
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls, "one link and one session, on the fresh link")
+        assertTrue(newClient.hasSession())
+        fireTimers()
+        assertEquals(listOf(POD_ID, freshConnect), central.connects, "the fallback timer asks nothing more")
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls)
+    }
+
+    @Test
+    fun `a restore before Bluetooth is on drops and releases nothing until it is on`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        // iOS gives the restore before the manager is powered on; it ignores commands until then.
+        central.adapter = BleAdapterState.Unknown
+        val (again, newClient) = relaunch()
+
+        again.onEvent(BleCentralEvent.Restored(listOf("OLD-POD", POD_ID)))
+
+        assertTrue(central.cancelled.isEmpty(), "no cancel before Bluetooth is on")
+        assertTrue(central.released.isEmpty(), "no release before Bluetooth is on")
+        assertEquals(listOf(POD_ID), central.connects)
+        assertTrue(timers.isEmpty())
+
+        central.radioOn()
+
+        assertEquals(listOf("OLD-POD"), central.released, "the old pod is released once Bluetooth is on")
+        assertEquals(listOf(POD_ID), central.cancelled)
+        assertEquals(listOf(POD_ID, freshConnect), central.connects)
+        central.podComesInRange()
+        runWorker()
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls)
+    }
+
+    @Test
+    fun `when the drop event never comes the timer connects anyway and only once`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        assertEquals(listOf(POD_ID), central.cancelled)
+        assertEquals(listOf(POD_ID), central.connects, "nothing is asked while the drop runs")
+        assertEquals(listOf(RESTORED_LINK_DROP_FALLBACK_MS), timers.map { it.first })
+
+        fireTimers()
+
+        assertEquals(listOf(POD_ID, freshConnect), central.connects, "the timer asks the connect once")
+        // iOS answers a connect on a link that never dropped at once: the set up runs on that link.
+        runWorker()
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls)
+        fireTimers()
+        assertEquals(listOf(POD_ID, freshConnect), central.connects)
+        assertEquals(listOf(POD_ID), central.cancelled)
+    }
+
+    @Test
+    fun `a connect event of the restored link during the drop starts no set up`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        again.onEvent(BleCentralEvent.Link(POD_ID, connected = true, status = 0))
+        runWorker()
+
+        assertTrue(newClient.calls.isEmpty(), "no session on the restored link")
+        assertFalse(again.isHandshakeInProgress)
+
+        // The drop event comes late.
+        central.ignoreCancel = false
+        central.podGoesAway()
+        assertEquals(listOf(POD_ID, freshConnect), central.connects)
+        central.podComesInRange()
+        runWorker()
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls)
+    }
+
+    @Test
+    fun `awaiting the connection during the drop sends nothing and gives the session of the fresh link`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+        var callsDuringDrop: List<String>? = null
+        var waits = 0
+        onSleep = {
+            waits++
+            if (waits == 2) {
+                callsDuringDrop = newClient.calls.toList()
+                // The drop event comes late.
+                central.ignoreCancel = false
+                central.podGoesAway()
+            }
+            if (waits == 4) central.podComesInRange()
+        }
+
+        val result = again.awaitConnection(POD_ID, 30_000)
+
+        assertSame(DashConnectResult.SessionReady, result)
+        assertEquals(emptyList(), callsDuringDrop, "nothing is sent while the drop runs")
+        assertEquals(listOf(POD_ID, freshConnect), central.connects)
+        assertEquals(listOf("attach 1", "session 1"), newClient.calls)
+    }
+
+    @Test
+    fun `awaiting the connection during a drop that never ends gives up and sends nothing`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        val result = again.awaitConnection(POD_ID, 1_000)
+
+        assertIs<DashConnectResult.NotConnected>(result)
+        assertTrue(newClient.calls.isEmpty())
+        assertEquals(listOf(POD_ID), central.connects)
+    }
+
+    @Test
+    fun `a stop during the drop connects nothing afterwards`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        again.stopHolding("queue empty")
+        central.ignoreCancel = false
+        central.podGoesAway()
+        fireTimers()
+        central.podComesInRange()
+        runWorker()
+
+        assertEquals(listOf(POD_ID), central.connects)
+        assertTrue(newClient.calls.isEmpty())
+        assertFalse(again.isConnecting)
+    }
+
+    @Test
+    fun `a pod forgotten during the drop connects nothing afterwards`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.ignoreCancel = true
+        val (again, newClient) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        again.forget("pod deactivated")
+        central.ignoreCancel = false
+        central.podGoesAway()
+        fireTimers()
+        central.podComesInRange()
+        runWorker()
+
+        assertEquals(listOf(POD_ID), central.connects)
+        assertTrue(newClient.calls.isEmpty())
+        assertFalse(again.isConnecting)
+    }
+
+    @Test
+    fun `a pod forgotten during the drop before Bluetooth is on is still released`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        central.adapter = BleAdapterState.Unknown
+        val (again, _) = relaunch()
+        again.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        again.forget("pod deactivated")
+        assertTrue(central.released.isEmpty())
+        central.radioOn()
+
+        assertEquals(listOf(POD_ID), central.released, "the link iOS kept is ended once Bluetooth is on")
+        assertEquals(listOf(POD_ID), central.connects)
     }
 
     @Test

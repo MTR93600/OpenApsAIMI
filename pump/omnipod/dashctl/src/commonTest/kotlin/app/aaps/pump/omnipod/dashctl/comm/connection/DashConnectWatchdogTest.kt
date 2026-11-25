@@ -5,6 +5,8 @@ import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companio
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.CONNECT_WATCHDOG_MS
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.CONNECT_WATCHDOG_RESTART_DELAY_S
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.FAILED_SETUP_CONNECT_DELAY_S
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.RESTORED_LINK_DROP_FALLBACK_MS
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.RESTORED_LINK_RECONNECT_DELAY_S
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral.Companion.POD_ID
 import app.aaps.pump.omnipod.dashctl.comm.io.SilentPodLogger
 import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod
@@ -245,5 +247,29 @@ class DashConnectWatchdogTest {
         central.podComesInRange()
         runWorker()
         assertEquals(listOf("attach 1", "session 1"), client.calls)
+    }
+
+    @Test
+    fun `the watchdog does not run while a restored link is dropped`() {
+        held.hold(POD_ID, "test")
+        runWorker()
+        client.attached = null // the app was started again: no session of before is known
+        // iOS kept the link, and the drop event of the cancel does not come.
+        iosLinked = true
+        central.ignoreCancel = true
+
+        held.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        assertEquals(listOf(RESTORED_LINK_DROP_FALLBACK_MS), timers.map { it.first }, "only the fallback timer, no watchdog")
+        assertEquals(listOf(POD_ID), central.cancelled)
+        assertEquals(listOf(POD_ID), central.connects)
+
+        fireNext()
+
+        assertEquals(listOf(POD_ID, "$POD_ID delay=$RESTORED_LINK_RECONNECT_DELAY_S"), central.connects)
+        runWorker()
+        while (timers.isNotEmpty()) fireNext()
+        assertEquals(listOf(POD_ID), central.cancelled, "no watchdog cancel")
+        assertTrue(client.hasSession())
     }
 }

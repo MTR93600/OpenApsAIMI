@@ -3,6 +3,7 @@ package app.aaps.pump.omnipod.dashctl.ios.pump
 import app.aaps.core.interfaces.pump.DetailedBolusInfo
 import app.aaps.core.interfaces.pump.ble.session.BleCentralEvent
 import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection
+import app.aaps.pump.omnipod.dashctl.comm.connection.DashHeldConnection.Companion.RESTORED_LINK_RECONNECT_DELAY_S
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral.Companion.POD_ID
 import app.aaps.pump.omnipod.dashctl.comm.connection.HeldPodCentral.Companion.advertisement
@@ -22,6 +23,8 @@ import app.aaps.pump.omnipod.dashctl.pod.command.base.CommandType
 import app.aaps.pump.omnipod.dashctl.pod.definition.ActivationProgress
 import app.aaps.pump.omnipod.dashctl.pod.definition.AlertTrigger
 import app.aaps.pump.omnipod.dashctl.pod.definition.BasalProgram
+import app.aaps.pump.omnipod.dashctl.session.DashCommandConfirmation
+import app.aaps.pump.omnipod.dashctl.session.DashCommandKind
 import app.aaps.pump.omnipod.dashctl.session.DashPodStateManager
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -433,6 +436,82 @@ class IosDashPumpHeldConnectionTest {
         assertTrue(part2.success, part2.comment)
         assertEquals(ActivationProgress.COMPLETED, stateManager.activationProgress)
         assertEquals(2, pod.commands.count { isBolus(it) }, "the prime and the cannula went once each")
+        pod.assertNoProblems()
+    }
+
+    /**
+     * iOS ended the app after the pod took a bolus and before its answer was written, and kept the
+     * BLE link. At the relaunch the link is dropped first, as Android (process death closes the
+     * GATT): the open bolus is decided by a status read on a fresh link and session, never sent again.
+     */
+    @Test
+    fun `a restore of a pod still connected decides an open bolus on a fresh link and sends it once`() = runTest {
+        activate()
+        val boluses = pod.commands.count { isBolus(it) }
+        assertTrue(pump.deliverTreatment(DetailedBolusInfo().apply { insulin = 1.0 }).success)
+        assertEquals(boluses + 1, pod.commands.count { isBolus(it) })
+        val open = store.history.last { it.activeCommand?.kind == DashCommandKind.BOLUS && it.activeCommand?.sent == true }
+        val relaunchedStore = MemoryDashPodStateStore().apply { saved = open }
+        val relaunchedState = DashPodStateManager(relaunchedStore)
+        val decided = mutableListOf<DashCommandOutcome>()
+        var again: DashHeldConnection? = null
+        val relaunched = IosDashPump(
+            aapsLogger = SilentPodLogger,
+            onCommandDecided = { if (it is DashCommandOutcome) decided += it },
+            stateManager = relaunchedState,
+            newKeyExchange = {
+                DashKeyExchange(
+                    IosX25519Dh(), IosAesCmac(),
+                    pdmNonce = parityHex(DashPumpOnFakePod.PDM_NONCE), pdmPrivate = parityHex(DashPumpOnFakePod.PDM_PRIVATE)
+                )
+            },
+            randomBytes = CountingRandomBytes(),
+            now = { nowMs },
+            sleep = { ms -> delay(ms) },
+            connectorFactory = { client ->
+                DashHeldConnection(
+                    central = central,
+                    aapsLogger = SilentPodLogger,
+                    client = client,
+                    runOnWorker = { worker.addLast(it) },
+                    sleep = {
+                        sleeps += it
+                        nowMs += it
+                        onSleep()
+                    },
+                    now = { nowMs },
+                    discoveryTimeoutMs = 200,
+                    schedule = { _, _ -> },
+                    peripheralConnected = { central.linkUp },
+                ).also {
+                    it.setPod(POD_ID)
+                    again = it
+                }
+            },
+        )
+        val restored = assertNotNull(again)
+        central.listener = restored::onEvent
+        assertTrue(central.linkUp, "iOS kept the link of the app it ended")
+        val cancelsBefore = central.cancelled.size
+        val messagesBefore = pod.commands.size
+
+        restored.onEvent(BleCentralEvent.Restored(listOf(POD_ID)))
+
+        assertEquals(cancelsBefore + 1, central.cancelled.size, "the restored link is dropped first")
+        assertFalse(central.linkUp)
+        assertEquals("$POD_ID delay=$RESTORED_LINK_RECONNECT_DELAY_S", central.connects.last(), "then a fresh connect")
+        assertEquals(messagesBefore, pod.commands.size, "nothing sent on the restored link")
+
+        onSleep = { central.podComesInRange() }
+        relaunched.getPumpStatus("after the restore")
+
+        assertNull(relaunchedState.activeCommand)
+        val outcome = decided.single()
+        assertEquals(DashCommandConfirmation.SUCCESS, outcome.confirmation)
+        assertTrue(outcome.decidedLate)
+        assertEquals(1.0, outcome.command.requestedBolusUnits)
+        assertEquals(boluses + 1, pod.commands.count { isBolus(it) }, "the bolus went to the pod once")
+        assertEquals(CommandType.GET_STATUS.value, pod.commands.last()[6], "decided by a status read")
         pod.assertNoProblems()
     }
 

@@ -14,7 +14,9 @@ import app.aaps.pump.omnipod.dashctl.comm.session.FakeDashPod
  *   (a [BleCentralEvent.Link] connected event); otherwise the connect is kept ([pendingConnect])
  *   until [podComesInRange];
  * - [cancel] drops a link that is up (the drop event comes, as `didDisconnectPeripheral`) and
- *   forgets a kept connect;
+ *   forgets a kept connect. While Bluetooth is not on, or when [ignoreCancel] is set, the cancel is
+ *   only recorded: CoreBluetooth ignores a command before its manager is powered on (for example
+ *   inside `willRestoreState`), and a test plays a drop event that never comes;
  * - [startScan] reports [advertisements] at once, except the one of the peripheral that is
  *   connected now (a connected pod does not advertise, and CoreBluetooth does not report it);
  * - the GATT calls go to the fake central of the current pod link ([FakeDashPod.central]).
@@ -39,6 +41,10 @@ class HeldPodCentral(private val pod: FakeDashPod) : BleCentral {
     val connects = mutableListOf<String>()
 
     val cancelled = mutableListOf<String>()
+
+    /** True: a cancel is recorded and nothing else happens (no drop event comes). */
+    var ignoreCancel = false
+
     val released = mutableListOf<String>()
 
     /** The service filters of each scan. */
@@ -140,6 +146,7 @@ class HeldPodCentral(private val pod: FakeDashPod) : BleCentral {
 
     override fun cancel(id: String) {
         cancelled += id
+        if (ignoreCancel || adapter != BleAdapterState.PoweredOn) return
         pendingConnect = null
         dropLink()
     }
