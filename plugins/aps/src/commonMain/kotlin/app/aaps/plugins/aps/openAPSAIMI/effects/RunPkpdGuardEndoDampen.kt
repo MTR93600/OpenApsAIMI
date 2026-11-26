@@ -242,7 +242,6 @@ internal fun decidePkpdGuardEndoDampenRedCarpetAndCapSmb(
         suppressRedCarpet = stackingEvalV3.suppressRedCarpetRestore,
         suppressSummary = stackingEvalV3.summary,
         currentMaxSmb = currentMaxSmb,
-        maxSmbHb = state.maxSmbHb(),
         effectiveMaxIob = effectiveMaxIobForDebridage,
         iobForCap = iob.toDouble(),
         memberIob = state.memberIob(),

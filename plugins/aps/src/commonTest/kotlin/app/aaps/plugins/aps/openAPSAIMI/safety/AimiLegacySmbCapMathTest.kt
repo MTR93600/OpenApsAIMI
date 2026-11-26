@@ -71,7 +71,6 @@ class AimiLegacySmbCapMathTest {
             suppressRedCarpet = false,
             suppressSummary = "",
             currentMaxSmb = 8.0,
-            maxSmbHb = 8.0,
             effectiveMaxIob = 20.0,
             iobForCap = 1.0,
             memberIob = 1.0,
@@ -99,7 +98,6 @@ class AimiLegacySmbCapMathTest {
             suppressRedCarpet = false,
             suppressSummary = "",
             currentMaxSmb = 8.0,
-            maxSmbHb = 8.0,
             effectiveMaxIob = 20.0,
             iobForCap = 1.0,
             memberIob = 1.0,
@@ -109,5 +107,50 @@ class AimiLegacySmbCapMathTest {
             "⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=4.00 Gated=1.00)",
             denied.logs.single(),
         )
+    }
+
+    private fun carpet(
+        isExplicitAction: Boolean = false,
+        anyMealMode: Boolean = false,
+        redCarpetEligible: Boolean = false,
+        isConfirmedHighRise: Boolean = false,
+        currentMaxSmb: Double = 0.2,
+    ) = AimiLegacySmbCapMath.redCarpetOrCap(
+        smbAfterGuards = 0.08f,
+        proposedUnits = 0.35f,
+        finalSmb = 0.35,
+        isExplicitAction = isExplicitAction,
+        anyMealMode = anyMealMode,
+        redCarpetEligible = redCarpetEligible,
+        mealSummary = "",
+        isConfirmedHighRise = isConfirmedHighRise,
+        mealCob = 0.0,
+        delta = 4.4,
+        bg = 150.0,
+        shortAvgDelta = 4.0,
+        pkpdReliefEnabled = false,
+        isAggressivePriorityContext = false,
+        restoreThresholdPref = 0.6f,
+        criticalSafetyZeroed = false,
+        suppressRedCarpet = false,
+        suppressSummary = "",
+        currentMaxSmb = currentMaxSmb,
+        effectiveMaxIob = 5.0,
+        iobForCap = 0.7,
+        memberIob = 0.7,
+    )
+
+    /** No meal declared: a rise read as a meal keeps what the guards allowed, no restore. */
+    @Test
+    fun `a guessed meal is not restored`() {
+        assertNear(0.08, carpet(redCarpetEligible = true).units.toDouble())
+        assertNear(0.08, carpet(isConfirmedHighRise = true).units.toDouble())
+    }
+
+    /** A declared meal mode still restores, but only up to the MaxSMB of the normal path. */
+    @Test
+    fun `a declared meal is restored up to the normal MaxSMB only`() {
+        assertNear(0.2, carpet(anyMealMode = true, currentMaxSmb = 0.2).units.toDouble())
+        assertNear(0.35, carpet(anyMealMode = true, currentMaxSmb = 0.4).units.toDouble())
     }
 }

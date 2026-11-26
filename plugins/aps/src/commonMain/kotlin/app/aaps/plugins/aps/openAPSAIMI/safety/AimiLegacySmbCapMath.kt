@@ -127,7 +127,6 @@ internal object AimiLegacySmbCapMath {
         suppressRedCarpet: Boolean,
         suppressSummary: String,
         currentMaxSmb: Double,
-        maxSmbHb: Double,
         effectiveMaxIob: Double,
         iobForCap: Double,
         memberIob: Double,
@@ -138,17 +137,21 @@ internal object AimiLegacySmbCapMath {
     ): RedCarpet {
         val logs = mutableListOf<String>()
         val isMealChaos = mealCob > 10.0 && delta > 5.0
-        val isRedCarpetSituation =
-            isExplicitAction || anyMealMode || redCarpetEligible || isConfirmedHighRise ||
-                (isMealChaos && finalSmb > 0.5)
+        // Red Carpet only on a meal the person declared, see RedCarpetPolicy. A meal guessed from a rise
+        // (implicit meal context, confirmed high rise) goes through the normal guards with no restore.
+        val isRedCarpetSituation = RedCarpetPolicy.allowed(
+            explicitUserAction = isExplicitAction,
+            declaredMealMode = anyMealMode,
+            declaredCarbsRise = isMealChaos && finalSmb > 0.5,
+        )
+        if (!isRedCarpetSituation && (redCarpetEligible || isConfirmedHighRise)) {
+            logs += "🍽️ IMPLICIT_MEAL_NO_REDCARPET ${mealSummary.ifBlank { "confirmed rise" }} " +
+                "(BG=${aimiFmt0(bg)} Δ=${aimiFmt1(delta)} sΔ=${aimiFmt1(shortAvgDelta)})"
+        }
         if (!(isRedCarpetSituation && proposedUnits > 0f)) {
             val capped = capSmbDose(smbAfterGuards, bg, currentMaxSmb, iobForCap, effectiveMaxIob)
             val reason = if (capped < smbAfterGuards) " | 🛡️ Cap: ${aimiFmt2(smbAfterGuards)} → ${aimiFmt2(capped)}" else null
             return RedCarpet(capped, isRedCarpetSituation, logs, reason)
-        }
-        if (redCarpetEligible && !anyMealMode && !isExplicitAction) {
-            logs += "🍽️ IMPLICIT_MEAL_REDCARPET ${mealSummary.ifBlank { "signals" }} " +
-                "(BG=${aimiFmt0(bg)} Δ=${aimiFmt1(delta)} sΔ=${aimiFmt1(shortAvgDelta)})"
         }
         val baseRestoreThreshold = 0.60f
         val restoreThreshold = if (isAggressivePriorityContext && pkpdReliefEnabled) {
@@ -180,7 +183,9 @@ internal object AimiLegacySmbCapMath {
         } else {
             smbAfterGuards
         }
-        val redCarpetMaxSmb = max(currentMaxSmb, maxSmbHb)
+        // The same MaxSMB as the normal path on this tick: the ladder already picks the high-BG ceiling
+        // when BG and the rise call for it. Red Carpet no longer forces it at any BG.
+        val redCarpetMaxSmb = currentMaxSmb
         var mealBolus = min(candidateUnits.toDouble(), redCarpetMaxSmb).toFloat()
         val iobSpace = (effectiveMaxIob - memberIob).coerceAtLeast(0.0)
         if (mealBolus > iobSpace.toFloat()) {
@@ -192,7 +197,6 @@ internal object AimiLegacySmbCapMath {
             val reason = when {
                 isExplicitAction -> "UserAction"
                 isMealChaos -> "CarbChaos"
-                redCarpetEligible -> "ImplicitMeal:${mealSummary.ifBlank { "signals" }}"
                 else -> "MealMode"
             }
             logs += "🍱 MEAL_FORCE_EXECUTED ($reason): ${aimiFmt2(mealBolus)} U (Overrides minor safety checks)"

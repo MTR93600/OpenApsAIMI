@@ -1025,8 +1025,12 @@ class ShellDecisionTraceTest {
         assertEquals(T9_ACTIVE_TRACE, trace)
     }
 
+    /**
+     * A rise with no meal declared: the guards cut 2.00 U to 0.80 U and Red Carpet no longer puts it
+     * back (see RedCarpetPolicy). It used to restore the full 2.00 U here.
+     */
     @Test
-    fun pkpdGuardCutsThenEndoDampensAndTheRedCarpetRestores() {
+    fun pkpdGuardCutsThenEndoDampensAndAGuessedMealIsNotRestored() {
         val prefs = recordingPreferences(emptyMap())
         setField(tick, "preferences", prefs)
         setField(tick, "bg", 160.0)
@@ -1051,11 +1055,12 @@ class ShellDecisionTraceTest {
         }
         val stage = returned!!
         val smb = stage.javaClass.getDeclaredField("smbToGive").apply { isAccessible = true }.get(stage) as Float
-        assertEquals(2.0f, smb, 0.0f)
+        assertEquals(0.8f, smb, 1e-6f)
         assertTrue(trace.contains("SMB_GUARDED"))
         assertTrue(trace.contains("SMB_ENDO_DAMPEN"))
-        assertTrue(trace.contains("RED CARPET"))
-        assertTrue(trace.contains("MEAL_FORCE_EXECUTED"))
+        assertTrue(trace.contains("IMPLICIT_MEAL_NO_REDCARPET"))
+        assertFalse(trace.contains("RED CARPET"))
+        assertFalse(trace.contains("MEAL_FORCE_EXECUTED"))
         assertEquals(PKPD_GUARD_ACTIVE_TRACE, trace)
     }
 
@@ -7074,8 +7079,7 @@ class ShellDecisionTraceTest {
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=BooleanKey.OApsAIMIPredictionAuthorityEnabled value=false
             READ key=BooleanKey.OApsAIMIIobSurveillanceGuard value=false
-            LOG ✨ RED CARPET: Restoring meal bolus blocked by minor safety (Proposed=2.00 vs Gated=0.80)
-            LOG 🍱 MEAL_FORCE_EXECUTED (MealMode): 2.00 U (Overrides minor safety checks)
+            LOG 🍽️ IMPLICIT_MEAL_NO_REDCARPET confirmed rise (BG=160 Δ=2.0 sΔ=2.0)
         """.trimIndent()
 
         private val PKPD_GUARD_FLAT_TRACE = """

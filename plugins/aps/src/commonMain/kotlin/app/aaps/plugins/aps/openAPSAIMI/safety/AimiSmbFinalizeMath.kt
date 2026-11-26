@@ -344,15 +344,19 @@ internal object AimiSmbFinalizeMath {
         )
 
         val isMealChaos = input.mealCob > 10.0 && input.delta > 5.0
-        val isAimiContextMeal = !input.isExplicitUserAction && input.redCarpetEligible
-        val isRedCarpetSituation = input.isExplicitUserAction || input.mealModeCondition || isAimiContextMeal ||
-            ((isMealChaos || input.isMealActive) && input.proposedUnits > 0.5)
+        // Red Carpet only on a meal the person declared, see RedCarpetPolicy. The implicit meal context
+        // (a meal guessed from a rise) no longer opens it.
+        val isRedCarpetSituation = RedCarpetPolicy.allowed(
+            explicitUserAction = input.isExplicitUserAction,
+            declaredMealMode = input.mealModeCondition || (input.isMealActive && input.proposedUnits > 0.5),
+            declaredCarbsRise = isMealChaos && input.proposedUnits > 0.5,
+        )
+        if (!isRedCarpetSituation && !input.isExplicitUserAction && input.redCarpetEligible) {
+            logs += "🍽️ IMPLICIT_MEAL_NO_REDCARPET ${input.mealSummary.ifBlank { "signals" }} " +
+                "(BG=${aimiFmt0(input.bg)} Δ=${aimiFmt1(input.delta)} sΔ=${aimiFmt1(input.shortAvgDelta)})"
+        }
         var finalUnits: Double
         if (isRedCarpetSituation && input.proposedUnits > 0.0 && !input.stacking.suppressRedCarpetRestore) {
-            if (isAimiContextMeal && !input.mealModeCondition) {
-                logs += "🍽️ IMPLICIT_MEAL_REDCARPET ${input.mealSummary.ifBlank { "signals" }} " +
-                    "(BG=${aimiFmt0(input.bg)} Δ=${aimiFmt1(input.delta)} sΔ=${aimiFmt1(input.shortAvgDelta)})"
-            }
             val candidateUnits = if (gatedUnits < input.proposedUnits.toFloat() * 0.6f) {
                 if (input.criticalSafetyZeroed) {
                     logs += "⛔ RED_CARPET_DENIED: vital hypo safety zeroed SMB this tick — no restore (Proposed=${aimiFmt2(input.proposedUnits)} Gated=${aimiFmt2(gatedUnits)})"
@@ -364,7 +368,9 @@ internal object AimiSmbFinalizeMath {
             } else {
                 gatedUnits
             }
-            val maxSmbCap = if (input.maxSmbHb > input.baseLimit) input.maxSmbHb.toFloat() else input.baseLimit.toFloat()
+            // The same limit as the normal path on this tick (baseLimit already takes the high-BG MaxSMB
+            // when BG calls for it). Red Carpet no longer forces maxSmbHb at any BG.
+            val maxSmbCap = input.baseLimit.toFloat()
             var mealBolus = min(candidateUnits, maxSmbCap)
             val iobSpace = (input.maxIob - input.iob).coerceAtLeast(0.0)
             logs += "MEAL_DEBUG Need=${aimiFmt2(candidateUnits)} MaxSMB=${aimiFmt2(input.baseLimit)} MaxSMBHB=${aimiFmt2(input.maxSmbHb)} Cap=${aimiFmt2(maxSmbCap)} MaxIOB=${aimiFmt2(input.maxIob)} IOB=${aimiFmt2(input.iob)} Space=${aimiFmt2(iobSpace)}"
@@ -378,7 +384,6 @@ internal object AimiSmbFinalizeMath {
                 val reason = when {
                     input.isExplicitUserAction -> "UserAction"
                     isMealChaos -> "CarbChaos"
-                    isAimiContextMeal -> "ImplicitMeal:${input.mealSummary.ifBlank { "signals" }}"
                     else -> "MealMode/Context"
                 }
                 logs += "🍱 MEAL_FORCE_EXECUTED ($reason): ${aimiFmt2(finalUnits)} U (Overrides minor safety checks)"
