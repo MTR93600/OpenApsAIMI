@@ -502,10 +502,12 @@ class WatchDirect(
          * The watch waits this long before it sends a reading. The rest of the sensor's backfill
          * comes in the meantime, so the readings go in one message. The phone reads the sensor in
          * the same radio window and tells the watch within seconds that it has the value, so a
-         * phone that works gets nothing. While only the watch hears the sensor, the loop gets the value this
-         * much later. Not longer: the loop runs on each new value.
+         * phone that works gets nothing: in field logs it had the value about 2 s after the watch.
+         * While only the watch hears the sensor, the loop gets the value this much later. Not
+         * longer: the loop runs on each new value. Not much shorter: below about 10 s the watch
+         * would send most values the phone gets anyway.
          */
-        const val SEND_TO_PHONE_DELAY_MS = 30_000L
+        const val SEND_TO_PHONE_DELAY_MS = 15_000L
 
         /** The empty screen Wear OS settings put in place of a setting the watch does not have. */
         const val STAND_IN_SETTINGS_SCREEN = "FakeSettingsActivity"
