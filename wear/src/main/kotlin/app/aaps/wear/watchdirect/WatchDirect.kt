@@ -57,9 +57,10 @@ import kotlinx.coroutines.launch
  * The link needs Android 12 (the Bluetooth permissions it uses); an older watch reports
  * [EventData.CgmWatchState.NOT_SUPPORTED], so the phone shows it as not possible.
  *
- * Behaviour follows `G7WatchDirect` in nightscout/AndroidAPS pull request 5397 (commit
+ * Behaviour follows `G7WatchDirect` in nightscout/AndroidAPS pull request 5397 by t1dude (commit
  * `bec1b16ba20`), re-built on our own driver through [WatchSensorLink]. See the NOTICE file of this
- * module.
+ * module. Fixes by stavlor, and by olorinmaia: #250, and #251 (the watch sleeps between readings
+ * and wakes just before the sensor).
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -105,6 +106,9 @@ class WatchDirect(
     /** The readings the phone does not have yet, for the loop. Sent only when the phone asked. */
     private val forPhone = WatchReadingsForPhone()
     private var sendToPhoneJob: Job? = null
+
+    /** Waits while the link is down, then asks it to start again. See [WatchDirectRestart]. */
+    private var restartJob: Job? = null
 
     private val _status = MutableStateFlow(EventData.CgmWatchStatus(EventData.CgmWatchState.OFF))
 
@@ -176,7 +180,10 @@ class WatchDirect(
 
             override fun onConnected(connected: Boolean) {
                 scope.launch {
-                    if (connected) refusal = null
+                    if (connected) {
+                        refusal = null
+                        stopWatchingTheLink()
+                    } else watchTheLink()
                     report(describe())
                 }
             }
@@ -198,10 +205,59 @@ class WatchDirect(
                     connectAsked = link.pairAgain()
                     if (connectAsked) aapsLogger.info(LTag.WEAR, "Direct to watch: not paired yet, pairing started again after a restart")
                 }
-                WatchDirectService.start(context)
+                startService()
+                watchTheLink()
             }
             report(describe())
         }
+    }
+
+    /** True while direct to watch is on and its foreground service should run. */
+    @Volatile private var serviceWanted = false
+
+    private fun startService() {
+        serviceWanted = true
+        WatchDirectService.start(context, aapsLogger)
+    }
+
+    /** Android refused the service while the app was in the background: start it from the alarm of `ForegroundStart`. */
+    fun startServiceAgain() {
+        if (serviceWanted) WatchDirectService.start(context, aapsLogger, retryWhenRefused = false)
+    }
+
+    /**
+     * Start the wait of [WatchDirectRestart]: while the link stays down, ask it again each time the
+     * wait is over. One wait at a time: a call while one runs changes nothing, so the phone's
+     * repeated messages do not push the wait further out.
+     *
+     * Asking does nothing while the driver still has a session of its own, which is the normal case.
+     * The wait is counted while the watch is awake, so on a sleeping watch it can take longer.
+     */
+    private fun watchTheLink() {
+        if (restartJob?.isActive == true) return
+        restartJob = scope.launch {
+            while (true) {
+                delay(WatchDirectRestart.DOWN_BEFORE_ASKING_MS)
+                val link = link ?: return@launch
+                val ask = WatchDirectRestart.shouldAsk(
+                    hasSensor = link.address() != null,
+                    hasKey = link.hasKey(),
+                    paused = link.isPaused(),
+                    permitted = hasPermissions,
+                    bluetoothOn = bluetoothOn,
+                    connected = link.isConnected()
+                )
+                if (ask && link.resume()) {
+                    aapsLogger.info(LTag.WEAR, "Direct to watch: the link had stopped by itself, started again")
+                    report(describe())
+                }
+            }
+        }
+    }
+
+    private fun stopWatchingTheLink() {
+        restartJob?.cancel()
+        restartJob = null
     }
 
     /** After the wearer allowed Bluetooth on the watch's own screen. */
@@ -256,7 +312,8 @@ class WatchDirect(
                         connectAsked = true
                     }
                 }
-                WatchDirectService.start(context)
+                startService()
+                if (!link.isConnected()) watchTheLink()
             }
         } else {
             waitingForPermission = null
@@ -269,6 +326,8 @@ class WatchDirect(
             }
             connectAsked = false
             refusal = null
+            stopWatchingTheLink()
+            serviceWanted = false
             WatchDirectService.stop(context)
             clearLowAlarm()
         }

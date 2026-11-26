@@ -9,10 +9,13 @@ object Versions {
     const val versionCode = 1500
 
     const val compileSdk = 37
+    // Compose 1.13 needs 37.1 or later. Set through `compileSdk { release(..) { minorApiLevel } }`,
+    // the one form both the plain Android and the multiplatform library DSL have.
+    const val compileSdkMinor = 1
     const val minSdk = 31
     const val targetSdk = 35
     const val wearMinSdk = 30
-    const val wearTargetSdk = 30
+    const val wearTargetSdk = 31
 
     val javaVersion = JavaVersion.VERSION_21
     val jvmTarget = JvmTarget.JVM_21

@@ -14,7 +14,7 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
  * when the watch lets it go. The watch's readings stay on the watch, unless the phone asks for them
  * for the loop ([DexcomOnePlusIngest.mayFeedLoopFromWatch]).
  *
- * Behaviour follows the phone handover of nightscout/AndroidAPS pull request 5397
+ * Behaviour follows the phone handover of nightscout/AndroidAPS pull request 5397 by t1dude
  * (`G7WatchHandover`), re-written for this driver's sensor store and its two sensor slots.
  */
 object DexcomOnePlusWatchDirectRules {
