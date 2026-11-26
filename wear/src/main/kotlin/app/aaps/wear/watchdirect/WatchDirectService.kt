@@ -7,7 +7,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
+import app.aaps.core.interfaces.logging.AAPSLogger
+import app.aaps.wear.WearApp
 import app.aaps.wear.comm.DataLayerListenerServiceWear
+import app.aaps.wear.comm.ForegroundStart
 
 /**
  * Keeps the watch app a foreground service of type connectedDevice while it reads the sensor itself.
@@ -21,6 +24,8 @@ import app.aaps.wear.comm.DataLayerListenerServiceWear
  * Not always enough on its own: some watches still freeze the app when the screen dims unless its
  * battery use is unrestricted, see [WatchDirect.isBatteryUnrestricted]. The link itself lives in
  * [WatchDirect]; this service only holds the foreground state.
+ *
+ * Fixes by olorinmaia (#250, #251).
  */
 class WatchDirectService : Service() {
 
@@ -29,12 +34,15 @@ class WatchDirectService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // The channel this service had for itself before it shared the notification.
         getSystemService(NotificationManager::class.java).deleteNotificationChannel(OLD_CHANNEL_ID)
-        ServiceCompat.startForeground(
-            this,
-            DataLayerListenerServiceWear.FOREGROUND_NOTIF_ID,
-            DataLayerListenerServiceWear.foregroundNotification(this),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        )
+        // Android can restart this service by itself while the app is in the background, and may then refuse.
+        ForegroundStart.attempt(this, (application as WearApp).aapsLogger) {
+            ServiceCompat.startForeground(
+                this,
+                DataLayerListenerServiceWear.FOREGROUND_NOTIF_ID,
+                DataLayerListenerServiceWear.foregroundNotification(this),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        }
         return START_STICKY
     }
 
@@ -42,8 +50,9 @@ class WatchDirectService : Service() {
 
         private const val OLD_CHANNEL_ID = "AndroidAPS-WatchDirectService"
 
-        fun start(context: Context) {
-            context.startForegroundService(Intent(context, WatchDirectService::class.java))
+        /** @param retryWhenRefused see [ForegroundStart.attempt]. */
+        fun start(context: Context, aapsLogger: AAPSLogger, retryWhenRefused: Boolean = true) {
+            ForegroundStart.startService(context, Intent(context, WatchDirectService::class.java), aapsLogger, retryWhenRefused)
         }
 
         fun stop(context: Context) {

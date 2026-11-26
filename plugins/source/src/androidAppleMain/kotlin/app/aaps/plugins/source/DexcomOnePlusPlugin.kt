@@ -34,7 +34,6 @@ import app.aaps.core.interfaces.source.SensorSlot
 import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
-import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.BooleanNonKey
 import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.core.keys.interfaces.TextRef
@@ -79,6 +78,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -206,6 +207,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Watches who owns the radio, so both slots back off while a pump setup runs. */
     private var radioLeaseWatcher: Job? = null
 
+    /** How long the reconnect watchdog waits between two questions. Only a test changes it. */
+    internal var reconnectWatchdogMs = RECONNECT_WATCHDOG_MS
+
     /**
      * The last resort that brings a sensor back.
      *
@@ -298,8 +302,11 @@ class DexcomOnePlusPlugin @Inject constructor(
 
 
 
-    /** Collector that drives the safety basal guard from the warm-up state (cancelled in onStop). */
+    /** Runs [DexcomOnePlusWarmupBasalGuard] on every warm-up / connection change. Started in onStart, cancelled in onStop. */
     private var warmupGuardJob: Job? = null
+
+    /** True while the [DexcomOnePlusWarmupBasalGuard] collector runs. For tests. */
+    internal fun isWarmupGuardRunning(): Boolean = warmupGuardJob?.isActive == true
 
     /** Session start already checked by [healMissingSensorChange], so a deletion is not undone twice. */
     @Volatile
@@ -522,26 +529,40 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "autoResumeQueued=$autoResumeQueued " +
                 "stagingResumeQueued=$stagingResumeQueued",
         )
-        // SAFETY (DRAFT — see DexcomOnePlusWarmupBasalGuard): while warm-up is active and no glucose
-        // is available, revert the pump to profile basal (option b: only cancel a high residual temp).
-        // Driven by the warm-up state on ioScope so it works in standby without any Activity; stops
-        // forcing the moment warm-up ends (status → null), letting the normal loop reclaim dosing.
         watchRadioLease()
         watchStagingClock()
         watchIosPreSoakSwitch()
+        startWarmupBasalGuard()
         ioScope()?.let { watchHandover.start(it) }
+    }
+
+    /**
+     * While the sensor warms up or the link is (re)connecting, no glucose arrives and the APS does
+     * not run, so a high temp basal could keep running blind. On every change of that state the
+     * guard checks its conditions and may cancel a temp basal above profile, see
+     * [DexcomOnePlusWarmupBasalGuard]. It works in the background, with no screen open, and does
+     * nothing once a reading ends the warm-up (the state becomes null).
+     *
+     * A change is a change of the generic status or of the driver's status text, so a long
+     * reconnect that keeps reporting new attempts is checked again each time, also after the last
+     * glucose has become older than 7 minutes.
+     */
+    private fun startWarmupBasalGuard() {
         warmupGuardJob?.cancel()
         warmupGuardJob = ioScope()?.launch {
-            warmupStatus.collect { status ->
-                val scope = ioScope()
-                if (status != null && scope != null) {
-                    try {
-                        warmupBasalGuard.ensureProfileBasalDuringWarmup(this@DexcomOnePlusPlugin, scope)
-                    } catch (t: Throwable) {
-                        aapsLogger.error(LTag.BGSOURCE, "ONEPLUS_WARMUP_BASAL guard error: ${t.message}", t)
+            warmup
+                .map { state -> DexcomOnePlusWarmupMapper.toCgmWarmupStatus(state)?.let { status -> status to state.message } }
+                .distinctUntilChanged()
+                .collect { active ->
+                    val scope = ioScope()
+                    if (active != null && scope != null) {
+                        try {
+                            warmupBasalGuard.ensureProfileBasalDuringWarmup(this@DexcomOnePlusPlugin, scope)
+                        } catch (t: Throwable) {
+                            aapsLogger.error(LTag.BGSOURCE, "ONEPLUS_WARMUP_BASAL guard error: ${t.message}", t)
+                        }
                     }
                 }
-            }
         }
     }
 
@@ -944,24 +965,30 @@ class DexcomOnePlusPlugin @Inject constructor(
     }
 
     /**
-     * Asks for a connection again when the session has been down for a while.
+     * Asks for a connection again, and again, while the session stays down.
      *
      * One watch at a time: a new one replaces the old, so a session that flaps does not leave a
      * queue behind. It does nothing when the driver has already brought the session back by itself,
      * which is the normal case, and nothing when no sensor is stored.
+     *
+     * It keeps asking until the session is up. A new session that ends before its link is up
+     * reports an error and no "session down", so nothing would arm a second watch: after one
+     * question the phone waited for ever (field log 26/11/2026).
      */
     private fun armReconnectWatchdog() {
         reconnectWatchdog?.cancel()
         reconnectWatchdog = ioScope()?.launch {
-            delay(RECONNECT_WATCHDOG_MS)
-            if (driver.isSessionUp()) return@launch
-            val real = driver
-            aapsLogger.info(
-                LTag.BGSOURCE,
-                "DEXCOM_ONEPLUS_SESSION: session still down after ${RECONNECT_WATCHDOG_MS / 60_000} min, asking again",
-            )
-            host.attachPlatform(real)
-            real.resumeStoredSession()
+            while (true) {
+                delay(reconnectWatchdogMs)
+                if (driver.isSessionUp()) return@launch
+                val real = driver
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "DEXCOM_ONEPLUS_SESSION: session still down after ${reconnectWatchdogMs / 60_000} min, asking again",
+                )
+                host.attachPlatform(real)
+                real.resumeStoredSession()
+            }
         }
     }
 
@@ -979,18 +1006,21 @@ class DexcomOnePlusPlugin @Inject constructor(
      */
     private fun armStagingReconnectWatchdog() {
         val next = ioScope()?.launch {
-            delay(RECONNECT_WATCHDOG_MS)
-            if (!host.supportsStaging) return@launch
-            if (stagingDriver.isSessionUp()) return@launch
-            if (!stagingStore.loadSlotPresent()) return@launch
-            aapsLogger.info(
-                LTag.BGSOURCE,
-                "DEXCOM_ONEPLUS_STAGING: session still down after ${RECONNECT_WATCHDOG_MS / 60_000} min, asking again",
-            )
-            val real = stagingDriver
-            host.attachPlatform(real)
-            real.addWatcher(stagingWatcher)
-            real.resumeStoredSession()
+            // Keeps asking, see armReconnectWatchdog.
+            while (true) {
+                delay(reconnectWatchdogMs)
+                if (!host.supportsStaging) return@launch
+                if (stagingDriver.isSessionUp()) return@launch
+                if (!stagingStore.loadSlotPresent()) return@launch
+                aapsLogger.info(
+                    LTag.BGSOURCE,
+                    "DEXCOM_ONEPLUS_STAGING: session still down after ${reconnectWatchdogMs / 60_000} min, asking again",
+                )
+                val real = stagingDriver
+                host.attachPlatform(real)
+                real.addWatcher(stagingWatcher)
+                real.resumeStoredSession()
+            }
         } ?: return
         val previous = stagingWatchdogLock.withLock {
             val old = stagingReconnectWatchdog
@@ -1580,7 +1610,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             )
             return
         }
-        // Collect-only: buffer for QA / dashboard, NEVER insertCgmSourceData (invariant I2).
+        // Collect-only: kept in the local buffer, NEVER passed to insertCgmSourceData.
         stagingBufferLock.withLock {
             stagingBuffer.addLast(sample.timestampMs to sample.mgdl)
             while (stagingBuffer.size > STAGING_BUFFER_CAP) stagingBuffer.removeFirst()
@@ -1591,7 +1621,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         stagingValidEgvCount++
         stagingLastValueMgdl = sample.mgdl
         stagingLastValueAtMs = sample.timestampMs
-        // Survive a restart with the promotion gate intact (the count is the gate, plan §8).
+        // Survive a restart with the promotion gate intact (the count is the gate).
         stagingStore.saveSlotProgress(
             present = true,
             validEgvCount = stagingValidEgvCount,
