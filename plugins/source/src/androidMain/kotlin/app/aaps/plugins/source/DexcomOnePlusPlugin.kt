@@ -268,6 +268,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             aapsLogger = aapsLogger,
             transport = host.watchTransport(rxBus),
             productionSession = { sensorStore.load() },
+            productionRefusals = { sensorStore.loadAuthRefusals() },
             wearPluginEnabled = ::wearPluginEnabled,
             onWatchReadings = ::onWatchReadings,
         )

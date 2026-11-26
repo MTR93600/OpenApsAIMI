@@ -8,6 +8,7 @@ import app.aaps.core.keys.interfaces.Preferences
 import app.aaps.plugins.dexcomoneplus.OnePlusDisplaySlot
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -56,6 +57,7 @@ data class DexcomOnePlusWatchReport(val status: EventData.CgmWatchStatus, val re
  *
  * @param transport null on a phone without a watch link, which makes every call here a no-op.
  * @param productionSession reads the production slot's stored sensor, live, on every call.
+ * @param productionRefusals reads the production slot's refusals in a row, live, on every call.
  * @param wearPluginEnabled whether the Wear plugin is on. Without it no message reaches a watch, so
  *   the feature is not offered (see [isOffered]).
  * @param onWatchReadings gets the watch's readings that passed the checks, for the loop.
@@ -66,6 +68,7 @@ class DexcomOnePlusWatchHandover(
     private val aapsLogger: AAPSLogger,
     private val transport: DexcomOnePlusWatchTransport?,
     private val productionSession: () -> OnePlusStoredSession?,
+    private val productionRefusals: () -> OnePlusAuthRefusals = { OnePlusAuthRefusals() },
     private val wearPluginEnabled: () -> Boolean = { true },
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val onWatchReadings: (List<OnePlusGlucoseSample>) -> Unit = {},
@@ -97,7 +100,7 @@ class DexcomOnePlusWatchHandover(
     val readingsToLoop: Boolean get() = preferences.get(DexcomOnePlusBooleanKey.WatchReadingsToLoop)
 
     /** True when the production sensor can be handed to the watch right now. */
-    fun isAvailable(): Boolean = DexcomOnePlusWatchDirectRules.isAvailable(DexcomOnePlusWatchDirectRules.sensorOf(productionSession()))
+    fun isAvailable(): Boolean = DexcomOnePlusWatchDirectRules.isAvailable(DexcomOnePlusWatchDirectRules.sensorOf(productionSession(), productionRefusals()))
 
     fun start(scope: CoroutineScope) {
         if (transport == null) return
@@ -141,7 +144,7 @@ class DexcomOnePlusWatchHandover(
     }
 
     private fun wanted(): EventData.CgmWatchDirect =
-        DexcomOnePlusWatchDirectRules.wanted(isEnabled, DexcomOnePlusWatchDirectRules.sensorOf(productionSession()), readingsToLoop)
+        DexcomOnePlusWatchDirectRules.wanted(isEnabled, DexcomOnePlusWatchDirectRules.sensorOf(productionSession(), productionRefusals()), readingsToLoop)
 
     private fun send(message: EventData.CgmWatchDirect, reason: String) {
         val link = transport ?: return
