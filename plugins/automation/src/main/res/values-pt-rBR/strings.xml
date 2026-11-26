@@ -1,95 +1,167 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="automation">Automatização</string>
-    <string name="automation_missing_task_name">Insira um nome da tarefa.</string>
-    <string name="automation_missing_trigger">Especifique pelo menos um gatilho.</string>
-    <string name="automation_missing_action">Especifique pelo menos uma acção.</string>
+    <string name="automation">Automação</string>
+    <string name="automation_enabled">Ativada</string>
+    <string name="automation_read_only">Apenas leitura</string>
+    <string name="automation_new_rule">Nova regra</string>
+    <string name="automation_empty_desc">Crie uma regra para automatizar ações com base em gatilhos.</string>
+    <string name="automation_edit_rule">Editar regra</string>
+    <string name="automation_discard_title">Descartar alterações?</string>
+    <string name="automation_discard_message">A regra está incompleta e não pode ser salva. Descartar as alterações?</string>
+    <string name="automation_discard_confirm">Descartar</string>
+    <string name="automation_category_time">Hora e agendamento</string>
+    <string name="automation_category_glucose">Glicose e tratamento</string>
+    <string name="automation_category_device">Estado do dispositivo</string>
+    <string name="automation_category_sensors">Sensores e conectividade</string>
+    <string name="automation_category_other">Outro</string>
+    <string name="automation_choose_trigger">Adicionar gatilho</string>
+    <string name="automation_add_group">Grupo</string>
+    <string name="automation_choose_action">Adicionar ação</string>
+    <string name="automation_category_targets">Metas</string>
+    <string name="automation_category_profile">Perfil</string>
+    <string name="automation_category_loop">Loop e insulina</string>
+    <string name="automation_category_alerts">Alertas</string>
+    <string name="automation_category_system">Sistema</string>
+    <string name="automation_category_scenes">Cenas</string>
+    <string name="action_run_scene">Executar cena</string>
+    <string name="action_run_scene_short">Executar cena: %1$s</string>
+    <string name="action_enable_scene">Ativar cena</string>
+    <string name="action_enable_scene_short">Ativar cena: %1$s</string>
+    <string name="action_disable_scene">Desativar cena</string>
+    <string name="action_disable_scene_short">Desativar cena: %1$s</string>
+    <string name="action_scene_label">Cena</string>
+    <string name="trigger_scene_active">Cena</string>
+    <string name="trigger_scene_active_compared">Cena %1$s</string>
+    <string name="action_scene_not_found">Cena não encontrada</string>
+    <string name="action_scene_disabled">A cena está desativada</string>
+    <string name="automation_unit_meters">m</string>
+    <string name="automation_unit_bpm">bpm</string>
+    <string name="automation_missing_task_name">Por favor, insira um nome para a tarefa.</string>
+    <string name="automation_missing_trigger">Por favor, especifique pelo menos um gatilho.</string>
+    <string name="automation_missing_action">Por favor, especifique pelo menos uma ação.</string>
+    <string name="exportsettings_message">Exportação de configurações: %1$s</string>
+    <string name="export_settings_short">Texto nos tratamentos:</string>
     <string name="alarm_message">Alarme: %1$s</string>
     <string name="alarm_short">Alarme:</string>
-    <string name="message_short">Mnsg:</string>
+    <string name="message_short">Msg:</string>
     <string name="notification_message">Notificação: %1$s</string>
     <string name="profilename">Alterar perfil para</string>
     <string name="changengetoprofilename">Alterar perfil para %1$s</string>
-    <string name="automation_trigger_pump_last_connection_label">Última ligação com a bomba</string>
-    <string name="automation_trigger_pump_last_connection_compared">Última ligação com a bomba %1$s %2$s min atrás</string>
+    <string name="automation_trigger_pump_last_connection_label">Última conexão com a bomba</string>
+    <string name="automation_trigger_pump_last_connection_compared">Última conexão com a bomba %1$s há %2$s min</string>
     <string name="alreadyset">Já definido</string>
-    <string name="profilepercentage">Percentagem do Perfil</string>
+    <string name="profilepercentage">Percentagem do perfil</string>
     <string name="startprofileforever">Iniciar perfil %1$d%%</string>
     <string name="sendsmsactionlabel">Enviar SMS: %1$s</string>
     <string name="sendsmsactiondescription">Enviar SMS para todos os números</string>
-    <string name="sendsmsactiontext">Enviar SMS com texto</string>
-    <string name="starttemptarget">Iniciar Alvo Temp</string>
+    <string name="sendsmsactiontext">Enviar SMS com o texto</string>
+    <string name="starttemptarget">Iniciar meta temporária</string>
     <string name="islesser">é menor que</string>
-    <string name="isequalorlesser">é igual ou menor que</string>
+    <string name="isequalorlesser">é menor ou igual a</string>
     <string name="isequal">é igual a</string>
-    <string name="isequalorgreater">é igual ou maior que</string>
+    <string name="isequalorgreater">é maior ou igual a</string>
     <string name="isgreater">é maior que</string>
     <string name="isnotavailable">não está disponível</string>
-    <string name="glucoseisnotavailable">Glicose não está disponível</string>
+    <string name="glucoseisnotavailable">A glicose não está disponível</string>
     <string name="glucosecomparedmgdl">Glicose %1$s %2$.0f %3$s</string>
     <string name="glucosecomparedmmol">Glicose %1$s %2$.1f %3$s</string>
-    <string name="notemptarget">Alvo Temporário não existe</string>
-    <string name="temptargetcomparedmgdl">Alvo Temporário %1$s %2$.0f %3$s</string>
-    <string name="temptargetcomparedmmol">Alvo Temporário %1$s %2$.1f %3$s</string>
-    <string name="percentagecompared">Percentagem Perfil  %1$s %2$d</string>
+    <string name="notemptarget">Meta temporária não existe</string>
+    <string name="temptargetcomparedmgdl">Meta temporária %1$s %2$.0f %3$s</string>
+    <string name="temptargetcomparedmmol">Meta temporária %1$s %2$.1f %3$s</string>
+    <string name="percentagecompared">Pct do perfil %1$s %2$d</string>
     <string name="iobcompared">IOB %1$s %2$.1f</string>
     <string name="or">Ou</string>
-    <string name="xor">Exclusivo ou</string>
+    <string name="xor">Ou exclusivo</string>
     <string name="atspecifiedtime">Às %1$s</string>
-    <string name="onconnect">Ao ligar</string>
-    <string name="ondisconnect">Ao desligar</string>
+    <string name="onconnect">Ao conectar</string>
+    <string name="ondisconnect">Ao desconectar</string>
     <string name="short_avgdelta">Delta médio curto</string>
     <string name="long_avgdelta">Delta médio longo</string>
     <string name="delta">Delta</string>
     <string name="locationis">%1$s %2$s</string>
     <string name="location_inside">Quando estiver dentro da área</string>
     <string name="location_outside">Quando estiver fora da área</string>
-    <string name="location_going_in">Quando entrar na área definida</string>
-    <string name="location_going_out">Quando sair da área definida</string>
+    <string name="location_going_in">Quando entrar na área chamada</string>
+    <string name="location_going_out">Quando sair da área chamada</string>
     <string name="time_range">Intervalo de tempo</string>
-    <string name="timerange_value">O tempo está entre %1$s e %2$s</string>
+    <string name="timerange_value">A hora está entre %1$s e %2$s</string>
     <string name="add_short">ADICIONAR</string>
-    <string name="temptargetcompared">Alvo Temp %1$s</string>
-    <string name="btdevicecompared">Ligação Bluetooth com o dispositivo %1$s %2$s</string>
-    <string name="btdevice">Ligação ao dispositivo Bluetooth </string>
-    <string name="wifissidcompared">WiFi SSID %1$s %2$s</string>
+    <string name="temptargetcompared">Meta temporária %1$s</string>
+    <string name="btdevicecompared">Conexão Bluetooth ao dispositivo %1$s %2$s</string>
+    <string name="btdevice">Conexão ao dispositivo Bluetooth </string>
+    <string name="wifissidcompared">SSID do Wi-Fi %1$s %2$s</string>
     <string name="autosenscompared">Autosens %1$s %2$s %%</string>
     <string name="autosenslabel">Autosens %</string>
     <string name="deltacompared">%3$s %1$s %2$s</string>
-    <string name="deltalabel">Diferença de Glic.</string>
-    <string name="currentlocation">Localização actual</string>
+    <string name="deltalabel">Diferença de glicemia</string>
+    <string name="currentlocation">Localização atual</string>
     <string name="location">Localização</string>
-    <string name="lastboluslabel">Último bolus atrás</string>
-    <string name="lastboluscompared">Última vez do bolus %1$s %2$s atrás</string>
-    <string name="triggercoblabel">CA</string>
+    <string name="lastboluslabel">Tempo desde o último bolus</string>
+    <string name="lastboluscompared">Hora do último bolus %1$s há %2$s min</string>
+    <string name="triggercoblabel">COB</string>
     <string name="cobcompared">COB %1$s %2$.0f</string>
     <string name="triggerHeartRate">Frequência cardíaca</string>
     <string name="triggerHeartRateDesc">FC %1$s %2$.0f</string>
-    <string name="recurringTime">Tempo recorrente</string>
-    <string name="every">Todo</string>
+    <string name="triggerSensorAgeLabel">Idade do sensor</string>
+    <string name="triggerSensorAgeDesc">Idade do sensor %1$s %2$.1f hora(s)</string>
+    <string name="triggerCannulaAgeLabel">Idade da cânula</string>
+    <string name="triggerCannulaAgeDesc">Idade da cânula %1$s %2$.1f hora(s)</string>
+    <string name="triggerPodChangeLabel">Ativação do Pod</string>
+    <string name="triggerPodChangeDesc">Pod ativado</string>
+    <string name="triggerInsulinAgeLabel">Idade da insulina</string>
+    <string name="triggerInsulinAgeDesc">Idade da insulina %1$s %2$.1f hora(s)</string>
+    <string name="triggerPumpBatteryAgeLabel">Idade da bateria da bomba</string>
+    <string name="triggerPumpBatteryAgeDesc">Idade da bateria da bomba %1$s %2$.1f hora(s)</string>
+    <string name="triggerReservoirLevelLabel">Nível do reservatório</string>
+    <string name="triggerReservoirLevelDesc">Nível do reservatório %1$s %2$.0f</string>
+    <string name="triggerPumpBatteryLevelLabel">Nível da bateria da bomba</string>
+    <string name="triggerPumpBatteryLevelDesc">Nível da bateria da bomba %1$s %2$.0f</string>
+    <string name="recurringTime">Horário recorrente</string>
+    <string name="every">A cada</string>
     <string name="never">Nunca</string>
     <string name="condition">Condição:</string>
     <string name="action">Ação:</string>
-    <string name="taskname">Nome da Tarefa</string>
+    <string name="taskname">Nome da tarefa</string>
     <string name="edit_short">EDITAR</string>
-    <string name="preconditions">Precondições:</string>
-    <string name="user_action">Ação do usuário</string>
-    <string name="system_automation">Automação do Sistema</string>
+    <string name="preconditions">Pré-condições:</string>
+    <string name="user_action">Ação do utilizador</string>
+    <string name="system_automation">Automação do sistema</string>
     <string name="run_automations">Executar automações</string>
     <string name="add_automation">Adicionar regra</string>
     <string name="stop_processing">Parar processamento</string>
-    <!--    Reminders-->
-    <string name="time_to_eat">Hora de comer!\nAbra o assistente de bolus e faça o cálculo novamente.</string>
-    <string name="time_to_bolus">Hora do bolus!\nAbra o assistente de bolus e faça o cálculo novamente.</string>
-    <string name="error_setting_reminder">Erro ao definir alarme futuro</string>
+
+    <!--    Lembretes-->
+    <string name="time_to_eat">Hora de comer!\nExecute o assistente de bolus e calcule novamente.</string>
+    <string name="time_to_bolus">Hora do bolus!\nExecute o assistente de bolus e calcule novamente.</string>
+    <string name="error_setting_reminder">Erro ao definir o alarme futuro</string>
+
     <!--    Autotune-->
+    <string name="autotune_profile_name">Perfil do Autotune %1$s</string>
     <string name="autotune_run">Executar Autotune</string>
-    <string name="autotune_run_without_autoswitch">Autotune executado sem troca de perfil</string>
-    <string name="autotune_run_with_autoswitch">Autotune executado e perfil alterado automaticamente</string>
+    <string name="autotune_run_without_autoswitch">O Autotune foi executado sem alteração de perfil</string>
+    <string name="autotune_run_with_autoswitch">O Autotune foi executado e o perfil foi alterado automaticamente</string>
     <string name="autotune_run_with_error">Erro durante a última execução do Autotune</string>
-    <string name="autotune_run_cancelled">Outra execução de Autotune foi detectada, execução cancelada</string>
-    <!--    Steps count-->
-    <!--    SMB mode-->
-    <!--    Map Picker (OpenStreetMap)-->
-    <!-- Permission rationales -->
+    <string name="autotune_run_cancelled">Outra execução do Autotune foi detetada, execução cancelada</string>
+
+    <!--    Contagem de passos-->
+    <string name="triggerStepsCountLabel">Contagem de passos</string>
+    <string name="triggerStepsCountDesc">Contagem de passos a cada %1$s minutos %2$s %3$.0f</string>
+    <string name="triggerStepsCountDropdownLabel">Duração da medição</string>
+
+    <!--    Modo SMB-->
+    <string name="changeSmbState">Ativar/desativar SMB</string>
+    <string name="changeSmbTo">Alterar SMB para %1$s</string>
+    <string name="newSmbMode">Novo modo SMB:</string>
+    <string name="on">LIGADO</string>
+    <string name="off">DESLIGADO</string>
+
+    <!--    Seletor de Mapa (OpenStreetMap)-->
+    <string name="pick_from_map">Escolher no mapa</string>
+    <string name="tap_to_select_location">Toque no mapa para selecionar uma localização</string>
+    <string name="selected_coords">Selecionado: %1$.6f, %2$.6f</string>
+    <!-- Justificativas de permissões -->
+    <string name="permission_location_title">Localização</string>
+    <string name="permission_location_description">Necessário para gatilhos de automação baseados em localização e identificação da rede Wi-Fi</string>
+    <string name="permission_background_location_description">Necessário para que os gatilhos de automação funcionem quando a aplicação estiver em segundo plano</string>
+
 </resources>
