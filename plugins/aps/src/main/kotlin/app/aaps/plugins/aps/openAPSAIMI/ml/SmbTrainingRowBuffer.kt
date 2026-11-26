@@ -135,15 +135,31 @@ internal class SmbTrainingRowBuffer(
      *
      * A row leaves with the outcome it got inside the window, or with an empty outcome field if it
      * got none. Rows still inside their window stay here.
+     *
+     * Every row is checked, not only the first one. The loop used to stop at the first row still in
+     * its window, so one row with a time in the future (the phone clock went back) held every row
+     * behind it until the queue cap pushed it out, about 64 ticks later. A row more than
+     * [FUTURE_TOLERANCE_MS] in the future leaves at once with an empty outcome: its age cannot be
+     * trusted, so any glucose matched to it later would be a wrong outcome.
      */
     @Synchronized
     fun drainWritableRows(nowMs: Long): List<String> {
         val out = mutableListOf<String>()
-        while (true) {
-            val head = pending.firstOrNull() ?: break
-            if (nowMs - head.timestampMs <= OUTCOME_HORIZON_MAX_MS) break
-            pending.removeFirst()
-            out.add(render(head))
+        val iterator = pending.iterator()
+        while (iterator.hasNext()) {
+            val row = iterator.next()
+            val age = nowMs - row.timestampMs
+            when {
+                age > OUTCOME_HORIZON_MAX_MS -> {
+                    iterator.remove()
+                    out.add(render(row))
+                }
+
+                age < -FUTURE_TOLERANCE_MS   -> {
+                    iterator.remove()
+                    out.add(render(row.copy(bgRealisedAfter = null)))
+                }
+            }
         }
         return out
     }
@@ -192,6 +208,12 @@ internal class SmbTrainingRowBuffer(
         const val OUTCOME_HORIZON_MS = 30L * 60_000
         const val OUTCOME_HORIZON_MIN_MS = 20L * 60_000
         const val OUTCOME_HORIZON_MAX_MS = 45L * 60_000
+
+        /**
+         * A row stamped more than this after "now" comes from a clock that went back. It is written at
+         * once with no outcome instead of waiting. A few minutes cover the normal jitter of the tick time.
+         */
+        const val FUTURE_TOLERANCE_MS = 5L * 60_000
 
         /** About four hours of five-minute ticks. A safety cap, not a working size. */
         const val MAX_PENDING_ROWS = 64

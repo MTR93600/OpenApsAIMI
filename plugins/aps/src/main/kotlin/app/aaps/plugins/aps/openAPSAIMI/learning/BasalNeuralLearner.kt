@@ -747,8 +747,12 @@ class BasalNeuralLearner @Inject constructor(
      * [OUTCOME_HORIZON_MS] ago. Samples outside the acceptance window are left unrealised rather than
      * labelled with a stale reading.
      */
-    private fun fillRealisedOutcomes(nowMs: Long, observedBg: Double) {
+    internal fun fillRealisedOutcomes(nowMs: Long, observedBg: Double) {
         if (!observedBg.isFinite() || observedBg <= 0.0) return
+        // A sample stamped well after "now" comes from a clock that went back. Its age cannot be
+        // trusted: once the clock caught up it would get the glucose of the wrong moment as its
+        // outcome, and the hypo governance would count it. It is dropped instead.
+        governanceWindow.removeAll { it.realisedBgAfter == null && it.timestamp - nowMs > FUTURE_TOLERANCE_MS }
         governanceWindow.forEach { sample ->
             if (sample.realisedBgAfter != null) return@forEach
             val age = nowMs - sample.timestamp
@@ -981,6 +985,22 @@ class BasalNeuralLearner @Inject constructor(
         }
     }
 
+    /** Tests only: governance samples at [timestamps] (newest last), none with an outcome yet. */
+    internal fun seedUnrealisedGovernanceSamplesForTesting(timestamps: List<Long>, bg: Double = 120.0) {
+        governanceWindow.clear()
+        timestamps.forEach { ts ->
+            governanceWindow.addFirst(
+                LearningSample(
+                    timestamp = ts, bgBefore = bg, bgAfter = bg, targetBg = 100.0,
+                    deltaMgDl = 0.0, iobUnits = 0.0, sensorNoise = 0.0, shortMinPredBg = null,
+                )
+            )
+        }
+    }
+
+    /** Tests only: the timestamps of the governance samples and whether each has an outcome, newest first. */
+    internal fun governanceSamplesForTesting(): List<Pair<Long, Boolean>> = governanceWindow.map { it.timestamp to (it.realisedBgAfter != null) }
+
     /**
      * Resets governance + heuristic factors (for unit tests).
      */
@@ -1107,6 +1127,9 @@ class BasalNeuralLearner @Inject constructor(
         const val OUTCOME_HORIZON_MS = 30L * 60_000
         const val OUTCOME_HORIZON_MIN_MS = 20L * 60_000
         const val OUTCOME_HORIZON_MAX_MS = 45L * 60_000
+
+        /** A sample stamped more than this after "now" is from a clock that went back. Same as the SMB queue. */
+        const val FUTURE_TOLERANCE_MS = 5L * 60_000
         const val GOVERNANCE_LOG_MIN_MS = 5 * 60 * 1000L
 
         const val GOVERNANCE_WEIGHT_NOISE_TIER3 = 0.35
