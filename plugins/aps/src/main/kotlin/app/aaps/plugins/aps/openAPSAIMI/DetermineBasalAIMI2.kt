@@ -177,6 +177,7 @@ import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionMemory
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhase
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionPhaseEngine
 import app.aaps.plugins.aps.openAPSAIMI.physio.MealAbsorptionRuntime
+import app.aaps.plugins.aps.openAPSAIMI.safety.RedCarpetPolicy
 import app.aaps.plugins.aps.openAPSAIMI.safety.SmbRestoreCeiling
 import app.aaps.plugins.aps.openAPSAIMI.safety.SmbSwitchGate
 import app.aaps.plugins.aps.openAPSAIMI.physio.PhysiologicalPhaseClassifier
@@ -7743,12 +7744,19 @@ class DetermineBasalaimiSMB2 @Inject constructor(
             shortAvgDeltaMgdlPer5 = shortAvgDelta.toDouble(),
         )
 
-        val isRedCarpetSituation =
-            isExplicitAction ||
-                anyMealModeForGuard ||
-                implicitMealCorrection.redCarpetEligible ||
-                isConfirmedHighRiseLocal ||
-                (isMealChaos && smbExecution.finalSmb > 0.5)
+        // Red Carpet only on a meal the person declared, see RedCarpetPolicy. A meal guessed from a rise
+        // (implicit meal context, confirmed high rise) goes through the normal guards with no restore.
+        val isRedCarpetSituation = RedCarpetPolicy.allowed(
+            explicitUserAction = isExplicitAction,
+            declaredMealMode = anyMealModeForGuard,
+            declaredCarbsRise = isMealChaos && smbExecution.finalSmb > 0.5,
+        )
+        if (!isRedCarpetSituation && (implicitMealCorrection.redCarpetEligible || isConfirmedHighRiseLocal)) {
+            consoleLog.add(
+                "🍽️ IMPLICIT_MEAL_NO_REDCARPET ${implicitMealCorrection.summary().ifBlank { "confirmed rise" }} " +
+                    "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} sΔ=${"%.1f".format(shortAvgDelta)})"
+            )
+        }
 
         val gatedUnits = smbToGiveLocal
         val proposedUnits = smbExecution.finalSmb.toFloat()
@@ -7778,12 +7786,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         val suppressRedCarpetRestoreV3 = stackingEvalV3.suppressRedCarpetRestore
 
         if (isRedCarpetSituation && proposedUnits > 0.0) {
-            if (implicitMealCorrection.redCarpetEligible && !anyMealModeForGuard && !isExplicitAction) {
-                consoleLog.add(
-                    "🍽️ IMPLICIT_MEAL_REDCARPET ${implicitMealCorrection.summary().ifBlank { "signals" }} " +
-                        "(BG=${"%.0f".format(bg)} Δ=${"%.1f".format(delta)} sΔ=${"%.1f".format(shortAvgDelta)})"
-                )
-            }
             val baseRestoreThreshold = 0.60f
             val restoreThreshold = if (isAggressivePriorityContext && pkpdReliefEnabled) {
                 max(baseRestoreThreshold, redCarpetRestoreThresholdPref)
@@ -7817,7 +7819,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 gatedUnits
             }
 
-            val redCarpetMaxSmb = max(currentMaxSmb, maxSMBHB)
+            // The same MaxSMB as the normal path on this tick: the ladder already picks the high-BG
+            // ceiling when BG and the rise call for it. Red Carpet no longer forces it at any BG.
+            val redCarpetMaxSmb = currentMaxSmb
             var mealBolus = min(candidateUnits.toDouble(), redCarpetMaxSmb).toFloat()
 
             val iobSpace = (effectiveMaxIobForDebridage - this.iob).coerceAtLeast(0.0)
@@ -7835,7 +7839,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val reason = when {
                     isExplicitAction -> "UserAction"
                     isMealChaos -> "CarbChaos"
-                    implicitMealCorrection.redCarpetEligible -> "ImplicitMeal:${implicitMealCorrection.summary().ifBlank { "signals" }}"
                     else -> "MealMode"
                 }
                 consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(smbToGiveLocal)} U (Overrides minor safety checks)")
@@ -15546,19 +15549,22 @@ class DetermineBasalaimiSMB2 @Inject constructor(
         // Helper interne pour vérifier AIMI Context (RContext) - supposer true si mealData indique un repas récent
         // Dans une implémentation idéale, on injecterait le ContextRepository, mais ici on utilise les proxies disponibles
         // 🐛 FIX: 'mealData.isMealStart' n'existe pas. On utilise la variable locale 'isMealActive' calculée plus haut.
-        val isAimiContextMeal = !isExplicitUserAction && mealCorrectionContext.redCarpetEligible
-
-        val isRedCarpetSituation = isExplicitUserAction || isMealModeCondition() || isAimiContextMeal || ((isMealChaos || isMealActive) && proposedUnits > 0.5f)
+        // Red Carpet only on a meal the person declared, see RedCarpetPolicy. The implicit meal context
+        // (a meal guessed from a rise) no longer opens it.
+        val isRedCarpetSituation = RedCarpetPolicy.allowed(
+            explicitUserAction = isExplicitUserAction,
+            declaredMealMode = isMealModeCondition() || (isMealActive && proposedUnits > 0.5f),
+            declaredCarbsRise = isMealChaos && proposedUnits > 0.5f,
+        )
+        if (!isRedCarpetSituation && !isExplicitUserAction && mealCorrectionContext.redCarpetEligible) {
+            consoleLog.add(
+                "🍽️ IMPLICIT_MEAL_NO_REDCARPET ${mealCorrectionContext.summary().ifBlank { "signals" }} " +
+                    "(BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} sΔ=${"%.1f".format(this.shortAvgDelta)})"
+            )
+        }
 
         // On entre dans la logique forcée si on est en situation "Red Carpet" et qu'il y a une demande
         if (isRedCarpetSituation && proposedUnits > 0.0 && !iobSurveillanceSuppressRedCarpet) {
-            if (isAimiContextMeal && !isMealModeCondition()) {
-                consoleLog.add(
-                    "🍽️ IMPLICIT_MEAL_REDCARPET ${mealCorrectionContext.summary().ifBlank { "signals" }} " +
-                        "(BG=${"%.0f".format(this.bg)} Δ=${"%.1f".format(this.delta)} sΔ=${"%.1f".format(this.shortAvgDelta)})"
-                )
-            }
-            
             // 1. Restauration de la demande
             // Si les sécurités MINEURES (throttle, refractory, damping) ont coupé plus de 40% du bolus,
             // on restaure la demande initiale. Un zéro posé par une sécurité VITALE (protection hypo,
@@ -15578,8 +15584,9 @@ class DetermineBasalaimiSMB2 @Inject constructor(
 
             // 2. Appliquer les Sécurités VITALES (Hard Caps uniquement)
             
-            // a. Cap MaxSMB - On utilise MaxSMBHB (High) si dispo, sinon config standard
-            val maxSmbCap = if (maxSMBHB > baseLimit) maxSMBHB.toFloat() else baseLimit.toFloat()
+            // a. Cap MaxSMB: the same limit as the normal path on this tick (baseLimit already takes the
+            // high-BG MaxSMB when BG calls for it). Red Carpet no longer forces maxSMBHB at any BG.
+            val maxSmbCap = baseLimit.toFloat()
             var mealBolus = min(candidateUnits, maxSmbCap)
 
             // b. Cap MaxIOB (Sécurité Ultime) - On ne s'autorise à remplir QUE l'espace disponible
@@ -15603,7 +15610,6 @@ class DetermineBasalaimiSMB2 @Inject constructor(
                 val reason = when {
                     isExplicitUserAction -> "UserAction"
                     isMealChaos -> "CarbChaos"
-                    isAimiContextMeal -> "ImplicitMeal:${mealCorrectionContext.summary().ifBlank { "signals" }}"
                     else -> "MealMode/Context"
                 }
                 consoleLog.add("🍱 MEAL_FORCE_EXECUTED ($reason): ${"%.2f".format(finalUnits)} U (Overrides minor safety checks)")
