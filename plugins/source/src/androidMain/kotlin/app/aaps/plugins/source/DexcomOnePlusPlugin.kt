@@ -277,6 +277,29 @@ class DexcomOnePlusPlugin @Inject constructor(
     /** Runs [DexcomOnePlusWarmupBasalGuard] on every warm-up / connection change. Started in onStart, cancelled in onStop. */
     private var warmupGuardJob: Job? = null
 
+    private val _feed = MutableStateFlow(DexcomOnePlusFeedState(DexcomOnePlusFeed.NONE))
+
+    /** Where the loop's glucose comes from now, for the Status screen. See [DexcomOnePlusFeed]. */
+    internal val feed: StateFlow<DexcomOnePlusFeedState> = _feed.asStateFlow()
+
+    /** Checks [feed] every minute, so the watch-only alert comes on time and goes when nothing arrives. */
+    private var feedJob: Job? = null
+
+    /**
+     * Updates [feed] and the watch-only notice: silent at first, with a sound after
+     * [DexcomOnePlusFeed.WATCH_ONLY_ALERT_MS], gone when the phone hears the sensor again or when the
+     * watch stops too (then the usual signal loss alarm takes over).
+     */
+    private fun refreshFeed() {
+        val now = nowMs()
+        val state = sensorAlertsLock.withLock { sensorAlerts.feed(now) }
+        val previous = _feed.value
+        _feed.value = state
+        if (state.feed != previous.feed) aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_FEED: ${previous.feed} -> ${state.feed} since=${state.watchOnlySinceMs}")
+        val since = state.watchOnlySinceMs.takeIf { state.feed == DexcomOnePlusFeed.WATCH_ONLY }
+        host.showWatchOnly(since, state.alert(now))
+    }
+
     /** True while the [DexcomOnePlusWarmupBasalGuard] collector runs. For tests. */
     internal fun isWarmupGuardRunning(): Boolean = warmupGuardJob?.isActive == true
 
@@ -495,6 +518,13 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "stagingResumeQueued=$stagingResumeQueued",
         )
         startWarmupBasalGuard()
+        feedJob?.cancel()
+        feedJob = ioScope()?.launch {
+            while (true) {
+                refreshFeed()
+                delay(FEED_CHECK_MS)
+            }
+        }
         watchStagingClock()
         ioScope()?.let { watchHandover.start(it) }
     }
@@ -543,6 +573,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         stopStep("staging clock cancel") { stagingClock?.cancel(); stagingClock = null }
         stopStep("warm-up guard cancel") { warmupGuardJob?.cancel() }
         warmupGuardJob = null
+        stopStep("feed check cancel") { feedJob?.cancel() }
+        feedJob = null
+        stopStep("watch-only notice") { host.showWatchOnly(null, false) }
         // Only the instances that exist. Asking the registry for "the driver" would build a new
         // one just to shut it down.
         host.existingProductionDriver()?.let { production ->
@@ -702,6 +735,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         if (sample.timestampMs > (lastProductionReading?.timestampMs ?: Long.MIN_VALUE)) lastProductionReading = sample
         sensorAlertsLock.withLock { sensorAlerts.onReading(sample.timestampMs) }
+        refreshFeed()
         ingestToLoop(sample, sensorStore)
     }
 
@@ -718,6 +752,9 @@ class DexcomOnePlusPlugin @Inject constructor(
             aapsLogger.debug(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BG: ${samples.size} watch readings ignored during WARMING")
             return
         }
+        // Also the readings the phone has already: they show the watch still hears the sensor.
+        sensorAlertsLock.withLock { samples.forEach { sensorAlerts.onWatchReading(it.timestampMs) } }
+        refreshFeed()
         val fresh = samples.filter { DexcomOnePlusIngest.shouldAcceptFromWatch(it) }
         if (fresh.isEmpty()) return
         val glucoseValues = fresh.map { DexcomOnePlusIngest.mapToGv(it) }
@@ -1636,6 +1673,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
 
     companion object {
+
+        /** How often [feed] is checked while the plugin runs. */
+        private const val FEED_CHECK_MS = 60_000L
 
         /**
          * How far before the driver's own session start a therapy event may sit and still count as

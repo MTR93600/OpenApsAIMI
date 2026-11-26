@@ -88,6 +88,13 @@
     <string name="dexcom_oneplus_watch_state_bluetooth_off">Bluetooth is off on the watch</string>
     <string name="dexcom_oneplus_watch_state_pairing">Pairing: accept the request on the watch</string>
     <string name="dexcom_oneplus_watch_state_waiting">Paired, waiting for the next reading</string>
+    <string name="dexcom_oneplus_feed_phone">Glucose comes from the phone.</string>
+    <string name="dexcom_oneplus_feed_watch_only" comment="%1$s = time of day the phone lost the sensor. Example: Glucose comes from the watch only. The phone lost the sensor at 16:05.">Glucose comes from the watch only. The phone lost the sensor at %1$s.</string>
+    <string name="dexcom_oneplus_feed_none">No recent glucose from the phone or the watch.</string>
+    <string name="dexcom_oneplus_notif_watch_only_title">Phone lost the sensor</string>
+    <string name="dexcom_oneplus_notif_watch_only_text" comment="%1$s = time of day the phone lost the sensor. Example: Since 16:05 the loop uses the readings of the watch.">Since %1$s the loop uses the readings of the watch. Keep the watch on you and near the phone.</string>
+    <string name="dexcom_oneplus_notif_alert_channel_name">Dexcom ONE+ / G7 alerts</string>
+    <string name="dexcom_oneplus_notif_alert_channel_desc">Alerts with a sound, for example when the phone lost the sensor and the loop uses the watch.</string>
     <string name="dexcom_oneplus_watch_state_connected">Connected</string>
     <string name="dexcom_oneplus_watch_state_refused">The sensor refused the watch</string>
 

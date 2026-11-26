@@ -62,10 +62,13 @@ fun DexcomOnePlusStatusOverview(
                 val watchDirectOn by viewModel.watchDirectEnabled.collectAsState()
                 if (watchDirectOn && watchHandover.isOffered) {
                     val watchReport by watchHandover.report.collectAsState()
+                    val feed by viewModel.feed.collectAsState()
                     DexcomOnePlusWatchDirectCard(
                         // Read again on every status tick, so a new pairing shows at once.
                         available = remember(current) { watchHandover.isAvailable() },
                         report = watchReport,
+                        feed = feed.takeIf { watchHandover.readingsToLoop },
+                        formatTime = viewModel.format.time,
                     )
                 }
                 view.calibration?.let { SensorCalibrationCard(it) }

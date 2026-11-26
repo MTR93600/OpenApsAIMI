@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.source.DexcomOnePlusFeed
+import app.aaps.plugins.source.DexcomOnePlusFeedState
 import app.aaps.plugins.source.DexcomOnePlusWatchReport
 import app.aaps.plugins.source.SourceStrings
 
@@ -16,11 +18,16 @@ import app.aaps.plugins.source.SourceStrings
  * @param available false while no production sensor can be handed over (none started, or this phone
  *   is not paired with it). The row then says the watch waits for a sensor, instead of "Off", which
  *   read as if the feature were off.
+ * @param feed where the loop's glucose comes from now; null while the watch's readings do not go to
+ *   the loop, then the line is not shown.
+ * @param formatTime the time of day, for when the phone lost the sensor
  */
 @Composable
-fun DexcomOnePlusWatchDirectCard(
+internal fun DexcomOnePlusWatchDirectCard(
     available: Boolean,
     report: DexcomOnePlusWatchReport?,
+    feed: DexcomOnePlusFeedState? = null,
+    formatTime: (Long) -> String = { it.toString() },
 ) {
     CgmCard {
         CgmCardHeader(stringResource(SourceStrings.dexcom_oneplus_watch_direct))
@@ -32,6 +39,21 @@ fun DexcomOnePlusWatchDirectCard(
             ),
             style = MaterialTheme.typography.bodyMedium,
         )
+        if (feed != null) {
+            val since = feed.watchOnlySinceMs
+            Text(
+                text = when {
+                    feed.feed == DexcomOnePlusFeed.PHONE                     -> stringResource(SourceStrings.dexcom_oneplus_feed_phone)
+                    feed.feed == DexcomOnePlusFeed.WATCH_ONLY && since != null ->
+                        stringResource(SourceStrings.dexcom_oneplus_feed_watch_only, formatTime(since))
+
+                    else                                                    -> stringResource(SourceStrings.dexcom_oneplus_feed_none)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                // Not the normal case: the loop depends on the watch, or gets nothing.
+                color = if (feed.feed == DexcomOnePlusFeed.PHONE) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+            )
+        }
         if (available && report?.status?.batteryRestricted == true) {
             Text(
                 text = stringResource(SourceStrings.dexcom_oneplus_watch_direct_battery),
