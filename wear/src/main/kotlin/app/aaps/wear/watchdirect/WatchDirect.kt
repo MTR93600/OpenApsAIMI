@@ -317,7 +317,9 @@ class WatchDirect(
      */
     private fun scheduleSendToPhone() {
         if (!forPhone.wanted) return
-        sendToPhoneJob?.cancel()
+        // Not restarted by a later event: a reading waits at most this long, also while the phone
+        // keeps sending its own values.
+        if (sendToPhoneJob?.isActive == true) return
         sendToPhoneJob = scope.launch {
             delay(SEND_TO_PHONE_DELAY_MS)
             sendToPhone()
@@ -437,8 +439,14 @@ class WatchDirect(
         const val URGENT_VIBRATION_S = 10
         const val LOW_VIBRATION_S = 5
 
-        /** Waits for the rest of the sensor's backfill, so the readings go in one message. */
-        const val SEND_TO_PHONE_DELAY_MS = 3_000L
+        /**
+         * The watch waits this long before it sends a reading. The rest of the sensor's backfill
+         * comes in the meantime, so the readings go in one message. The phone reads the sensor in
+         * the same radio window and tells the watch within seconds that it has the value, so a
+         * phone that works gets nothing. While only the watch hears the sensor, the loop gets the value this
+         * much later. Not longer: the loop runs on each new value.
+         */
+        const val SEND_TO_PHONE_DELAY_MS = 30_000L
 
         /** The empty screen Wear OS settings put in place of a setting the watch does not have. */
         const val STAND_IN_SETTINGS_SCREEN = "FakeSettingsActivity"

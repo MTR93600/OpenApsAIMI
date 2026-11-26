@@ -45,8 +45,10 @@ class WatchReadingsForPhone {
 
     /** @return true when the reading is new for the phone */
     fun add(reading: WatchSensorReading, now: Long): Boolean {
-        if (reading.timestampMs <= phoneNewest) return false
-        if (pending.containsKey(reading.timestampMs)) return false
+        val at = reading.timestampMs
+        if (at <= phoneNewest + SAME_READING_MS) return false
+        // The sensor's backfill gives the same reading a few seconds off the live one.
+        if (pending.subMap(at - SAME_READING_MS, true, at + SAME_READING_MS, true).isNotEmpty()) return false
         pending[reading.timestampMs] = EventData.CgmWatchReading(reading.timestampMs, reading.mgdl, reading.slopeMgdlPerMin)
         dropOld(now)
         return true
@@ -56,7 +58,7 @@ class WatchReadingsForPhone {
     fun phoneHas(readingAt: Long) {
         if (readingAt <= phoneNewest) return
         phoneNewest = readingAt
-        pending.headMap(readingAt, true).clear()
+        pending.headMap(readingAt + SAME_READING_MS, true).clear()
     }
 
     /** What to send to the phone now, oldest first. Empty when the phone did not ask, or has them all. */
@@ -68,5 +70,14 @@ class WatchReadingsForPhone {
 
     private fun dropOld(now: Long) {
         pending.headMap(now - WatchDirectReadings.GRAPH_WINDOW_MS, false).clear()
+    }
+
+    companion object {
+
+        /**
+         * Two times closer than this are the same reading: the sensor sends one about every 5
+         * minutes, and its backfill gives the live reading a few seconds off (field log 26/11/2026).
+         */
+        const val SAME_READING_MS: Long = 60_000L
     }
 }

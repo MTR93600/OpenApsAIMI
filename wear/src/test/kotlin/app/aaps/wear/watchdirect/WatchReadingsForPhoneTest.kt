@@ -56,6 +56,26 @@ class WatchReadingsForPhoneTest {
     }
 
     @Test
+    fun `the backfill copy of a reading, a few seconds off, is the same reading`() {
+        val forPhone = WatchReadingsForPhone().apply { setWanted(true) }
+        assertThat(forPhone.add(reading(now), now)).isTrue()
+        assertThat(forPhone.add(reading(now + 3_817L), now)).isFalse()
+        assertThat(forPhone.toSend(now)).hasSize(1)
+        // The phone has the live one: the copy is not sent either.
+        forPhone.phoneHas(now)
+        assertThat(forPhone.add(reading(now + 3_817L), now)).isFalse()
+        assertThat(forPhone.toSend(now)).isEmpty()
+    }
+
+    @Test
+    fun `the phone's own copy, a few seconds off, also clears the watch's reading`() {
+        val forPhone = WatchReadingsForPhone().apply { setWanted(true) }
+        forPhone.add(reading(now + 3_817L), now)
+        forPhone.phoneHas(now)
+        assertThat(forPhone.toSend(now)).isEmpty()
+    }
+
+    @Test
     fun `turned off by the phone, the readings are dropped`() {
         val forPhone = WatchReadingsForPhone().apply { setWanted(true) }
         forPhone.add(reading(now), now)
