@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 
 /**
@@ -27,7 +28,8 @@ object DexcomOnePlusWatchDirectRules {
         val serial: String?,
         val sensorName: String?,
         /**
-         * True when this phone has a key for the sensor. The phone always asks for the phone slot,
+         * True when this phone has a key for the sensor, or lost it only because the sensor refused
+         * it (see [sensorOf]). The phone always asks for the phone slot,
          * so a key means this phone holds the phone slot and the watch slot is the one left free.
          */
         val holdsPhoneSlot: Boolean,
@@ -41,15 +43,26 @@ object DexcomOnePlusWatchDirectRules {
     /**
      * The production sensor, as the handover sees it. Only the PRODUCTION store may be passed here:
      * a pre-soak sensor is never handed to the watch. Null when no sensor is stored.
+     *
+     * The phone still holds the phone slot when the sensor refused its saved key: the phone then
+     * deletes the key and pairs again, which can fail for a long time on a phone with a bad
+     * Bluetooth. That is just when the watch is needed, so the watch keeps the sensor.
+     *
+     * @param refusals the production slot's refusals in a row, from the same store
      */
-    fun sensorOf(production: OnePlusStoredSession?): Sensor? {
+    fun sensorOf(production: OnePlusStoredSession?, refusals: OnePlusAuthRefusals = OnePlusAuthRefusals()): Sensor? {
         if (production == null) return null
+        val hasKey = production.sharedKey?.size == SHARED_KEY_SIZE
+        val lostKeyToRefusal = refusals.count > 0 &&
+            refusals.lastWithSavedKey &&
+            !production.lastMac.isNullOrBlank() &&
+            refusals.address.equals(production.lastMac, ignoreCase = true)
         return Sensor(
             address = production.lastMac,
             pairingCode = production.identity.pin,
             serial = production.identity.serial,
             sensorName = production.lastDeviceName,
-            holdsPhoneSlot = production.sharedKey?.size == SHARED_KEY_SIZE,
+            holdsPhoneSlot = hasKey || lostKeyToRefusal,
         )
     }
 
