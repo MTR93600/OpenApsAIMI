@@ -513,6 +513,9 @@ class AppRepository internal constructor(
     suspend fun bulkMigrateProfileSwitchInsulinConfig(label: String, end: Long, peak: Long, conc: Double): Int =
         database.profileSwitchDao.bulkMigrateInsulinConfig(label, end, peak, conc)
 
+    suspend fun fillMissingProfileSwitchInsulinPeak(label: String, peak: Long): Int =
+        database.profileSwitchDao.fillMissingInsulinPeak(label, peak)
+
     suspend fun getProfileSwitchesFromTime(timestamp: Long, ascending: Boolean): List<ProfileSwitch> =
         database.profileSwitchDao.getProfileSwitchDataFromTime(timestamp).reversedIf(!ascending)
 
@@ -613,6 +616,9 @@ class AppRepository internal constructor(
 
     suspend fun bulkMigrateEffectiveProfileSwitchInsulinConfig(label: String, end: Long, peak: Long, conc: Double): Int =
         database.effectiveProfileSwitchDao.bulkMigrateInsulinConfig(label, end, peak, conc)
+
+    suspend fun fillMissingEffectiveProfileSwitchInsulinPeak(label: String, peak: Long): Int =
+        database.effectiveProfileSwitchDao.fillMissingInsulinPeak(label, peak)
 
     // THERAPY EVENT
     /*

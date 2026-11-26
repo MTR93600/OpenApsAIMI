@@ -299,6 +299,7 @@ jobs:
             :plugins:source:iosSimulatorArm64Test \
             :plugins:dexcom_oneplus:iosSimulatorArm64Test \
             :pump:medtrum:iosSimulatorArm64Test \
+            :shared:impl:iosSimulatorArm64Test \
             | tee test.log
 
       # Every module that HAS iOS tests is checked by name. A module added to the run above but not
@@ -340,6 +341,7 @@ jobs:
           check ":plugins:source" plugins/source
           check ":plugins:dexcom_oneplus" plugins/dexcom_oneplus
           check ":pump:medtrum" pump/medtrum
+          check ":shared:impl" shared/impl
           exit $fail
 
       # The list above is written by hand, which is how three modules came to be missed: a module
