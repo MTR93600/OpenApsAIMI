@@ -34,10 +34,26 @@ import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.time.Clock
 
 internal object OnePlusCgmDriverResumePolicy {
-    fun canResume(storedSession: OnePlusStoredSession?): Boolean =
-        storedSession?.lastMac?.isNotBlank() == true &&
-            OnePlusSessionStart.isValidPairingCode(storedSession.identity.pin) &&
-            storedSession.sharedKey?.size == SHARED_KEY_SIZE
+
+    /**
+     * True when the stored sensor can be connected again on our own: an address, a valid pairing
+     * code, and a key, or a key that was deleted only because this same sensor refused it.
+     *
+     * After such a refusal the running session pairs again in full with the pairing code. Without
+     * the second case, a restart of the app in that state left the phone with no connection at all,
+     * for good (field log 26/11/2026: "auto-resume skipped — stored session incomplete" while the
+     * watch still read the sensor). The resumed session does the same full pairing.
+     *
+     * @param refusals this slot's refusals in a row
+     */
+    fun canResume(storedSession: OnePlusStoredSession?, refusals: OnePlusAuthRefusals = OnePlusAuthRefusals()): Boolean {
+        if (storedSession == null) return false
+        val mac = storedSession.lastMac
+        if (mac.isNullOrBlank() || !OnePlusSessionStart.isValidPairingCode(storedSession.identity.pin)) return false
+        val hasKey = storedSession.sharedKey?.size == SHARED_KEY_SIZE
+        val lostKeyToRefusal = refusals.count > 0 && refusals.lastWithSavedKey && refusals.address.equals(mac, ignoreCase = true)
+        return hasKey || lostKeyToRefusal
+    }
 
     private const val SHARED_KEY_SIZE = 16
 }
@@ -522,7 +538,7 @@ class OnePlusCgmDriverReal(
      */
     override fun resumeStoredSession(): Boolean {
         val stored = sensorStore?.load()
-        if (!OnePlusCgmDriverResumePolicy.canResume(stored)) {
+        if (!OnePlusCgmDriverResumePolicy.canResume(stored, refusalLedger.load())) {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume skipped — stored session incomplete",
             )
@@ -568,7 +584,7 @@ class OnePlusCgmDriverReal(
         dropPendingCalibration("session restart")
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume queued mac=***${deviceAddress.takeLast(5)} " +
-                "savedKey=true newStart=false",
+                "savedKey=${stored.sharedKey != null} newStart=false",
         )
         try {
             lifecycleLock.withLock {
