@@ -58,6 +58,22 @@ class DexcomOnePlusWatchDirectRulesTest {
     }
 
     @Test
+    fun `the watch sends its readings back only when the loop may use them`() {
+        val sensor = DexcomOnePlusWatchDirectRules.sensorOf(paired())
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, sensor).sendReadings)
+        assertTrue(DexcomOnePlusWatchDirectRules.wanted(true, sensor, readingsToLoop = true).sendReadings)
+        // Direct to watch off: nothing at all, the loop setting alone does nothing.
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(false, sensor, readingsToLoop = true).sendReadings)
+        // Turning the loop setting on or off must reach the watch.
+        assertTrue(
+            DexcomOnePlusWatchDirectRules.changed(
+                DexcomOnePlusWatchDirectRules.wanted(true, sensor),
+                DexcomOnePlusWatchDirectRules.wanted(true, sensor, readingsToLoop = true)
+            )
+        )
+    }
+
+    @Test
     fun `a new production sensor after a promotion is a change`() {
         val before = DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(paired()))
         val after = DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(paired(mac = "AA:BB:CC:DD:EE:02", pin = "5937")))

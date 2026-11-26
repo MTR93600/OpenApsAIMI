@@ -269,6 +269,7 @@ class DexcomOnePlusPlugin @Inject constructor(
             transport = host.watchTransport(rxBus),
             productionSession = { sensorStore.load() },
             wearPluginEnabled = ::wearPluginEnabled,
+            onWatchReadings = ::onWatchReadings,
         )
     }
 
@@ -428,6 +429,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         ) + listOfNotNull(
             // Only where a watch link exists and the Wear plugin is on.
             DexcomOnePlusBooleanKey.WatchDirect.takeIf { watchHandover.isOffered },
+            DexcomOnePlusBooleanKey.WatchReadingsToLoop.takeIf { watchHandover.isOffered },
         ),
         icon = pluginDescription.icon,
     )
@@ -700,6 +702,37 @@ class DexcomOnePlusPlugin @Inject constructor(
         if (sample.timestampMs > (lastProductionReading?.timestampMs ?: Long.MIN_VALUE)) lastProductionReading = sample
         sensorAlertsLock.withLock { sensorAlerts.onReading(sample.timestampMs) }
         ingestToLoop(sample, sensorStore)
+    }
+
+    /**
+     * Readings the watch took itself, already checked by [DexcomOnePlusWatchHandover] (setting on, same
+     * sensor, value in range, not in the future). They go to the loop the same way as the phone's
+     * own, minus the ones the phone already has.
+     *
+     * The phone's link state, its sensor alarms, its last reading and its sequence floor are left
+     * alone: they tell about the phone's own link to the sensor, which is still missing.
+     */
+    private fun onWatchReadings(samples: List<OnePlusGlucoseSample>) {
+        if (DexcomOnePlusIngest.isWarmupBlockingIngest(warmupPhase)) {
+            aapsLogger.debug(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BG: ${samples.size} watch readings ignored during WARMING")
+            return
+        }
+        val fresh = samples.filter { DexcomOnePlusIngest.shouldAcceptFromWatch(it) }
+        if (fresh.isEmpty()) return
+        val glucoseValues = fresh.map { DexcomOnePlusIngest.mapToGv(it) }
+        ioScope()?.launch {
+            val result = persistenceLayer.insertCgmSourceData(
+                Sources.DexcomOnePlus,
+                glucoseValues,
+                emptyList(),
+                sensorInsertionTime = null,
+            )
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_BG: watch readings inserted: ${result.inserted.size}, updated: ${result.updated.size}, " +
+                    "newest ts=${fresh.maxOf { it.timestampMs }}",
+            )
+        }
     }
 
     /**
