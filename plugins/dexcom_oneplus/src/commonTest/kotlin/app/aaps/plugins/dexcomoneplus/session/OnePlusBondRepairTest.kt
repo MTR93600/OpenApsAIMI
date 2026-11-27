@@ -95,8 +95,8 @@ class OnePlusBondRepairTest {
 
         session.startWithPairingCode("AA:BB:CC:DD:EE:FF", "1234")
 
-        // Broken after the second stale cycle, repairing once the bond was removed after the third.
-        assertEquals(listOf(OnePlusBondRepairState.BROKEN, OnePlusBondRepairState.REPAIRING), states)
+        // Said at start, broken after the second stale cycle, repairing once the bond was removed after the third.
+        assertEquals(listOf(OnePlusBondRepairState.NONE, OnePlusBondRepairState.BROKEN, OnePlusBondRepairState.REPAIRING), states)
         // Removed once, and never while a link was up.
         assertEquals(listOf(false), gatt.bondRemovalsWhileConnected)
         assertTrue(!gatt.bonded)
@@ -122,4 +122,49 @@ class OnePlusBondRepairTest {
         assertEquals(OnePlusBondRepairState.BROKEN, session.bondRepairState())
         assertEquals(emptyList(), gatt.bondRemovalsWhileConnected)
     }
+
+    /** Every handshake fails while the link stays up, as after a failed cycle that is not the stale case. */
+    private class RefusedLinkUp(private val repairAt: Int, private val stopAt: Int) : OnePlusSessionAuth {
+
+        var calls = 0
+        lateinit var session: OnePlusBleSession
+
+        override fun authenticate(pairingCode: String, savedSharedKey: ByteArray?): AuthResult {
+            calls++
+            if (calls == repairAt) session.requestBondRepair()
+            if (calls >= stopAt) session.stop("test done")
+            return AuthResult(ok = false, message = "test handshake failed")
+        }
+    }
+
+    @Test
+    fun `a new session starts from the state of the session before it, and says it`() {
+        val gatt = FakeOnePlusGatt()
+        val auth = RefusedLinkUp(repairAt = Int.MAX_VALUE, stopAt = 1)
+        val states = mutableListOf<OnePlusBondRepairState>()
+        val session = session(gatt, auth, initial = OnePlusBondRepairState.BROKEN, states = states)
+        auth.session = session
+
+        session.startWithPairingCode("AA:BB:CC:DD:EE:FF", "1234")
+
+        assertEquals(OnePlusBondRepairState.BROKEN, states.first())
+        assertEquals(OnePlusBondRepairState.BROKEN, session.bondRepairState())
+    }
+
+    private fun session(
+        gatt: FakeOnePlusGatt,
+        auth: OnePlusSessionAuth,
+        initial: OnePlusBondRepairState = OnePlusBondRepairState.NONE,
+        states: MutableList<OnePlusBondRepairState> = mutableListOf(),
+    ) = OnePlusBleSessionSkeleton(
+        gatt = gatt,
+        auth = auth,
+        reconnectPolicy = NoRetryPause,
+        profile = DeviceProfileRegistry.GenericFallback,
+        requestNewSensorStart = false,
+        beforeConnect = { _, _, _ -> OnePlusConnectPrep(advFresh = true) },
+        postCycleAdvGuardMs = 1L,
+        onBondRepair = { states += it },
+        initialBondRepair = initial,
+    )
 }
