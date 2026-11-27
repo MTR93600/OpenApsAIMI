@@ -562,6 +562,8 @@ class OnePlusBleSessionSkeleton(
     private val timedConnectLeadMs: Long = OnePlusBleSessionCyclePolicy.TIMED_CONNECT_LEAD_MS,
     /** The state of a stale bond and of its repair changed, see [OnePlusBondRepair]. */
     private val onBondRepair: (OnePlusBondRepairState) -> Unit = {},
+    /** Where the stale bond stood in the session before this one, on the same sensor. Reported at start. */
+    initialBondRepair: OnePlusBondRepairState = OnePlusBondRepairState.NONE,
 ) : OnePlusBleSession {
 
     @Volatile
@@ -602,7 +604,7 @@ class OnePlusBleSessionSkeleton(
     private var staleBondCycles = 0
 
     @Volatile
-    private var bondRepairState = OnePlusBondRepairState.NONE
+    private var bondRepairState = initialBondRepair
 
     /** The user asked for a bond repair. Done between two links, see [runRequestedBondRepair]. */
     @Volatile
@@ -748,6 +750,9 @@ class OnePlusBleSessionSkeleton(
             return
         }
         val normalized = OnePlusSessionStart.normalizePairingCode(pairingCode)
+        // Said once at start, even when nothing changed: the session before this one may have
+        // reported BROKEN or REPAIRING, and that must not stay on screen if this one starts clean.
+        onBondRepair(bondRepairState)
         if (deviceAddress.isBlank()) {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: [$slot] start pairing (addr blank) profile=${profile.id}",
@@ -972,10 +977,26 @@ class OnePlusBleSessionSkeleton(
     /**
      * Removes the bond when the user asked for it. Called between two links only: removing a bond
      * during a link may drop it. The next pairing then asks for a new bond.
+     *
+     * Only while the bond is still [OnePlusBondRepairState.BROKEN]: the cycle after the tap may have
+     * been healthy, and removing a working bond would make the user pair again for nothing. The link
+     * of the cycle is closed first: after the stale case the sensor already closed it, but after
+     * other failed cycles it can still be up here.
      */
     private fun runRequestedBondRepair() {
         if (!bondRepairRequested) return
         bondRepairRequested = false
+        if (bondRepairState != OnePlusBondRepairState.BROKEN) {
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair not done: the state is now $bondRepairState")
+            return
+        }
+        if (gatt.isConnected()) {
+            up = false
+            try {
+                gatt.disconnect()
+            } catch (_: Throwable) {
+            }
+        }
         val removed = try {
             gatt.removeBond()
         } catch (t: Throwable) {

@@ -158,6 +158,20 @@ class OnePlusCgmDriverReal(
     @Volatile
     private var sensorStore: OnePlusSensorStore? = null
 
+    /**
+     * The last stale-bond state a session reported, with its sensor address. A session is often
+     * replaced (Connect, auto-resume), and a new one would otherwise start at
+     * [OnePlusBondRepairState.NONE] and say nothing: the plugin would keep showing BROKEN or
+     * REPAIRING after the link is healthy again. The next session on the same sensor starts from
+     * this state, and reports it when it starts. See [OnePlusBondRepair].
+     */
+    @Volatile
+    private var lastBondRepair: Pair<String, OnePlusBondRepairState>? = null
+
+    /** The state a new session on [deviceAddress] starts from, see [lastBondRepair]. */
+    private fun bondRepairToCarry(deviceAddress: String): OnePlusBondRepairState =
+        lastBondRepair?.takeIf { it.first.equals(deviceAddress, ignoreCase = true) }?.second ?: OnePlusBondRepairState.NONE
+
     /** Last ADV name seen for [connect] target — persisted on auth success. */
     @Volatile
     private var pendingDeviceName: String? = null
@@ -500,6 +514,7 @@ class OnePlusCgmDriverReal(
                     val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
+                            deviceAddress = deviceAddress,
                             requestNewSensorStart = true,
                             generation = generation,
                         ).also { session = it }
@@ -594,6 +609,7 @@ class OnePlusCgmDriverReal(
                     val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
+                            deviceAddress = deviceAddress,
                             requestNewSensorStart = false,
                             generation = generation,
                         ).also { session = it }
@@ -717,6 +733,7 @@ class OnePlusCgmDriverReal(
     }
 
     private fun createSession(
+        deviceAddress: String,
         requestNewSensorStart: Boolean,
         generation: Long,
     ): OnePlusBleSession {
@@ -795,8 +812,10 @@ class OnePlusCgmDriverReal(
             standingConnectWait = watchMode,
             // And it wakes for the sensor's next cycle, so it can connect the fast way in time.
             wakeAlarm = wakeAlarm,
+            initialBondRepair = bondRepairToCarry(deviceAddress),
             onBondRepair = { state ->
                 ifCurrentOperation(generation) {
+                    lastBondRepair = deviceAddress to state
                     watchersSnapshot().forEach { it.onBondRepair(state) }
                 }
             },
