@@ -979,7 +979,9 @@ class OnePlusBleSessionSkeleton(
      * during a link may drop it. The next pairing then asks for a new bond.
      *
      * Only while the bond is still [OnePlusBondRepairState.BROKEN]: the cycle after the tap may have
-     * been healthy, and removing a working bond would make the user pair again for nothing.
+     * been healthy, and removing a working bond would make the user pair again for nothing. The link
+     * of the cycle is closed first: after the stale case the sensor already closed it, but after
+     * other failed cycles it can still be up here.
      */
     private fun runRequestedBondRepair() {
         if (!bondRepairRequested) return
@@ -987,6 +989,13 @@ class OnePlusBleSessionSkeleton(
         if (bondRepairState != OnePlusBondRepairState.BROKEN) {
             OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair not done: the state is now $bondRepairState")
             return
+        }
+        if (gatt.isConnected()) {
+            up = false
+            try {
+                gatt.disconnect()
+            } catch (_: Throwable) {
+            }
         }
         val removed = try {
             gatt.removeBond()

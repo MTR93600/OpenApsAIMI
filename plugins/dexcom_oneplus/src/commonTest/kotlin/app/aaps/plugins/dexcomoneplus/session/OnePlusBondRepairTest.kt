@@ -166,6 +166,20 @@ class OnePlusBondRepairTest {
         assertEquals(OnePlusBondRepairState.BROKEN, session.bondRepairState())
     }
 
+    @Test
+    fun `the link is closed before the bond is removed`() {
+        val gatt = FakeOnePlusGatt()
+        // The link is still up after the failed handshake, when the repair runs.
+        val auth = RefusedLinkUp(repairAt = 1, stopAt = 2)
+        val session = session(gatt, auth, initial = OnePlusBondRepairState.BROKEN)
+        auth.session = session
+
+        session.startWithPairingCode("AA:BB:CC:DD:EE:FF", "1234")
+
+        assertEquals(listOf(false), gatt.bondRemovalsWhileConnected)
+        assertEquals(OnePlusBondRepairState.REPAIRING, session.bondRepairState())
+    }
+
     private fun session(
         gatt: FakeOnePlusGatt,
         auth: OnePlusSessionAuth,
