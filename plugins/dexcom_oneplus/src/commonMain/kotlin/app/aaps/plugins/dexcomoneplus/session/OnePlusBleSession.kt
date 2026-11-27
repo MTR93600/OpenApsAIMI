@@ -977,10 +977,17 @@ class OnePlusBleSessionSkeleton(
     /**
      * Removes the bond when the user asked for it. Called between two links only: removing a bond
      * during a link may drop it. The next pairing then asks for a new bond.
+     *
+     * Only while the bond is still [OnePlusBondRepairState.BROKEN]: the cycle after the tap may have
+     * been healthy, and removing a working bond would make the user pair again for nothing.
      */
     private fun runRequestedBondRepair() {
         if (!bondRepairRequested) return
         bondRepairRequested = false
+        if (bondRepairState != OnePlusBondRepairState.BROKEN) {
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair not done: the state is now $bondRepairState")
+            return
+        }
         val removed = try {
             gatt.removeBond()
         } catch (t: Throwable) {

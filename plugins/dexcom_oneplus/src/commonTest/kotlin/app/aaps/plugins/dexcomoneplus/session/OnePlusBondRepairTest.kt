@@ -123,6 +123,21 @@ class OnePlusBondRepairTest {
         assertEquals(emptyList(), gatt.bondRemovalsWhileConnected)
     }
 
+    @Test
+    fun `a repair asked while the bond is not broken removes nothing`() {
+        val gatt = FakeOnePlusGatt()
+        // Asked during the first cycle: after it the state is still NONE (one stale cycle only).
+        val auth = AcceptedThenDropped(gatt, repairAt = 1, stopAt = 3)
+        val session = session(gatt, auth)
+        auth.session = session
+
+        session.startWithPairingCode("AA:BB:CC:DD:EE:FF", "1234")
+
+        // The request was dropped, not kept for later: BROKEN came after it, and still no removal.
+        assertEquals(OnePlusBondRepairState.BROKEN, session.bondRepairState())
+        assertEquals(emptyList(), gatt.bondRemovalsWhileConnected)
+    }
+
     /** Every handshake fails while the link stays up, as after a failed cycle that is not the stale case. */
     private class RefusedLinkUp(private val repairAt: Int, private val stopAt: Int) : OnePlusSessionAuth {
 
