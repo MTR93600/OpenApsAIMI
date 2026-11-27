@@ -20,8 +20,16 @@ internal enum class DexcomOnePlusFeed {
         /** Two reading intervals and one minute: one missed reading does not change the source. */
         const val FRESH_MS: Long = 11L * 60L * 1000L
 
-        /** Watch only for this long: the user gets an alert with a sound, once per episode. */
-        const val WATCH_ONLY_ALERT_MS: Long = 15L * 60L * 1000L
+        /**
+         * While the loop runs on the watch, the silent notice shows again when the phone screen
+         * turns on, but not more often than this. No sound: glucose still arrives, so there is
+         * nothing urgent, and these outages also happen at night. The sound stays with the signal
+         * loss alarm, when the watch stops too ([NONE]).
+         */
+        const val WATCH_ONLY_REMIND_MS: Long = 60L * 60L * 1000L
+
+        /** True when the notice, last shown at [lastShownAtMs], may show again at screen on. */
+        fun remindAtScreenOn(lastShownAtMs: Long, nowMs: Long): Boolean = nowMs - lastShownAtMs >= WATCH_ONLY_REMIND_MS
 
         fun isFresh(readingAtMs: Long?, nowMs: Long): Boolean = readingAtMs != null && nowMs - readingAtMs < FRESH_MS
 
@@ -40,9 +48,4 @@ internal enum class DexcomOnePlusFeed {
 internal data class DexcomOnePlusFeedState(
     val feed: DexcomOnePlusFeed,
     val watchOnlySinceMs: Long? = null,
-) {
-
-    /** True when the watch-only time is long enough for the alert with a sound. */
-    fun alert(nowMs: Long): Boolean =
-        feed == DexcomOnePlusFeed.WATCH_ONLY && watchOnlySinceMs != null && nowMs - watchOnlySinceMs >= DexcomOnePlusFeed.WATCH_ONLY_ALERT_MS
-}
+)

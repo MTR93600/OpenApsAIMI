@@ -156,7 +156,25 @@ class DexcomOnePlusIngestTest {
     @Test
     fun `a watch reading of the same sensor may feed the loop when the setting is on`() {
         assertThat(fromWatch()).isTrue()
-        assertThat(fromWatch(timestampMs = now - 24 * 3_600_000L)).isTrue()
+        assertThat(fromWatch(timestampMs = now - DexcomOnePlusIngest.WATCH_MAX_AGE_MS)).isTrue()
+    }
+
+    @Test
+    fun `a watch reading older than the sensor backfill is refused`() {
+        assertThat(fromWatch(timestampMs = now - DexcomOnePlusIngest.WATCH_MAX_AGE_MS - 1)).isFalse()
+        assertThat(fromWatch(timestampMs = now - 24 * 3_600_000L)).isFalse()
+    }
+
+    @Test
+    fun `watch readings are refused when the watch clock does not agree with the phone clock`() {
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now, now)).isTrue()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now - DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS, now)).isTrue()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now + DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS, now)).isTrue()
+        // A watch clock behind: its readings would look older or newer than they are.
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now - DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS - 1, now)).isFalse()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now + DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS + 1, now)).isFalse()
+        // A watch app that does not send its clock.
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(null, now)).isFalse()
     }
 
     @Test

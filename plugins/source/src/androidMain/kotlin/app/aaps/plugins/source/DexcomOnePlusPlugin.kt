@@ -288,9 +288,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     private var feedJob: Job? = null
 
     /**
-     * Updates [feed] and the watch-only notice: silent at first, with a sound after
-     * [DexcomOnePlusFeed.WATCH_ONLY_ALERT_MS], gone when the phone hears the sensor again or when the
-     * watch stops too (then the usual signal loss alarm takes over).
+     * Updates [feed] and the watch-only notice: silent, shown again at screen on at most every
+     * [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS], gone when the phone hears the sensor again or when the
+     * watch stops too (then the usual signal loss alarm takes over, with its sound).
      */
     private fun refreshFeed() {
         val now = nowMs()
@@ -299,7 +299,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         _feed.value = state
         if (state.feed != previous.feed) aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_FEED: ${previous.feed} -> ${state.feed} since=${state.watchOnlySinceMs}")
         val since = state.watchOnlySinceMs.takeIf { state.feed == DexcomOnePlusFeed.WATCH_ONLY }
-        host.showWatchOnly(since, state.alert(now))
+        host.showWatchOnly(since)
     }
 
     /** True while the [DexcomOnePlusWarmupBasalGuard] collector runs. For tests. */
@@ -577,7 +577,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         warmupGuardJob = null
         stopStep("feed check cancel") { feedJob?.cancel() }
         feedJob = null
-        stopStep("watch-only notice") { host.showWatchOnly(null, false) }
+        stopStep("watch-only notice") { host.showWatchOnly(null) }
         // Only the instances that exist. Asking the registry for "the driver" would build a new
         // one just to shut it down.
         host.existingProductionDriver()?.let { production ->

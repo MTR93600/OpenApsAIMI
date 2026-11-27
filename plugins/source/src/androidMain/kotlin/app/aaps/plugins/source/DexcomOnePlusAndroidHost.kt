@@ -101,7 +101,7 @@ class DexcomOnePlusAndroidHost(
 
     override fun alert(message: String) = warmupNotification.alert(message)
 
-    override fun showWatchOnly(sinceMs: Long?, alert: Boolean) = warmupNotification.watchOnly(sinceMs, alert)
+    override fun showWatchOnly(sinceMs: Long?) = warmupNotification.watchOnly(sinceMs)
 
     /** The start screen's own scanner instance, with no hint until the screen sets one. */
     override fun screenScanner(): OnePlusBleScanner =

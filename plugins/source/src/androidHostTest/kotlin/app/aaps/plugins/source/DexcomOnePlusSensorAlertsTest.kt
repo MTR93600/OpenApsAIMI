@@ -44,8 +44,12 @@ class DexcomOnePlusSensorAlertsTest {
         assertEquals(DexcomOnePlusFeed.WATCH_ONLY, feed.feed)
         // The phone's last own reading starts the watch-only time.
         assertEquals(now, feed.watchOnlySinceMs)
-        assertEquals(false, feed.alert(now + 12 * minute))
-        assertEquals(true, alerts.feed(now + 16 * minute).alert(now + 16 * minute))
+    }
+
+    @Test
+    fun theWatchOnlyNoticeShowsAgainAtScreenOnAtMostOnceAnHour() {
+        assertEquals(false, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS - 1))
+        assertEquals(true, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS))
     }
 
     @Test

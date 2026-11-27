@@ -175,11 +175,16 @@ class DexcomOnePlusWatchHandover(
     /**
      * Readings the watch took itself. Only the ones that pass [DexcomOnePlusIngest.mayFeedLoopFromWatch]
      * go on: the setting is on now (not only when the watch was asked), and they are of the sensor
-     * this phone follows.
+     * this phone follows. None goes on when the watch's clock does not agree with the phone's
+     * ([DexcomOnePlusIngest.watchClockAgrees]).
      */
     private fun onReadings(message: EventData.CgmWatchReadings) {
         val wanted = wanted()
         val now = nowMs()
+        if (!DexcomOnePlusIngest.watchClockAgrees(message.sentAt, now)) {
+            aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS_WATCH: ${message.readings.size} readings refused, watch clock sentAt=${message.sentAt} phone=$now")
+            return
+        }
         val accepted = message.readings.filter {
             DexcomOnePlusIngest.mayFeedLoopFromWatch(wanted.active && wanted.sendReadings, message.address, wanted.address, it.mgdl, it.timestamp, now)
         }

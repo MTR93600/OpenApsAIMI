@@ -733,11 +733,15 @@ sealed class EventData : Event() {
     /**
      * Wear -> Mobile: the readings the watch took from the sensor [address] itself and the phone does
      * not have yet. Sent only when the phone asked for them ([CgmWatchDirect.sendReadings]).
+     *
+     * @param sentAt the watch's clock when it sent the message. The phone refuses the readings when
+     *   it does not agree with its own clock. Null from a watch app that does not send it.
      */
     @Serializable
     data class CgmWatchReadings(
         val address: String,
-        val readings: List<CgmWatchReading>
+        val readings: List<CgmWatchReading>,
+        val sentAt: Long? = null
     ) : EventData()
 
     /** One reading of [CgmWatchReadings], in mg/dL, with the sensor's rate of change in mg/dL per minute. */

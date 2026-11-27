@@ -365,7 +365,8 @@ class EventDataTest {
             EventData.CgmWatchDirect(active = true, pairingCode = "1234", address = "AA:BB:CC:DD:EE:FF", serial = "SN1", sensorName = "DXCM12"),
             EventData.CgmWatchDirect(active = false),
             EventData.CgmWatchDirect(active = true, pairingCode = "1234", address = "AA:BB:CC:DD:EE:FF", sendReadings = true),
-            EventData.CgmWatchReadings("AA:BB:CC:DD:EE:FF", listOf(EventData.CgmWatchReading(5L, 120.0, -1.5), EventData.CgmWatchReading(6L, 118.0))),
+            EventData.CgmWatchReadings("AA:BB:CC:DD:EE:FF", listOf(EventData.CgmWatchReading(5L, 120.0, -1.5), EventData.CgmWatchReading(6L, 118.0)), sentAt = 7L),
+            EventData.CgmWatchReadings("AA:BB:CC:DD:EE:FF", listOf(EventData.CgmWatchReading(5L, 120.0))),
             EventData.CgmWatchStatus(EventData.CgmWatchState.CONNECTED, address = "AA:BB:CC:DD:EE:FF", latestReadingAt = 5L, batteryRestricted = true),
             EventData.CgmWatchStatus(EventData.CgmWatchState.REFUSED, detail = "slot in use")
         ).forEach {

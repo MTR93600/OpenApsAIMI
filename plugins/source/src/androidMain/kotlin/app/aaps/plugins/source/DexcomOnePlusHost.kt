@@ -87,9 +87,9 @@ interface DexcomOnePlusHost {
 
     /**
      * Show that the loop runs only on the watch's readings since [sinceMs], or take it down (null).
-     * [alert] is true once it lasted long enough for a sound, see [DexcomOnePlusFeed.WATCH_ONLY_ALERT_MS].
+     * A silent notice, shown again at screen on, see [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS].
      */
-    fun showWatchOnly(sinceMs: Long?, alert: Boolean) {}
+    fun showWatchOnly(sinceMs: Long?) {}
 
     /**
      * How direct-to-watch messages reach a watch, or null when this host has no watch link.

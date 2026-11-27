@@ -3,12 +3,15 @@ package app.aaps.plugins.source
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
@@ -171,19 +174,35 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
         }
     }
 
-    /** What [watchOnly] shows now: the start of the time and whether it made a sound. Null: nothing. */
-    private var watchOnlyShown: Pair<Long, Boolean>? = null
+    /** The start of the watch-only time the notice shows now. Null: no notice. */
+    private var watchOnlySinceMs: Long? = null
+
+    /** When the watch-only notice was last posted, for [DexcomOnePlusFeed.remindAtScreenOn]. */
+    private var watchOnlyShownAtMs: Long = 0L
+
+    /** Shows the notice again when the phone screen turns on. Registered only while it shows. */
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_ON) remindWatchOnly()
+        }
+    }
+    private var screenOnRegistered = false
 
     /**
-     * The loop runs only on the watch's readings since [sinceMs]: an ongoing notice, silent at
-     * first, then posted once again on the alert channel, with a sound, when [alert] turns true.
-     * Null takes it down. Posts only on a change, so a check every minute does not repeat it.
+     * The loop runs only on the watch's readings since [sinceMs]: a silent ongoing notice. Null
+     * takes it down. Posts only on a change, so a check every minute does not repeat it.
+     *
+     * No sound, on purpose: glucose still arrives, and these outages also happen at night. So the
+     * notice shows again when the user turns the phone screen on, at most once every
+     * [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS], and the user sees it when they are awake. When the
+     * watch stops too, the usual signal loss alarm comes, with its sound.
      */
     @Synchronized
-    fun watchOnly(sinceMs: Long?, alert: Boolean) {
+    fun watchOnly(sinceMs: Long?) {
         if (sinceMs == null) {
-            if (watchOnlyShown != null) {
-                watchOnlyShown = null
+            if (watchOnlySinceMs != null) {
+                watchOnlySinceMs = null
+                listenScreenOn(false)
                 try {
                     NotificationManagerCompat.from(context).cancel(WATCH_ONLY_ID)
                 } catch (_: Throwable) {
@@ -191,27 +210,53 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
             }
             return
         }
-        val wanted = sinceMs to alert
-        if (wanted == watchOnlyShown) return
-        val soundNow = alert && watchOnlyShown?.second != true
-        watchOnlyShown = wanted
+        if (sinceMs == watchOnlySinceMs) return
+        watchOnlySinceMs = sinceMs
+        postWatchOnly(sinceMs)
+        listenScreenOn(true)
+    }
+
+    @Synchronized
+    private fun remindWatchOnly() {
+        val since = watchOnlySinceMs ?: return
+        if (!DexcomOnePlusFeed.remindAtScreenOn(watchOnlyShownAtMs, System.currentTimeMillis())) return
+        // A notice that is already in the list does not move when posted again: take it down first.
+        try {
+            NotificationManagerCompat.from(context).cancel(WATCH_ONLY_ID)
+        } catch (_: Throwable) {
+        }
+        postWatchOnly(since)
+    }
+
+    private fun postWatchOnly(sinceMs: Long) {
+        watchOnlyShownAtMs = System.currentTimeMillis()
         val since = DateFormat.getTimeFormat(context).format(Date(sinceMs))
         val text = context.getString(R.string.dexcom_oneplus_notif_watch_only_text, since)
-        val builder = NotificationCompat.Builder(context, if (alert) ALERT_CHANNEL_ID else CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(CoreUiR.drawable.notif_icon)
             .setContentTitle(context.getString(R.string.dexcom_oneplus_notif_watch_only_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
-            .setOnlyAlertOnce(!soundNow)
+            .setSilent(true)
             .setShowWhen(false)
             .setContentIntent(openDetailIntent(warmupPage = false))
         try {
-            // A notice that is already showing makes no sound when posted again: take it down first.
-            if (soundNow) NotificationManagerCompat.from(context).cancel(WATCH_ONLY_ID)
             NotificationManagerCompat.from(context).notify(WATCH_ONLY_ID, builder.build())
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS denied: the status screen still says it.
+        }
+    }
+
+    private fun listenScreenOn(on: Boolean) {
+        if (on == screenOnRegistered) return
+        try {
+            if (on) ContextCompat.registerReceiver(context, screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
+            else context.unregisterReceiver(screenOnReceiver)
+            screenOnRegistered = on
+        } catch (_: IllegalArgumentException) {
+            // Not registered: nothing to undo.
+            screenOnRegistered = false
         }
     }
 
@@ -247,15 +292,6 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
             setSound(null, null)
         }
         nm.createNotificationChannel(channel)
-        // With a sound: the phone lost the sensor and the loop now depends on the watch.
-        val alertChannel = NotificationChannel(
-            ALERT_CHANNEL_ID,
-            context.getString(R.string.dexcom_oneplus_notif_alert_channel_name),
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = context.getString(R.string.dexcom_oneplus_notif_alert_channel_desc)
-        }
-        nm.createNotificationChannel(alertChannel)
     }
 
     companion object {
@@ -267,7 +303,6 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
 
         /** The watch-only notice, apart from the warm-up one: both can show at the same time. */
         private const val WATCH_ONLY_ID = 8934
-        private const val ALERT_CHANNEL_ID = "DEXCOM_ONEPLUS_ALERT"
 
         private const val REQUEST_WARMUP = 0
         private const val REQUEST_STATUS = 1

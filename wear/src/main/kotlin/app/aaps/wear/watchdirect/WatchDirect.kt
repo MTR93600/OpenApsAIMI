@@ -379,18 +379,34 @@ class WatchDirect(
         // Not restarted by a later event: a reading waits at most this long, also while the phone
         // keeps sending its own values.
         if (sendToPhoneJob?.isActive == true) return
+        // The watch may sleep during the delay, and the reading would then wait for the next wake
+        // up. A partial wake lock keeps the CPU on until the message is sent, and a short time after,
+        // because the message leaves the watch in the background. The timeout is a safety net.
+        val wakeLock = context.getSystemService(PowerManager::class.java)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, SEND_TO_PHONE_WAKE_LOCK_TAG)
+            ?.apply { acquire(SEND_TO_PHONE_DELAY_MS + 2 * SEND_TO_PHONE_HOLD_AFTER_MS) }
         sendToPhoneJob = scope.launch {
-            delay(SEND_TO_PHONE_DELAY_MS)
-            sendToPhone()
+            try {
+                delay(SEND_TO_PHONE_DELAY_MS)
+                sendToPhone()
+            } finally {
+                // Released apart from this job: a reading that comes now must start a new send.
+                scope.launch {
+                    delay(SEND_TO_PHONE_HOLD_AFTER_MS)
+                    if (wakeLock?.isHeld == true) wakeLock.release()
+                }
+            }
         }
     }
 
     private fun sendToPhone() {
         val address = link?.address() ?: return
-        val readings = forPhone.toSend(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val readings = forPhone.toSend(now)
         if (readings.isEmpty()) return
         aapsLogger.info(LTag.WEAR, "Direct to watch: ${readings.size} readings sent to the phone, newest ts=${readings.last().timestamp}")
-        rxBus.send(EventWearToMobile(EventData.CgmWatchReadings(address, readings)))
+        // The watch's clock goes with the readings: the phone refuses them when the two clocks differ.
+        rxBus.send(EventWearToMobile(EventData.CgmWatchReadings(address, readings, sentAt = now)))
     }
 
     /** One reading from the watch's own link: to the faces, and a low alarm when the phone is away. */
@@ -508,6 +524,12 @@ class WatchDirect(
          * would send most values the phone gets anyway.
          */
         const val SEND_TO_PHONE_DELAY_MS = 15_000L
+
+        /** The wake lock stays this long after the readings were handed over, so the message leaves the watch. */
+        const val SEND_TO_PHONE_HOLD_AFTER_MS = 5_000L
+
+        /** The tag of that wake lock, in the form `app:what` that Android asks for. */
+        const val SEND_TO_PHONE_WAKE_LOCK_TAG = "AAPS:WatchDirectSendToPhone"
 
         /** The empty screen Wear OS settings put in place of a setting the watch does not have. */
         const val STAND_IN_SETTINGS_SCREEN = "FakeSettingsActivity"

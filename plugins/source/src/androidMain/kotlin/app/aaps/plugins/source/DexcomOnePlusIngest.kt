@@ -144,6 +144,25 @@ internal object DexcomOnePlusIngest {
     /** A watch reading more than this ahead of the phone's clock is refused. */
     const val WATCH_MAX_AHEAD_MS: Long = 60L * 1000L
 
+    /**
+     * A watch reading older than this is refused. The sensor sends its last 3 hours at each
+     * connection, so the watch never has an older reading the phone could miss.
+     */
+    const val WATCH_MAX_AGE_MS: Long = 3L * 60L * 60L * 1000L
+
+    /** The watch's clock may differ from the phone's by this much, see [watchClockAgrees]. */
+    const val WATCH_MAX_CLOCK_SKEW_MS: Long = 60L * 1000L
+
+    /**
+     * True when the watch's clock, read when it sent its readings ([watchSentAtMs]), agrees with the
+     * phone's clock [nowMs]. A watch reading carries the watch's time: with a wrong watch clock the
+     * loop would get a value at the wrong time, too old or too new. The message reaches the phone
+     * within seconds, so a larger gap is a wrong clock. Null: a watch app that does not send its time,
+     * refused too.
+     */
+    fun watchClockAgrees(watchSentAtMs: Long?, nowMs: Long): Boolean =
+        watchSentAtMs != null && abs(nowMs - watchSentAtMs) <= WATCH_MAX_CLOCK_SKEW_MS
+
     /** The range of a glucose value the sensor reports, the same as on the watch. */
     private const val WATCH_MIN_MGDL = 40.0
     private const val WATCH_MAX_MGDL = 400.0
@@ -172,7 +191,7 @@ internal object DexcomOnePlusIngest {
             !phoneAddress.isNullOrBlank() &&
             fromAddress == phoneAddress &&
             mgdl in WATCH_MIN_MGDL..WATCH_MAX_MGDL &&
-            timestampMs > 0 &&
+            timestampMs >= nowMs - WATCH_MAX_AGE_MS &&
             timestampMs <= nowMs + WATCH_MAX_AHEAD_MS
 
     /**

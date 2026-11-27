@@ -41,7 +41,7 @@ class WatchReadingReachesLoopOnlyThroughPhoneTest {
             SENT_TO_PHONE.findAll(file.readText()).map { it.groupValues[1].trim() }.toList()
         }
         assertThat(sent).isNotEmpty()
-        assertThat(sent.toSet()).containsExactly("status", "EventData.CgmWatchReadings(address, readings")
+        assertThat(sent.toSet()).containsExactly("status", "EventData.CgmWatchReadings(address, readings, sentAt = now")
     }
 
     @Test
