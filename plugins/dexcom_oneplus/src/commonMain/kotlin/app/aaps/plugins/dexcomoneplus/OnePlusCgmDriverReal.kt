@@ -20,6 +20,7 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationQueue
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
@@ -709,6 +710,12 @@ class OnePlusCgmDriverReal(
 
     override fun isSessionUp(): Boolean = session?.isUp() == true
 
+    override fun bondRepairState(): OnePlusBondRepairState = session?.bondRepairState() ?: OnePlusBondRepairState.NONE
+
+    override fun requestBondRepair() {
+        session?.requestBondRepair()
+    }
+
     private fun createSession(
         requestNewSensorStart: Boolean,
         generation: Long,
@@ -788,6 +795,11 @@ class OnePlusCgmDriverReal(
             standingConnectWait = watchMode,
             // And it wakes for the sensor's next cycle, so it can connect the fast way in time.
             wakeAlarm = wakeAlarm,
+            onBondRepair = { state ->
+                ifCurrentOperation(generation) {
+                    watchersSnapshot().forEach { it.onBondRepair(state) }
+                }
+            },
         )
         return created
     }

@@ -43,6 +43,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
 import app.aaps.plugins.source.compose.DexcomOnePlusComposeContent
 import app.aaps.plugins.source.compose.DexcomOnePlusSensorFacts
@@ -556,6 +557,10 @@ class DexcomOnePlusPlugin @Inject constructor(
             stopStep("staging shutdown") { staging.shutdown() }
         }
         stopStep("warm-up notification cancel") { host.cancelWarmupNotification() }
+        stopStep("bond repair notice cancel") {
+            _bondRepair.value = OnePlusBondRepairState.NONE
+            host.showBondRepair(OnePlusBondRepairState.NONE)
+        }
         stopStep("session service stop") { host.setSessionServiceWanted(false) }
         // Last, after the drivers are stopped. [stopped] already keeps late callbacks from making
         // a new scope.
@@ -836,6 +841,28 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         // A new sensor, or a new key after a re-pairing: the watch must follow. Sends only on a change.
         ioScope()?.launch { watchHandover.refresh(if (up) "session up" else "session down") }
+    }
+
+    private val _bondRepair = MutableStateFlow(OnePlusBondRepairState.NONE)
+
+    /** Where a stale Android bond of the production sensor and its repair stand, see `OnePlusBondRepair`. */
+    internal val bondRepair: StateFlow<OnePlusBondRepairState> = _bondRepair.asStateFlow()
+
+    override fun onBondRepair(state: OnePlusBondRepairState) {
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BOND: repair state=$state")
+        _bondRepair.value = state
+        host.showBondRepair(state)
+    }
+
+    /**
+     * The user asks to repair a stale bond. The production session removes the bond after its
+     * current link. Android then shows a pairing request at the next pairing, which the user must
+     * accept.
+     */
+    fun requestBondRepair() {
+        val driver = host.existingProductionDriver()
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BOND: repair asked driver=${driver != null}")
+        driver?.requestBondRepair()
     }
 
     /**
@@ -1283,6 +1310,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         // It also rebinds the promoted instance onto the production file, so it must happen BEFORE
         // the staging file is cleared: its live link reads that file on every reconnect.
         val retired = host.promoteStagingInstance()
+        // A stale bond of the old sensor says nothing about the new one.
+        onBondRepair(OnePlusBondRepairState.NONE)
         runCatching { retired?.shutdown() }
         runCatching { if (outgoing !== promoted && outgoing !== retired) outgoing.shutdown() }
         // 6) Only now retire the staging store — nothing points at it any more.

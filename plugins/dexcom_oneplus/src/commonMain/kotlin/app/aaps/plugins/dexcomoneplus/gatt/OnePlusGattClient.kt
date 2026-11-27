@@ -64,6 +64,8 @@ interface OnePlusGattClient {
      * Drop the Android OS bond via hidden [BluetoothDevice.removeBond] (Juggluco-style).
      * Used when KEKS AuthStatus rejects (`authenticated != 1`) while the phone is still bonded —
      * otherwise the next reconnect short-auths / stalls with sensor `bonded=1`.
+     * Also works between two links, on the device of the last link: the user's bond repair runs
+     * there, never during a link (`OnePlusBondRepair`).
      *
      * ⚠️ ASYNC IMPACT: may drop the GATT link; caller should treat as reconnect trigger.
      * @return true if already unbonded or removeBond returned true
