@@ -53,6 +53,9 @@ class OnePlusGattClientAndroid(
 
     @Volatile private var gatt: BluetoothGatt? = null
     @Volatile private var device: BluetoothDevice? = null
+
+    /** The device of the last link. Kept after the link closes, so [removeBond] works between two links. */
+    @Volatile private var lastDevice: BluetoothDevice? = null
     @Volatile private var authChar: BluetoothGattCharacteristic? = null
     @Volatile private var extraChar: BluetoothGattCharacteristic? = null
     @Volatile private var controlChar: BluetoothGattCharacteristic? = null
@@ -357,6 +360,7 @@ class OnePlusGattClientAndroid(
             error("ONEPLUS_GATT: invalid address")
         }
         device = remote
+        lastDevice = remote
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: connectGatt autoConnect=$autoConnect " +
                 "mtuOnConnect=${profile.requestMtuOnConnect}",
@@ -511,7 +515,7 @@ class OnePlusGattClientAndroid(
     }
 
     override fun removeBond(): Boolean {
-        val d = device ?: return false
+        val d = device ?: lastDevice ?: return false
         val state = try {
             d.bondState
         } catch (_: Throwable) {

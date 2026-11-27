@@ -1,6 +1,7 @@
 package app.aaps.plugins.dexcomoneplus
 
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusScanListener
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 
 /**
  * Native Dexcom ONE+ BLE driver façade.
@@ -71,4 +72,14 @@ interface OnePlusCgmDriver {
 
     /** True while a fingerstick is still waiting to be written. */
     fun calibrationPending(): Boolean = false
+
+    /**
+     * Where a stale Android bond and its repair stand, see
+     * `OnePlusBondRepair`. A driver without a live session
+     * has nothing to repair.
+     */
+    fun bondRepairState(): OnePlusBondRepairState = OnePlusBondRepairState.NONE
+
+    /** The user asks to repair a stale bond. The live session removes it after its current link. */
+    fun requestBondRepair() {}
 }
