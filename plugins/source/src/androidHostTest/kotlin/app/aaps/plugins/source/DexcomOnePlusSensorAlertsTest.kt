@@ -14,6 +14,7 @@ import kotlin.test.assertEquals
 class DexcomOnePlusSensorAlertsTest {
 
     private val now = 1_000_000_000L
+    private val minute = 60_000L
     private val hour = 3_600_000L
     private val lead = 12 * hour
     private val farEnd = now + 100 * hour
@@ -29,6 +30,77 @@ class DexcomOnePlusSensorAlertsTest {
         alerts.onWarmup(warmup(OnePlusWarmupState.Phase.READY), now)
         alerts.onReading(now)
         assertEquals(CgmSensorAlertState.Ok, alerts.at(now + 60_000L))
+    }
+
+    @Test
+    fun theWatchCoversALostPhoneLink() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onReading(now)
+        alerts.onWarmup(warmup(OnePlusWarmupState.Phase.RECONNECTING), now + minute)
+        alerts.onWatchReading(now + 5 * minute)
+        alerts.onWatchReading(now + 10 * minute)
+        assertEquals(CgmSensorAlertState.Ok, alerts.at(now + 12 * minute))
+        val feed = alerts.feed(now + 12 * minute)
+        assertEquals(DexcomOnePlusFeed.WATCH_ONLY, feed.feed)
+        // The phone's last own reading starts the watch-only time.
+        assertEquals(now, feed.watchOnlySinceMs)
+    }
+
+    @Test
+    fun afterAStartTheFeedWaitsForTheFirstReadingInsteadOfSayingNone() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onStart(now)
+        assertEquals(DexcomOnePlusFeed.STARTING, alerts.feed(now + minute).feed)
+        // The first reading answers it.
+        alerts.onReading(now + 2 * minute)
+        assertEquals(DexcomOnePlusFeed.PHONE, alerts.feed(now + 2 * minute).feed)
+    }
+
+    @Test
+    fun withNoReadingAfterAStartTheFeedSaysNoneOnceReadingsShouldHaveCome() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onStart(now)
+        assertEquals(DexcomOnePlusFeed.STARTING, alerts.feed(now + DexcomOnePlusFeed.FRESH_MS - 1).feed)
+        assertEquals(DexcomOnePlusFeed.NONE, alerts.feed(now + DexcomOnePlusFeed.FRESH_MS).feed)
+    }
+
+    @Test
+    fun theWatchOnlyNoticeShowsAgainAtScreenOnAtMostOnceAnHour() {
+        assertEquals(false, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS - 1))
+        assertEquals(true, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS))
+    }
+
+    @Test
+    fun bothSidesLostIsASignalLossFromTheLastReadingOfEither() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onReading(now)
+        alerts.onWarmup(warmup(OnePlusWarmupState.Phase.RECONNECTING), now + minute)
+        alerts.onWatchReading(now + 10 * minute)
+        val later = now + 10 * minute + DexcomOnePlusFeed.FRESH_MS
+        assertEquals(CgmSensorAlertState.SignalLost(now + 10 * minute), alerts.at(later))
+        assertEquals(DexcomOnePlusFeed.NONE, alerts.feed(later).feed)
+    }
+
+    @Test
+    fun withoutTheWatchALostLinkIsReportedAsBefore() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onReading(now)
+        alerts.onWarmup(warmup(OnePlusWarmupState.Phase.RECONNECTING), now + minute)
+        assertEquals(CgmSensorAlertState.SignalLost(now + minute), alerts.at(now + 2 * minute))
+        assertEquals(DexcomOnePlusFeed.PHONE, alerts.feed(now + 2 * minute).feed)
+    }
+
+    @Test
+    fun thePhoneBackEndsTheWatchOnlyTime() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onWatchReading(now)
+        assertEquals(DexcomOnePlusFeed.WATCH_ONLY, alerts.feed(now + minute).feed)
+        // No phone reading since the app started: the time starts when it was first seen.
+        assertEquals(now + minute, alerts.feed(now + 2 * minute).watchOnlySinceMs)
+        alerts.onReading(now + 3 * minute)
+        val back = alerts.feed(now + 4 * minute)
+        assertEquals(DexcomOnePlusFeed.PHONE, back.feed)
+        assertEquals(null, back.watchOnlySinceMs)
     }
 
     @Test

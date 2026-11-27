@@ -71,10 +71,25 @@ internal object DexcomOnePlusIngest {
      * @return true if this sample should be inserted (not a near-duplicate of a recent one).
      */
     fun shouldAccept(sample: OnePlusGlucoseSample): Boolean {
-        // The hard rule of direct-to-watch: a reading from any slot but the phone's is for the
-        // watch faces only and never reaches insertCgmSourceData. Checked first, so it does not
-        // even move the dedup state.
+        // The rule of direct-to-watch: a reading from any slot but the phone's never comes this way.
+        // A watch reading reaches insertCgmSourceData only through shouldAcceptFromWatch, after
+        // mayFeedLoopFromWatch. Checked first, so it does not even move the dedup state.
         if (!mayFeedLoop(sample)) return false
+        return acceptIfNew(sample)
+    }
+
+    /**
+     * The dedup for a reading the watch took itself and sent to the phone, see [mayFeedLoopFromWatch].
+     *
+     * Its sequence is null, so the sequence floor does not apply: a watch reading may fill a hole
+     * behind a newer phone reading. The timestamp window still drops the phone's own copy of it.
+     */
+    fun shouldAcceptFromWatch(sample: OnePlusGlucoseSample): Boolean {
+        if (sample.displaySlot != OnePlusDisplaySlot.WATCH || sample.sequence != null) return false
+        return acceptIfNew(sample)
+    }
+
+    private fun acceptIfNew(sample: OnePlusGlucoseSample): Boolean {
         lock.withLock {
             val seq = sample.sequence
             // Persistent floor: reject anything at or below the last accepted sequence — survives
@@ -125,6 +140,59 @@ internal object DexcomOnePlusIngest {
      * slot, whatever path the reading took.
      */
     fun mayFeedLoop(sample: OnePlusGlucoseSample): Boolean = sample.displaySlot.mayFeedLoop
+
+    /** A watch reading more than this ahead of the phone's clock is refused. */
+    const val WATCH_MAX_AHEAD_MS: Long = 60L * 1000L
+
+    /**
+     * A watch reading older than this is refused. The sensor sends its last 3 hours at each
+     * connection, so the watch never has an older reading the phone could miss.
+     */
+    const val WATCH_MAX_AGE_MS: Long = 3L * 60L * 60L * 1000L
+
+    /** The watch's clock may differ from the phone's by this much, see [watchClockAgrees]. */
+    const val WATCH_MAX_CLOCK_SKEW_MS: Long = 60L * 1000L
+
+    /**
+     * True when the watch's clock, read when it sent its readings ([watchSentAtMs]), agrees with the
+     * phone's clock [nowMs]. A watch reading carries the watch's time: with a wrong watch clock the
+     * loop would get a value at the wrong time, too old or too new. The message reaches the phone
+     * within seconds, so a larger gap is a wrong clock. Null: a watch app that does not send its time,
+     * refused too.
+     */
+    fun watchClockAgrees(watchSentAtMs: Long?, nowMs: Long): Boolean =
+        watchSentAtMs != null && abs(nowMs - watchSentAtMs) <= WATCH_MAX_CLOCK_SKEW_MS
+
+    /** The range of a glucose value the sensor reports, the same as on the watch. */
+    private const val WATCH_MIN_MGDL = 40.0
+    private const val WATCH_MAX_MGDL = 400.0
+
+    /**
+     * True when a reading the watch took itself, in the sensor's watch slot, may reach the loop.
+     *
+     * Direct-to-watch keeps the watch's readings on the watch, unless the user turned on
+     * [app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey.WatchReadingsToLoop]. The sensor computes
+     * the glucose itself, so the watch gets the same value as the phone, not a second measure. Still,
+     * every condition must hold:
+     *
+     * @param enabled direct to watch and the loop setting are both on
+     * @param fromAddress the sensor the watch read
+     * @param phoneAddress the production sensor the phone follows and handed to the watch
+     */
+    fun mayFeedLoopFromWatch(
+        enabled: Boolean,
+        fromAddress: String?,
+        phoneAddress: String?,
+        mgdl: Double,
+        timestampMs: Long,
+        nowMs: Long,
+    ): Boolean =
+        enabled &&
+            !phoneAddress.isNullOrBlank() &&
+            fromAddress == phoneAddress &&
+            mgdl in WATCH_MIN_MGDL..WATCH_MAX_MGDL &&
+            timestampMs >= nowMs - WATCH_MAX_AGE_MS &&
+            timestampMs <= nowMs + WATCH_MAX_AHEAD_MS
 
     /**
      * Turns the sensor's rate of change into the arrow AAPS stores and draws.

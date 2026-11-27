@@ -21,6 +21,7 @@ import app.aaps.core.interfaces.source.StagingState
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.pump.PumpOverviewScreen
 import app.aaps.core.ui.compose.stringResource
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.source.SourceStrings
 
 /**
@@ -28,7 +29,8 @@ import app.aaps.plugins.source.SourceStrings
  *
  * It is the shared pump overview: a banner with the phase, the facts of the sensor that feeds the
  * loop, and the buttons to start a sensor, follow the warm-up and read the driver log. Below the
- * facts come the cards: direct to watch, calibration, end of life, and the pre-soak sensor with its
+ * facts come the cards: a broken phone link with its Repair button, direct to watch, calibration,
+ * end of life, and the pre-soak sensor with its
  * switch button.
  *
  * No frame of its own: the plugin tab gives it the toolbar, and the status Activity wraps it in
@@ -55,6 +57,11 @@ fun DexcomOnePlusStatusOverview(
         modifier = modifier,
         customContent = {
             Column(verticalArrangement = Arrangement.spacedBy(AapsSpacing.medium)) {
+                // A stale Android bond: first, it is why the phone gets no glucose of its own.
+                val bondRepair by viewModel.bondRepair.collectAsState()
+                if (bondRepair != OnePlusBondRepairState.NONE) {
+                    BondRepairCard(state = bondRepair, onRepair = { viewModel.repairBond() })
+                }
                 // Direct-to-watch: what the watch reports, only while the feature is on (the switch
                 // itself is in the settings) and the Wear plugin is on. First of the cards: it is
                 // about the sensor in use, like the facts above it.
@@ -62,10 +69,13 @@ fun DexcomOnePlusStatusOverview(
                 val watchDirectOn by viewModel.watchDirectEnabled.collectAsState()
                 if (watchDirectOn && watchHandover.isOffered) {
                     val watchReport by watchHandover.report.collectAsState()
+                    val feed by viewModel.feed.collectAsState()
                     DexcomOnePlusWatchDirectCard(
                         // Read again on every status tick, so a new pairing shows at once.
                         available = remember(current) { watchHandover.isAvailable() },
                         report = watchReport,
+                        feed = feed.takeIf { watchHandover.readingsToLoop },
+                        formatTime = viewModel.format.time,
                     )
                 }
                 view.calibration?.let { SensorCalibrationCard(it) }
@@ -130,6 +140,29 @@ private fun PromoteConfirmDialog(early: Boolean, onConfirm: () -> Unit, onDismis
             TextButton(onClick = onDismiss) { Text(stringResource(SourceStrings.dexcom_oneplus_staging_promote_dismiss)) }
         },
     )
+}
+
+/**
+ * A stale Android bond, see `OnePlusBondRepair`. The button shows only while the bond is broken:
+ * during a repair the user only has to wait for the pairing request and accept it.
+ */
+@Composable
+private fun BondRepairCard(state: OnePlusBondRepairState, onRepair: () -> Unit) {
+    CgmCard(tone = CgmCardTone.Warning) {
+        CgmCardHeader(stringResource(SourceStrings.dexcom_oneplus_bond_title))
+        Text(
+            text = stringResource(
+                if (state == OnePlusBondRepairState.REPAIRING) SourceStrings.dexcom_oneplus_bond_repairing_text
+                else SourceStrings.dexcom_oneplus_bond_broken_text,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (state == OnePlusBondRepairState.BROKEN) {
+            Button(onClick = onRepair) {
+                Text(stringResource(SourceStrings.dexcom_oneplus_bond_repair))
+            }
+        }
+    }
 }
 
 /** The sensor in use is near its end and no replacement is warming up yet. */

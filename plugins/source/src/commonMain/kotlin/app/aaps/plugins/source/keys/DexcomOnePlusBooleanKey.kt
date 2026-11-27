@@ -65,4 +65,20 @@ enum class DexcomOnePlusBooleanKey(
         title = SourceStrings.dexcom_oneplus_watch_direct,
         summary = SourceStrings.dexcom_oneplus_watch_direct_summary,
     ),
+
+    /**
+     * Direct-to-watch: the watch sends its own readings to the phone, and the loop uses the ones the
+     * phone did not get itself. For a phone whose Bluetooth misses the sensor while the watch still
+     * hears it. The phone checks each reading (same sensor, value in range, not in the future) and
+     * drops the ones it already has.
+     *
+     * Off by default: with it off, the watch's readings stay on the watch.
+     */
+    WatchReadingsToLoop(
+        key = "dexcom_oneplus_watch_readings_to_loop",
+        defaultValue = false,
+        title = SourceStrings.dexcom_oneplus_watch_readings_to_loop,
+        summary = SourceStrings.dexcom_oneplus_watch_readings_to_loop_summary,
+        dependency = WatchDirect,
+    ),
 }

@@ -20,6 +20,7 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSession
 import app.aaps.plugins.dexcomoneplus.session.OnePlusMacArbiter
 import app.aaps.plugins.dexcomoneplus.session.OnePlusBleSessionSkeleton
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationQueue
 import app.aaps.plugins.dexcomoneplus.session.OnePlusConnectPrep
@@ -34,10 +35,26 @@ import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.time.Clock
 
 internal object OnePlusCgmDriverResumePolicy {
-    fun canResume(storedSession: OnePlusStoredSession?): Boolean =
-        storedSession?.lastMac?.isNotBlank() == true &&
-            OnePlusSessionStart.isValidPairingCode(storedSession.identity.pin) &&
-            storedSession.sharedKey?.size == SHARED_KEY_SIZE
+
+    /**
+     * True when the stored sensor can be connected again on our own: an address, a valid pairing
+     * code, and a key, or a key that was deleted only because this same sensor refused it.
+     *
+     * After such a refusal the running session pairs again in full with the pairing code. Without
+     * the second case, a restart of the app in that state left the phone with no connection at all,
+     * for good (field log 26/11/2026: "auto-resume skipped — stored session incomplete" while the
+     * watch still read the sensor). The resumed session does the same full pairing.
+     *
+     * @param refusals this slot's refusals in a row
+     */
+    fun canResume(storedSession: OnePlusStoredSession?, refusals: OnePlusAuthRefusals = OnePlusAuthRefusals()): Boolean {
+        if (storedSession == null) return false
+        val mac = storedSession.lastMac
+        if (mac.isNullOrBlank() || !OnePlusSessionStart.isValidPairingCode(storedSession.identity.pin)) return false
+        val hasKey = storedSession.sharedKey?.size == SHARED_KEY_SIZE
+        val lostKeyToRefusal = refusals.count > 0 && refusals.lastWithSavedKey && refusals.address.equals(mac, ignoreCase = true)
+        return hasKey || lostKeyToRefusal
+    }
 
     private const val SHARED_KEY_SIZE = 16
 }
@@ -140,6 +157,20 @@ class OnePlusCgmDriverReal(
 
     @Volatile
     private var sensorStore: OnePlusSensorStore? = null
+
+    /**
+     * The last stale-bond state a session reported, with its sensor address. A session is often
+     * replaced (Connect, auto-resume), and a new one would otherwise start at
+     * [OnePlusBondRepairState.NONE] and say nothing: the plugin would keep showing BROKEN or
+     * REPAIRING after the link is healthy again. The next session on the same sensor starts from
+     * this state, and reports it when it starts. See [OnePlusBondRepair].
+     */
+    @Volatile
+    private var lastBondRepair: Pair<String, OnePlusBondRepairState>? = null
+
+    /** The state a new session on [deviceAddress] starts from, see [lastBondRepair]. */
+    private fun bondRepairToCarry(deviceAddress: String): OnePlusBondRepairState =
+        lastBondRepair?.takeIf { it.first.equals(deviceAddress, ignoreCase = true) }?.second ?: OnePlusBondRepairState.NONE
 
     /** Last ADV name seen for [connect] target — persisted on auth success. */
     @Volatile
@@ -483,6 +514,7 @@ class OnePlusCgmDriverReal(
                     val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
+                            deviceAddress = deviceAddress,
                             requestNewSensorStart = true,
                             generation = generation,
                         ).also { session = it }
@@ -522,7 +554,7 @@ class OnePlusCgmDriverReal(
      */
     override fun resumeStoredSession(): Boolean {
         val stored = sensorStore?.load()
-        if (!OnePlusCgmDriverResumePolicy.canResume(stored)) {
+        if (!OnePlusCgmDriverResumePolicy.canResume(stored, refusalLedger.load())) {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume skipped — stored session incomplete",
             )
@@ -568,7 +600,7 @@ class OnePlusCgmDriverReal(
         dropPendingCalibration("session restart")
         OnePlusLog.i(
             "${OnePlusLogMarkers.SESSION}: [$slot] auto-resume queued mac=***${deviceAddress.takeLast(5)} " +
-                "savedKey=true newStart=false",
+                "savedKey=${stored.sharedKey != null} newStart=false",
         )
         try {
             lifecycleLock.withLock {
@@ -577,6 +609,7 @@ class OnePlusCgmDriverReal(
                     val created = lifecycleLock.withLock {
                         if (generation != operationGeneration) return@execute
                         createSession(
+                            deviceAddress = deviceAddress,
                             requestNewSensorStart = false,
                             generation = generation,
                         ).also { session = it }
@@ -693,7 +726,14 @@ class OnePlusCgmDriverReal(
 
     override fun isSessionUp(): Boolean = session?.isUp() == true
 
+    override fun bondRepairState(): OnePlusBondRepairState = session?.bondRepairState() ?: OnePlusBondRepairState.NONE
+
+    override fun requestBondRepair() {
+        session?.requestBondRepair()
+    }
+
     private fun createSession(
+        deviceAddress: String,
         requestNewSensorStart: Boolean,
         generation: Long,
     ): OnePlusBleSession {
@@ -772,6 +812,13 @@ class OnePlusCgmDriverReal(
             standingConnectWait = watchMode,
             // And it wakes for the sensor's next cycle, so it can connect the fast way in time.
             wakeAlarm = wakeAlarm,
+            initialBondRepair = bondRepairToCarry(deviceAddress),
+            onBondRepair = { state ->
+                ifCurrentOperation(generation) {
+                    lastBondRepair = deviceAddress to state
+                    watchersSnapshot().forEach { it.onBondRepair(state) }
+                }
+            },
         )
         return created
     }

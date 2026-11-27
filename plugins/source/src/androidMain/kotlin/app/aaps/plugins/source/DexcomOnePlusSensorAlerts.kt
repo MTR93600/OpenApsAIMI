@@ -36,6 +36,16 @@ internal class DexcomOnePlusSensorAlerts {
     private var warmupDoneAtMs: Long? = null
     private var lastReadingAtMs: Long? = null
     private var secondSensorReadyAtMs: Long? = null
+    private var lastWatchReadingAtMs: Long? = null
+    private var watchOnlySinceMs: Long? = null
+
+    /** When the plugin started, for [DexcomOnePlusFeed.STARTING]. */
+    private var startedAtMs: Long? = null
+
+    /** The plugin started: until the first reading, [feed] says so instead of "no recent glucose". */
+    fun onStart(nowMs: Long) {
+        startedAtMs = nowMs
+    }
 
     /** The last WARMING was a sensor issue, not a warm-up, so READY after it is no "warm-up done". */
     private var lastWasIssue = false
@@ -71,6 +81,21 @@ internal class DexcomOnePlusSensorAlerts {
         issueSinceMs = null
     }
 
+    /**
+     * A reading the watch took itself and sent to the phone, taken at [timestampMs]. Also when the
+     * phone had it already: it shows that the watch still hears the sensor.
+     */
+    fun onWatchReading(timestampMs: Long) {
+        if (timestampMs > (lastWatchReadingAtMs ?: Long.MIN_VALUE)) lastWatchReadingAtMs = timestampMs
+    }
+
+    /** Where the glucose comes from now, see [DexcomOnePlusFeed]. Keeps the start of a watch-only time. */
+    fun feed(nowMs: Long): DexcomOnePlusFeedState {
+        val feed = DexcomOnePlusFeed.of(lastReadingAtMs, lastWatchReadingAtMs, nowMs, startedAtMs)
+        watchOnlySinceMs = if (feed == DexcomOnePlusFeed.WATCH_ONLY) watchOnlySinceMs ?: lastReadingAtMs ?: nowMs else null
+        return DexcomOnePlusFeedState(feed, watchOnlySinceMs)
+    }
+
     /** The state of the pre-soak slot changed. */
     fun onStaging(state: StagingState, nowMs: Long) {
         secondSensorReadyAtMs = if (state == StagingState.READY) secondSensorReadyAtMs ?: nowMs else null
@@ -84,15 +109,46 @@ internal class DexcomOnePlusSensorAlerts {
         issueSinceMs = null
         warmupDoneAtMs = null
         lastReadingAtMs = null
+        lastWatchReadingAtMs = null
+        watchOnlySinceMs = null
         lastWasIssue = false
     }
 
+    /**
+     * While the watch sends readings, glucose still reaches the loop: no signal loss is reported, the
+     * plugin shows its own watch-only notice instead. When the watch stops too, the signal loss starts
+     * at the last reading of either side, so it has the weight a phone-only loss had before.
+     */
     fun state(
         running: Boolean,
         sensorStored: Boolean,
         expiresAtMs: Long?,
         nowMs: Long,
         expiringLeadMs: Long,
+    ): CgmSensorAlertState {
+        val watchCovers = DexcomOnePlusFeed.isFresh(lastWatchReadingAtMs, nowMs)
+        val watchAt = lastWatchReadingAtMs
+        val linkLost = when {
+            watchCovers -> null
+            watchAt == null -> linkLostSinceMs
+            else -> linkLostSinceMs?.let { maxOf(it, watchAt) }
+        }
+        val lastReading = when {
+            watchCovers -> null
+            watchAt == null -> lastReadingAtMs
+            else -> maxOf(lastReadingAtMs ?: watchAt, watchAt)
+        }
+        return map(running, sensorStored, expiresAtMs, nowMs, expiringLeadMs, linkLost, lastReading)
+    }
+
+    private fun map(
+        running: Boolean,
+        sensorStored: Boolean,
+        expiresAtMs: Long?,
+        nowMs: Long,
+        expiringLeadMs: Long,
+        linkLost: Long?,
+        lastReading: Long?,
     ): CgmSensorAlertState = CgmSensorAlertRules.map(
         CgmSensorAlertRules.Input(
             stopped = !running,
@@ -100,8 +156,8 @@ internal class DexcomOnePlusSensorAlerts {
             failure = failure,
             endedBySensor = endedBySensor,
             expiresAtMs = expiresAtMs,
-            linkLostSinceMs = linkLostSinceMs,
-            lastReadingAtMs = lastReadingAtMs,
+            linkLostSinceMs = linkLost,
+            lastReadingAtMs = lastReading,
             readingExpected = phase !in SILENCE_EXPECTED,
             issueSinceMs = issueSinceMs,
             secondSensorReadyAtMs = secondSensorReadyAtMs,

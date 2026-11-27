@@ -3,16 +3,22 @@ package app.aaps.plugins.source
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
+import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
 import app.aaps.plugins.source.compose.toCgmWarmupInfo
+import java.util.Date
 import app.aaps.core.ui.R as CoreUiR
 
 /** Importance of the shared ONE+ status channel. One value, so it can be changed in one place. */
@@ -169,6 +175,126 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
         }
     }
 
+    /** The start of the watch-only time the notice shows now. Null: no notice. */
+    private var watchOnlySinceMs: Long? = null
+
+    /** When the watch-only notice was last posted, for [DexcomOnePlusFeed.remindAtScreenOn]. */
+    private var watchOnlyShownAtMs: Long = 0L
+
+    /** Shows the notice again when the phone screen turns on. Registered only while it shows. */
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_ON) remindWatchOnly()
+        }
+    }
+    private var screenOnRegistered = false
+
+    /**
+     * The loop runs only on the watch's readings since [sinceMs]: a silent ongoing notice. Null
+     * takes it down. Posts only on a change, so a check every minute does not repeat it.
+     *
+     * No sound, on purpose: glucose still arrives, and these outages also happen at night. So the
+     * notice shows again when the user turns the phone screen on, at most once every
+     * [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS], and the user sees it when they are awake. When the
+     * watch stops too, the usual signal loss alarm comes, with its sound.
+     */
+    @Synchronized
+    fun watchOnly(sinceMs: Long?) {
+        if (sinceMs == null) {
+            if (watchOnlySinceMs != null) {
+                watchOnlySinceMs = null
+                listenScreenOn(false)
+                try {
+                    NotificationManagerCompat.from(context).cancel(WATCH_ONLY_ID)
+                } catch (_: Throwable) {
+                }
+            }
+            return
+        }
+        if (sinceMs == watchOnlySinceMs) return
+        watchOnlySinceMs = sinceMs
+        postWatchOnly(sinceMs)
+        listenScreenOn(true)
+    }
+
+    @Synchronized
+    private fun remindWatchOnly() {
+        val since = watchOnlySinceMs ?: return
+        if (!DexcomOnePlusFeed.remindAtScreenOn(watchOnlyShownAtMs, System.currentTimeMillis())) return
+        // A notice that is already in the list does not move when posted again: take it down first.
+        try {
+            NotificationManagerCompat.from(context).cancel(WATCH_ONLY_ID)
+        } catch (_: Throwable) {
+        }
+        postWatchOnly(since)
+    }
+
+    private fun postWatchOnly(sinceMs: Long) {
+        watchOnlyShownAtMs = System.currentTimeMillis()
+        val since = DateFormat.getTimeFormat(context).format(Date(sinceMs))
+        val text = context.getString(R.string.dexcom_oneplus_notif_watch_only_text, since)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
+            .setContentTitle(context.getString(R.string.dexcom_oneplus_notif_watch_only_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setContentIntent(openDetailIntent(warmupPage = false))
+        try {
+            NotificationManagerCompat.from(context).notify(WATCH_ONLY_ID, builder.build())
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied: the status screen still says it.
+        }
+    }
+
+    private fun listenScreenOn(on: Boolean) {
+        if (on == screenOnRegistered) return
+        try {
+            if (on) ContextCompat.registerReceiver(context, screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
+            else context.unregisterReceiver(screenOnReceiver)
+            screenOnRegistered = on
+        } catch (_: IllegalArgumentException) {
+            // Not registered: nothing to undo.
+            screenOnRegistered = false
+        }
+    }
+
+    /**
+     * The silent notice of a stale Android bond (`OnePlusBondRepair`). A tap opens the status screen,
+     * where the Repair button is. No sound: the user may be asleep, and the repair needs them awake
+     * and in front of the phone anyway, to accept the pairing request.
+     */
+    fun bondRepair(state: OnePlusBondRepairState) {
+        val text = when (state) {
+            OnePlusBondRepairState.NONE      -> {
+                try {
+                    NotificationManagerCompat.from(context).cancel(BOND_REPAIR_ID)
+                } catch (_: Throwable) {
+                }
+                return
+            }
+
+            OnePlusBondRepairState.BROKEN    -> context.getString(R.string.dexcom_oneplus_bond_broken_text)
+            OnePlusBondRepairState.REPAIRING -> context.getString(R.string.dexcom_oneplus_bond_repairing_text)
+        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
+            .setContentTitle(context.getString(R.string.dexcom_oneplus_bond_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setOngoing(true)
+            .setContentIntent(openDetailIntent(warmupPage = false))
+        try {
+            NotificationManagerCompat.from(context).notify(BOND_REPAIR_ID, builder.build())
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied — the status screen still shows the state and its button.
+        }
+    }
+
     /**
      * Where a tap goes: the warm-up page while a warm-up runs or has failed, the status screen in
      * every other state. The warm-up page says nothing useful about a sensor that is long past its
@@ -209,6 +335,12 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
 
         /** Not 8931 (warm-up): the two would replace each other. */
         private const val ALERT_ID = 8933
+
+        /** The watch-only notice, apart from the warm-up one: both can show at the same time. */
+        private const val WATCH_ONLY_ID = 8934
+
+        /** Its own id: it stays next to the warm-up notice and the alerts. */
+        private const val BOND_REPAIR_ID = 8935
 
         private const val REQUEST_WARMUP = 0
         private const val REQUEST_STATUS = 1

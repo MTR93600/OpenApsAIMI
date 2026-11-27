@@ -43,6 +43,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseWatcher
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.dexcomoneplus.session.OnePlusCalibrationGate
 import app.aaps.plugins.source.compose.DexcomOnePlusComposeContent
 import app.aaps.plugins.source.compose.DexcomOnePlusSensorFacts
@@ -271,12 +272,37 @@ class DexcomOnePlusPlugin @Inject constructor(
             aapsLogger = aapsLogger,
             transport = host.watchTransport(rxBus),
             productionSession = { sensorStore.load() },
+            productionRefusals = { sensorStore.loadAuthRefusals() },
             wearPluginEnabled = ::wearPluginEnabled,
+            onWatchReadings = ::onWatchReadings,
         )
     }
 
     /** Runs [DexcomOnePlusWarmupBasalGuard] on every warm-up / connection change. Started in onStart, cancelled in onStop. */
     private var warmupGuardJob: Job? = null
+
+    private val _feed = MutableStateFlow(DexcomOnePlusFeedState(DexcomOnePlusFeed.NONE))
+
+    /** Where the loop's glucose comes from now, for the Status screen. See [DexcomOnePlusFeed]. */
+    internal val feed: StateFlow<DexcomOnePlusFeedState> = _feed.asStateFlow()
+
+    /** Checks [feed] every minute, so the watch-only alert comes on time and goes when nothing arrives. */
+    private var feedJob: Job? = null
+
+    /**
+     * Updates [feed] and the watch-only notice: silent, shown again at screen on at most every
+     * [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS], gone when the phone hears the sensor again or when the
+     * watch stops too (then the usual signal loss alarm takes over, with its sound).
+     */
+    private fun refreshFeed() {
+        val now = nowMs()
+        val state = sensorAlertsLock.withLock { sensorAlerts.feed(now) }
+        val previous = _feed.value
+        _feed.value = state
+        if (state.feed != previous.feed) aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_FEED: ${previous.feed} -> ${state.feed} since=${state.watchOnlySinceMs}")
+        val since = state.watchOnlySinceMs.takeIf { state.feed == DexcomOnePlusFeed.WATCH_ONLY }
+        host.showWatchOnly(since)
+    }
 
     /** True while the [DexcomOnePlusWarmupBasalGuard] collector runs. For tests. */
     internal fun isWarmupGuardRunning(): Boolean = warmupGuardJob?.isActive == true
@@ -431,6 +457,7 @@ class DexcomOnePlusPlugin @Inject constructor(
         ) + listOfNotNull(
             // Only where a watch link exists and the Wear plugin is on.
             DexcomOnePlusBooleanKey.WatchDirect.takeIf { watchHandover.isOffered },
+            DexcomOnePlusBooleanKey.WatchReadingsToLoop.takeIf { watchHandover.isOffered },
         ),
         icon = pluginDescription.icon,
     )
@@ -459,6 +486,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     override suspend fun onStart() {
         super.onStart()
         sensorAlertsRunning = true
+        sensorAlertsLock.withLock { sensorAlerts.onStart(nowMs()) }
         workScopeLock.withLock { stopped = false }
         ioScope()
         syncDriverFromPrefs()
@@ -495,6 +523,13 @@ class DexcomOnePlusPlugin @Inject constructor(
                 "stagingResumeQueued=$stagingResumeQueued",
         )
         startWarmupBasalGuard()
+        feedJob?.cancel()
+        feedJob = ioScope()?.launch {
+            while (true) {
+                refreshFeed()
+                delay(FEED_CHECK_MS)
+            }
+        }
         watchStagingClock()
         ioScope()?.let { watchHandover.start(it) }
     }
@@ -543,6 +578,9 @@ class DexcomOnePlusPlugin @Inject constructor(
         stopStep("staging clock cancel") { stagingClock?.cancel(); stagingClock = null }
         stopStep("warm-up guard cancel") { warmupGuardJob?.cancel() }
         warmupGuardJob = null
+        stopStep("feed check cancel") { feedJob?.cancel() }
+        feedJob = null
+        stopStep("watch-only notice") { host.showWatchOnly(null) }
         // Only the instances that exist. Asking the registry for "the driver" would build a new
         // one just to shut it down.
         host.existingProductionDriver()?.let { production ->
@@ -555,6 +593,10 @@ class DexcomOnePlusPlugin @Inject constructor(
             stopStep("staging shutdown") { staging.shutdown() }
         }
         stopStep("warm-up notification cancel") { host.cancelWarmupNotification() }
+        stopStep("bond repair notice cancel") {
+            _bondRepair.value = OnePlusBondRepairState.NONE
+            host.showBondRepair(OnePlusBondRepairState.NONE)
+        }
         stopStep("session service stop") { host.setSessionServiceWanted(false) }
         // Last, after the drivers are stopped. [stopped] already keeps late callbacks from making
         // a new scope.
@@ -702,7 +744,42 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         if (sample.timestampMs > (lastProductionReading?.timestampMs ?: Long.MIN_VALUE)) lastProductionReading = sample
         sensorAlertsLock.withLock { sensorAlerts.onReading(sample.timestampMs) }
+        refreshFeed()
         ingestToLoop(sample, sensorStore)
+    }
+
+    /**
+     * Readings the watch took itself, already checked by [DexcomOnePlusWatchHandover] (setting on, same
+     * sensor, value in range, not in the future). They go to the loop the same way as the phone's
+     * own, minus the ones the phone already has.
+     *
+     * The phone's link state, its sensor alarms, its last reading and its sequence floor are left
+     * alone: they tell about the phone's own link to the sensor, which is still missing.
+     */
+    private fun onWatchReadings(samples: List<OnePlusGlucoseSample>) {
+        if (DexcomOnePlusIngest.isWarmupBlockingIngest(warmupPhase)) {
+            aapsLogger.debug(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BG: ${samples.size} watch readings ignored during WARMING")
+            return
+        }
+        // Also the readings the phone has already: they show the watch still hears the sensor.
+        sensorAlertsLock.withLock { samples.forEach { sensorAlerts.onWatchReading(it.timestampMs) } }
+        refreshFeed()
+        val fresh = samples.filter { DexcomOnePlusIngest.shouldAcceptFromWatch(it) }
+        if (fresh.isEmpty()) return
+        val glucoseValues = fresh.map { DexcomOnePlusIngest.mapToGv(it) }
+        ioScope()?.launch {
+            val result = persistenceLayer.insertCgmSourceData(
+                Sources.DexcomOnePlus,
+                glucoseValues,
+                emptyList(),
+                sensorInsertionTime = null,
+            )
+            aapsLogger.info(
+                LTag.BGSOURCE,
+                "DEXCOM_ONEPLUS_BG: watch readings inserted: ${result.inserted.size}, updated: ${result.updated.size}, " +
+                    "newest ts=${fresh.maxOf { it.timestampMs }}",
+            )
+        }
     }
 
     /**
@@ -835,6 +912,28 @@ class DexcomOnePlusPlugin @Inject constructor(
         }
         // A new sensor, or a new key after a re-pairing: the watch must follow. Sends only on a change.
         ioScope()?.launch { watchHandover.refresh(if (up) "session up" else "session down") }
+    }
+
+    private val _bondRepair = MutableStateFlow(OnePlusBondRepairState.NONE)
+
+    /** Where a stale Android bond of the production sensor and its repair stand, see `OnePlusBondRepair`. */
+    internal val bondRepair: StateFlow<OnePlusBondRepairState> = _bondRepair.asStateFlow()
+
+    override fun onBondRepair(state: OnePlusBondRepairState) {
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BOND: repair state=$state")
+        _bondRepair.value = state
+        host.showBondRepair(state)
+    }
+
+    /**
+     * The user asks to repair a stale bond. The production session removes the bond after its
+     * current link. Android then shows a pairing request at the next pairing, which the user must
+     * accept.
+     */
+    fun requestBondRepair() {
+        val driver = host.existingProductionDriver()
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_BOND: repair asked driver=${driver != null}")
+        driver?.requestBondRepair()
     }
 
     /**
@@ -1282,6 +1381,8 @@ class DexcomOnePlusPlugin @Inject constructor(
         // It also rebinds the promoted instance onto the production file, so it must happen BEFORE
         // the staging file is cleared: its live link reads that file on every reconnect.
         val retired = host.promoteStagingInstance()
+        // A stale bond of the old sensor says nothing about the new one.
+        onBondRepair(OnePlusBondRepairState.NONE)
         runCatching { retired?.shutdown() }
         runCatching { if (outgoing !== promoted && outgoing !== retired) outgoing.shutdown() }
         // 6) Only now retire the staging store — nothing points at it any more.
@@ -1614,6 +1715,9 @@ class DexcomOnePlusPlugin @Inject constructor(
     private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
 
     companion object {
+
+        /** How often [feed] is checked while the plugin runs. */
+        private const val FEED_CHECK_MS = 60_000L
 
         /**
          * How far before the driver's own session start a therapy event may sit and still count as

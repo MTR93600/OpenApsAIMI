@@ -708,8 +708,11 @@ sealed class EventData : Event() {
      * from [pairingCode]; the phone's key never leaves the phone. Without [active] the watch lets the
      * sensor go and forgets it.
      *
-     * The watch's readings go to its faces only. They are never sent back to the phone and never reach
-     * the loop.
+     * The watch's readings go to its faces. They come back to the phone only when [sendReadings] is
+     * true, as [CgmWatchReadings], and the phone checks them again before the loop gets them.
+     *
+     * @param sendReadings true when the user lets the loop use the watch's readings while the phone
+     *   misses them. False by default: then the watch sends no reading at all.
      */
     @Serializable
     data class CgmWatchDirect(
@@ -717,13 +720,37 @@ sealed class EventData : Event() {
         val pairingCode: String? = null,
         val address: String? = null,
         val serial: String? = null,
-        val sensorName: String? = null
+        val sensorName: String? = null,
+        val sendReadings: Boolean = false
     ) : EventData() {
 
         // Never print the pairing code in a log line.
         override fun toString(): String =
-            "CgmWatchDirect(active=$active, address=$address, serial=$serial, sensorName=$sensorName, pairingCode=${if (pairingCode == null) "null" else "***"})"
+            "CgmWatchDirect(active=$active, address=$address, serial=$serial, sensorName=$sensorName, sendReadings=$sendReadings, " +
+                "pairingCode=${if (pairingCode == null) "null" else "***"})"
     }
+
+    /**
+     * Wear -> Mobile: the readings the watch took from the sensor [address] itself and the phone does
+     * not have yet. Sent only when the phone asked for them ([CgmWatchDirect.sendReadings]).
+     *
+     * @param sentAt the watch's clock when it sent the message. The phone refuses the readings when
+     *   it does not agree with its own clock. Null from a watch app that does not send it.
+     */
+    @Serializable
+    data class CgmWatchReadings(
+        val address: String,
+        val readings: List<CgmWatchReading>,
+        val sentAt: Long? = null
+    ) : EventData()
+
+    /** One reading of [CgmWatchReadings], in mg/dL, with the sensor's rate of change in mg/dL per minute. */
+    @Serializable
+    data class CgmWatchReading(
+        val timestamp: Long,
+        val mgdl: Double,
+        val slopeMgdlPerMin: Double? = null
+    )
 
     /** Wear -> Mobile: how the watch's own connection to the sensor is doing (direct-to-watch). */
     @Serializable

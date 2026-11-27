@@ -7,8 +7,9 @@ package app.aaps.wear.watchdirect
  * let it go, and hear readings. The protocol lives behind it, in `:plugins:dexcom_oneplus` and
  * `:plugins:libkeks` (see [OnePlusWatchSensorLink]); nothing else in the watch app knows about it.
  *
- * A reading that comes through here is for the watch faces only. The watch app has no way to store
- * glucose for the loop, and it never sends a reading to the phone.
+ * A reading that comes through here is for the watch faces. The watch app has no way to store
+ * glucose for the loop. It sends a reading to the phone only when the phone asked for it
+ * (`WatchReadingsForPhone`), and the phone checks it before the loop gets it.
  */
 interface WatchSensorLink {
 

@@ -32,6 +32,16 @@ interface OnePlusBleSession {
     fun stop(reason: String?)
     fun isUp(): Boolean
     fun warmupState(): OnePlusWarmupState
+
+    /** Where a stale bond and its repair stand, see [OnePlusBondRepair]. */
+    fun bondRepairState(): OnePlusBondRepairState = OnePlusBondRepairState.NONE
+
+    /**
+     * The user asks to repair a stale bond: the bond is removed after the current link, see
+     * [OnePlusBondRepair]. A session that does not support it reports [OnePlusBondRepairState.NONE]
+     * and never offers it.
+     */
+    fun requestBondRepair() {}
 }
 
 /**
@@ -549,7 +559,12 @@ class OnePlusBleSessionSkeleton(
     /** [OnePlusBleSessionCyclePolicy.SENSOR_CYCLE_MS]; a test shortens it, the app never does. */
     private val sensorCycleMs: Long = OnePlusBleSessionCyclePolicy.SENSOR_CYCLE_MS,
     /** [OnePlusBleSessionCyclePolicy.TIMED_CONNECT_LEAD_MS]; a test shortens it, the app never does. */
-    private val timedConnectLeadMs: Long = OnePlusBleSessionCyclePolicy.TIMED_CONNECT_LEAD_MS,) : OnePlusBleSession {
+    private val timedConnectLeadMs: Long = OnePlusBleSessionCyclePolicy.TIMED_CONNECT_LEAD_MS,
+    /** The state of a stale bond and of its repair changed, see [OnePlusBondRepair]. */
+    private val onBondRepair: (OnePlusBondRepairState) -> Unit = {},
+    /** Where the stale bond stood in the session before this one, on the same sensor. Reported at start. */
+    initialBondRepair: OnePlusBondRepairState = OnePlusBondRepairState.NONE,
+) : OnePlusBleSession {
 
     @Volatile
     private var up = false
@@ -584,6 +599,16 @@ class OnePlusBleSessionSkeleton(
      */
     @Volatile
     private var everProvedControlChannel = false
+
+    /** Stale-bond cycles in a row, see [OnePlusBondRepair.staleCycles]. Only the BLE executor uses it. */
+    private var staleBondCycles = 0
+
+    @Volatile
+    private var bondRepairState = initialBondRepair
+
+    /** The user asked for a bond repair. Done between two links, see [runRequestedBondRepair]. */
+    @Volatile
+    private var bondRepairRequested = false
 
     /**
      * Start of the current ADV-silence episode. 0 = not in an episode.
@@ -725,6 +750,9 @@ class OnePlusBleSessionSkeleton(
             return
         }
         val normalized = OnePlusSessionStart.normalizePairingCode(pairingCode)
+        // Said once at start, even when nothing changed: the session before this one may have
+        // reported BROKEN or REPAIRING, and that must not stay on screen if this one starts clean.
+        onBondRepair(bondRepairState)
         if (deviceAddress.isBlank()) {
             OnePlusLog.i(
                 "${OnePlusLogMarkers.SESSION}: [$slot] start pairing (addr blank) profile=${profile.id}",
@@ -826,6 +854,8 @@ class OnePlusBleSessionSkeleton(
             )
             preparedConnect = null
             if (!running) return
+            // The link of this cycle is closed: the one safe moment for a bond repair.
+            runRequestedBondRepair()
 
             when (outcome) {
                 CycleOutcome.Stopped -> return
@@ -920,6 +950,64 @@ class OnePlusBleSessionSkeleton(
     override fun isUp(): Boolean = up
 
     override fun warmupState(): OnePlusWarmupState = warmup
+
+    override fun bondRepairState(): OnePlusBondRepairState = bondRepairState
+
+    override fun requestBondRepair() {
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair asked by the user — the bond goes after the current link")
+        bondRepairRequested = true
+    }
+
+    private fun setBondRepairState(state: OnePlusBondRepairState) {
+        if (state == bondRepairState) return
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair $bondRepairState -> $state staleCycles=$staleBondCycles")
+        bondRepairState = state
+        onBondRepair(state)
+    }
+
+    /**
+     * Counts the stale-bond cycles after a cycle that reached an accepted authentication, and
+     * reports a broken bond or the end of a repair. See [OnePlusBondRepair].
+     */
+    private fun noteBondAfterCycle(fullPairing: Boolean, osBonded: Boolean, provedHealthy: Boolean) {
+        staleBondCycles = OnePlusBondRepair.staleCycles(staleBondCycles, fullPairing, osBonded, provedHealthy)
+        setBondRepairState(OnePlusBondRepair.next(bondRepairState, staleBondCycles, provedHealthy))
+    }
+
+    /**
+     * Removes the bond when the user asked for it. Called between two links only: removing a bond
+     * during a link may drop it. The next pairing then asks for a new bond.
+     *
+     * Only while the bond is still [OnePlusBondRepairState.BROKEN]: the cycle after the tap may have
+     * been healthy, and removing a working bond would make the user pair again for nothing. The link
+     * of the cycle is closed first: after the stale case the sensor already closed it, but after
+     * other failed cycles it can still be up here.
+     */
+    private fun runRequestedBondRepair() {
+        if (!bondRepairRequested) return
+        bondRepairRequested = false
+        if (bondRepairState != OnePlusBondRepairState.BROKEN) {
+            OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair not done: the state is now $bondRepairState")
+            return
+        }
+        if (gatt.isConnected()) {
+            up = false
+            try {
+                gatt.disconnect()
+            } catch (_: Throwable) {
+            }
+        }
+        val removed = try {
+            gatt.removeBond()
+        } catch (t: Throwable) {
+            OnePlusLog.e("${OnePlusLogMarkers.ERROR}: [$slot] bond repair: removeBond ${t.message}", t)
+            false
+        }
+        OnePlusLog.i("${OnePlusLogMarkers.SESSION}: [$slot] bond repair: removeBond ok=$removed")
+        if (!removed) return
+        staleBondCycles = 0
+        setBondRepairState(OnePlusBondRepairState.REPAIRING)
+    }
 
     private fun runConnectionCycle(
         deviceAddress: String,
@@ -1057,8 +1145,11 @@ class OnePlusBleSessionSkeleton(
             // throws. Uncaught, it ended the whole session and nothing started a new one: no
             // glucose until the app was restarted (field log 26/11/2026, `write Auth status=257`).
             // It is a failed cycle like a failed connect, so the session tries again.
+            val savedSharedKey = savedSharedKeyProvider()
+            // Read before the handshake: the bond the sensor was talking to (see OnePlusBondRepair).
+            val osBondedAtAuth = gatt.isBonded()
             val authResult = try {
-                auth.authenticate(pairingCode, savedSharedKeyProvider())
+                auth.authenticate(pairingCode, savedSharedKey)
             } catch (t: Throwable) {
                 if (!running) return CycleOutcome.Stopped
                 val msg = t.message ?: "ONEPLUS_AUTH_FAILED"
@@ -1157,6 +1248,11 @@ class OnePlusBleSessionSkeleton(
                 enterReconnecting(msg)
                 return CycleOutcome.RetryableFailure
             }
+            noteBondAfterCycle(
+                fullPairing = savedSharedKey == null,
+                osBonded = osBondedAtAuth,
+                provedHealthy = sessionProvedHealthy,
+            )
 
             return when {
                 !running -> CycleOutcome.Stopped

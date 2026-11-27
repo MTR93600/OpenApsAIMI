@@ -5,7 +5,10 @@ import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.plugins.dexcomoneplus.OnePlusDisplaySlot
+import app.aaps.plugins.dexcomoneplus.OnePlusGlucoseSample
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.source.keys.DexcomOnePlusBooleanKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -46,14 +49,18 @@ data class DexcomOnePlusWatchReport(val status: EventData.CgmWatchStatus, val re
  * sent again whenever the watch asks for data, and whenever the watch reports a state that does not
  * match it, at most once a minute.
  *
- * The watch's readings never come back here. Nothing in this class receives a glucose value.
+ * The watch's readings come back here only when the user lets the loop use them
+ * ([DexcomOnePlusBooleanKey.WatchReadingsToLoop]). Each one is checked
+ * ([DexcomOnePlusIngest.mayFeedLoopFromWatch]) before it goes to [onWatchReadings].
  *
  * Behaviour follows `G7WatchHandover` in nightscout/AndroidAPS pull request 5397 by t1dude.
  *
  * @param transport null on a phone without a watch link, which makes every call here a no-op.
  * @param productionSession reads the production slot's stored sensor, live, on every call.
+ * @param productionRefusals reads the production slot's refusals in a row, live, on every call.
  * @param wearPluginEnabled whether the Wear plugin is on. Without it no message reaches a watch, so
  *   the feature is not offered (see [isOffered]).
+ * @param onWatchReadings gets the watch's readings that passed the checks, for the loop.
  */
 class DexcomOnePlusWatchHandover(
     private val preferences: Preferences,
@@ -61,8 +68,10 @@ class DexcomOnePlusWatchHandover(
     private val aapsLogger: AAPSLogger,
     private val transport: DexcomOnePlusWatchTransport?,
     private val productionSession: () -> OnePlusStoredSession?,
+    private val productionRefusals: () -> OnePlusAuthRefusals = { OnePlusAuthRefusals() },
     private val wearPluginEnabled: () -> Boolean = { true },
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val onWatchReadings: (List<OnePlusGlucoseSample>) -> Unit = {},
 ) {
 
     private var job: Job? = null
@@ -89,18 +98,26 @@ class DexcomOnePlusWatchHandover(
 
     val isEnabled: Boolean get() = preferences.get(DexcomOnePlusBooleanKey.WatchDirect)
 
+    /** True when the watch sends its readings back and the loop may use them. */
+    val readingsToLoop: Boolean get() = preferences.get(DexcomOnePlusBooleanKey.WatchReadingsToLoop)
+
     /** True when the production sensor can be handed to the watch right now. */
-    fun isAvailable(): Boolean = DexcomOnePlusWatchDirectRules.isAvailable(DexcomOnePlusWatchDirectRules.sensorOf(productionSession()))
+    fun isAvailable(): Boolean = DexcomOnePlusWatchDirectRules.isAvailable(DexcomOnePlusWatchDirectRules.sensorOf(productionSession(), productionRefusals()))
 
     fun start(scope: CoroutineScope) {
         if (transport == null) return
         job?.cancel()
         job = scope.launch {
             launch { rxBus.toFlow(EventData.CgmWatchStatus::class).collect { onStatus(it) } }
+            launch { rxBus.toFlow(EventData.CgmWatchReadings::class).collect { onReadings(it) } }
             // The watch app (re)started, or a watch connected: it may have missed the last message.
             launch { rxBus.toFlow(EventData.ActionResendData::class).collect { resend("watch asked for data") } }
             // The switch, from the Status screen or the settings
             launch { preferences.observe(DexcomOnePlusBooleanKey.WatchDirect).drop(1).collect { resend(if (it) "turned on" else "turned off") } }
+            launch {
+                preferences.observe(DexcomOnePlusBooleanKey.WatchReadingsToLoop).drop(1)
+                    .collect { resend(if (it) "loop uses watch readings" else "loop does not use watch readings") }
+            }
             resend("start")
         }
     }
@@ -129,7 +146,7 @@ class DexcomOnePlusWatchHandover(
     }
 
     private fun wanted(): EventData.CgmWatchDirect =
-        DexcomOnePlusWatchDirectRules.wanted(isEnabled, DexcomOnePlusWatchDirectRules.sensorOf(productionSession()))
+        DexcomOnePlusWatchDirectRules.wanted(isEnabled, DexcomOnePlusWatchDirectRules.sensorOf(productionSession(), productionRefusals()), readingsToLoop)
 
     private fun send(message: EventData.CgmWatchDirect, reason: String) {
         val link = transport ?: return
@@ -156,6 +173,27 @@ class DexcomOnePlusWatchHandover(
             lastCorrectionAtMs = now
             resend("watch is out of step")
         }
+    }
+
+    /**
+     * Readings the watch took itself. Only the ones that pass [DexcomOnePlusIngest.mayFeedLoopFromWatch]
+     * go on: the setting is on now (not only when the watch was asked), and they are of the sensor
+     * this phone follows. None goes on when the watch's clock does not agree with the phone's
+     * ([DexcomOnePlusIngest.watchClockAgrees]).
+     */
+    private fun onReadings(message: EventData.CgmWatchReadings) {
+        val wanted = wanted()
+        val now = nowMs()
+        if (!DexcomOnePlusIngest.watchClockAgrees(message.sentAt, now)) {
+            aapsLogger.warn(LTag.BGSOURCE, "DEXCOM_ONEPLUS_WATCH: ${message.readings.size} readings refused, watch clock sentAt=${message.sentAt} phone=$now")
+            return
+        }
+        val accepted = message.readings.filter {
+            DexcomOnePlusIngest.mayFeedLoopFromWatch(wanted.active && wanted.sendReadings, message.address, wanted.address, it.mgdl, it.timestamp, now)
+        }
+        aapsLogger.info(LTag.BGSOURCE, "DEXCOM_ONEPLUS_WATCH: ${message.readings.size} readings from the watch, ${accepted.size} may feed the loop")
+        if (accepted.isEmpty()) return
+        onWatchReadings(accepted.map { OnePlusGlucoseSample(it.mgdl, it.timestamp, it.slopeMgdlPerMin, sequence = null, displaySlot = OnePlusDisplaySlot.WATCH) })
     }
 
     private companion object {

@@ -42,11 +42,12 @@ import kotlinx.coroutines.launch
  * connects to the Dexcom ONE+ / G7 itself, in the sensor's watch slot, with its own key, next to the
  * phone. The phone stays the master: it says which sensor to follow and when to let it go.
  *
- * The watch's readings go to its faces, complications and tiles only. The phone's copy of the same
+ * The watch's readings go to its faces, complications and tiles. The phone's copy of the same
  * reading wins ([WatchDirectReadings.choose]); the watch's own copy shows when the phone is away.
- * No reading is ever sent to the phone: the only message this class sends is the link status
- * ([EventData.CgmWatchStatus]). That is the hard rule of direct-to-watch, and the reason the loop
- * can never get a watch reading.
+ * They go to the phone only when the phone asked for them ([EventData.CgmWatchDirect.sendReadings],
+ * a setting that is off by default), so the loop keeps running when only the watch hears the
+ * sensor ([WatchReadingsForPhone]). Otherwise the only message this class sends is the link status
+ * ([EventData.CgmWatchStatus]). The phone checks every watch reading again before the loop gets it.
  *
  * The phone owns the glucose alarms. The watch raises only a low or urgent low of its own, and only
  * while the phone has sent nothing for [WatchDirectReadings.PHONE_SILENT_MS]. It goes through
@@ -102,6 +103,10 @@ class WatchDirect(
     /** True once this app run has asked the link to connect, so a running pairing is not started twice. */
     private var connectAsked = false
 
+    /** The readings the phone does not have yet, for the loop. Sent only when the phone asked. */
+    private val forPhone = WatchReadingsForPhone()
+    private var sendToPhoneJob: Job? = null
+
     /** Waits while the link is down, then asks it to start again. See [WatchDirectRestart]. */
     private var restartJob: Job? = null
 
@@ -151,7 +156,13 @@ class WatchDirect(
         scope.launch { rxBus.toFlow(EventData.CgmWatchDirect::class).collect { handle(it) } }
         scope.launch {
             rxBus.toFlow(EventData.SingleBg::class).collect {
-                if (it.dataset == 0 && !it.fromSensor) lastPhoneReadingAt = WatchDirectReadings.newestPhoneReading(lastPhoneReadingAt, it.timeStamp)
+                if (it.dataset == 0 && !it.fromSensor) {
+                    lastPhoneReadingAt = WatchDirectReadings.newestPhoneReading(lastPhoneReadingAt, it.timeStamp)
+                    // The phone's newest reading says which watch readings arrived. The phone is
+                    // reachable now, so the ones it still misses go again.
+                    forPhone.phoneHas(it.timeStamp)
+                    scheduleSendToPhone()
+                }
             }
         }
         val link = link
@@ -272,6 +283,9 @@ class WatchDirect(
         }
         val address = message.address
         val pairingCode = message.pairingCode
+        // A sensor of its own: the readings of the old one must not go to the phone.
+        if (link.address() != null && link.address() != address) forPhone.clear()
+        forPhone.setWanted(message.active && message.sendReadings)
         if (message.active && address != null && pairingCode != null) {
             if (!hasPermissions) {
                 // Nothing can connect yet. Kept, so the watch's own screen can go on after the grant.
@@ -319,6 +333,7 @@ class WatchDirect(
         }
         // Always answer, so the phone knows the message arrived.
         report(describe(), force = true)
+        scheduleSendToPhone()
     }
 
     private fun describe(): EventData.CgmWatchStatus {
@@ -351,13 +366,53 @@ class WatchDirect(
         if (!force && status == lastReported) return
         lastReported = status
         aapsLogger.debug(LTag.WEAR, "Direct to watch: ${status.state} batteryRestricted=${status.batteryRestricted}")
-        // The status is the only thing this class ever sends to the phone. Never a reading.
+        // Readings go only through sendToPhone, and only when the phone asked for them.
         rxBus.send(EventWearToMobile(status))
+    }
+
+    /**
+     * Sends the readings the phone misses, a short time after the last change. The sensor sends its
+     * last 3 hours at each connection, one reading at a time: this makes one message of them, not 36.
+     */
+    private fun scheduleSendToPhone() {
+        if (!forPhone.wanted) return
+        // Not restarted by a later event: a reading waits at most this long, also while the phone
+        // keeps sending its own values.
+        if (sendToPhoneJob?.isActive == true) return
+        // The watch may sleep during the delay, and the reading would then wait for the next wake
+        // up. A partial wake lock keeps the CPU on until the message is sent, and a short time after,
+        // because the message leaves the watch in the background. The timeout is a safety net.
+        val wakeLock = context.getSystemService(PowerManager::class.java)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, SEND_TO_PHONE_WAKE_LOCK_TAG)
+            ?.apply { acquire(SEND_TO_PHONE_DELAY_MS + 2 * SEND_TO_PHONE_HOLD_AFTER_MS) }
+        sendToPhoneJob = scope.launch {
+            try {
+                delay(SEND_TO_PHONE_DELAY_MS)
+                sendToPhone()
+            } finally {
+                // Released apart from this job: a reading that comes now must start a new send.
+                scope.launch {
+                    delay(SEND_TO_PHONE_HOLD_AFTER_MS)
+                    if (wakeLock?.isHeld == true) wakeLock.release()
+                }
+            }
+        }
+    }
+
+    private fun sendToPhone() {
+        val address = link?.address() ?: return
+        val now = System.currentTimeMillis()
+        val readings = forPhone.toSend(now)
+        if (readings.isEmpty()) return
+        aapsLogger.info(LTag.WEAR, "Direct to watch: ${readings.size} readings sent to the phone, newest ts=${readings.last().timestamp}")
+        // The watch's clock goes with the readings: the phone refuses them when the two clocks differ.
+        rxBus.send(EventWearToMobile(EventData.CgmWatchReadings(address, readings, sentAt = now)))
     }
 
     /** One reading from the watch's own link: to the faces, and a low alarm when the phone is away. */
     private suspend fun showReading(reading: WatchSensorReading) {
         if (!WatchDirectReadings.isUsable(reading)) return
+        if (forPhone.add(reading, System.currentTimeMillis())) scheduleSendToPhone()
         val data = repository.current()
         val template = data.bgData.takeIf { !it.fromSensor && it.timeStamp > 0 } ?: data.bgData.takeIf { it.timeStamp > 0 }
         val bg = WatchDirectReadings.toSingleBg(reading, template, data.graphData.entries)
@@ -458,6 +513,23 @@ class WatchDirect(
         /** About 10 s for an urgent low and 5 s for a low, as before. */
         const val URGENT_VIBRATION_S = 10
         const val LOW_VIBRATION_S = 5
+
+        /**
+         * The watch waits this long before it sends a reading. The rest of the sensor's backfill
+         * comes in the meantime, so the readings go in one message. The phone reads the sensor in
+         * the same radio window and tells the watch within seconds that it has the value, so a
+         * phone that works gets nothing: in field logs it had the value about 2 s after the watch.
+         * While only the watch hears the sensor, the loop gets the value this much later. Not
+         * longer: the loop runs on each new value. Not much shorter: below about 10 s the watch
+         * would send most values the phone gets anyway.
+         */
+        const val SEND_TO_PHONE_DELAY_MS = 15_000L
+
+        /** The wake lock stays this long after the readings were handed over, so the message leaves the watch. */
+        const val SEND_TO_PHONE_HOLD_AFTER_MS = 5_000L
+
+        /** The tag of that wake lock, in the form `app:what` that Android asks for. */
+        const val SEND_TO_PHONE_WAKE_LOCK_TAG = "AAPS:WatchDirectSendToPhone"
 
         /** The empty screen Wear OS settings put in place of a setting the watch does not have. */
         const val STAND_IN_SETTINGS_SCREEN = "FakeSettingsActivity"

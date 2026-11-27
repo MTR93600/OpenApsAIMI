@@ -55,11 +55,21 @@ internal class FakeOnePlusGatt(
 
     override fun enableBackfillNotifications() = Unit
 
-    override fun isBonded(): Boolean = true
+    /** What [isBonded] answers. [removeBond] clears it. */
+    var bonded = true
+
+    /** How often [removeBond] was called, and whether the link was up at each call. */
+    val bondRemovalsWhileConnected = mutableListOf<Boolean>()
+
+    override fun isBonded(): Boolean = bonded
 
     override fun createBond(): Boolean = true
 
-    override fun removeBond(): Boolean = true
+    override fun removeBond(): Boolean {
+        bondRemovalsWhileConnected += connected
+        bonded = false
+        return true
+    }
 
     override fun awaitBondComplete(timeoutMs: Long): Boolean = true
 

@@ -2,6 +2,7 @@ package app.aaps.plugins.source
 
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
 
 /**
@@ -10,7 +11,8 @@ import app.aaps.plugins.dexcomoneplus.session.OnePlusSessionStart
  *
  * Direct-to-watch: a Wear OS watch reads the same sensor in the sensor's watch slot, with its own
  * key, next to the phone. The phone stays the master: it decides which sensor the watch follows and
- * when the watch lets it go. The watch's readings stay on the watch.
+ * when the watch lets it go. The watch's readings stay on the watch, unless the phone asks for them
+ * for the loop ([DexcomOnePlusIngest.mayFeedLoopFromWatch]).
  *
  * Behaviour follows the phone handover of nightscout/AndroidAPS pull request 5397 by t1dude
  * (`G7WatchHandover`), re-written for this driver's sensor store and its two sensor slots.
@@ -27,7 +29,8 @@ object DexcomOnePlusWatchDirectRules {
         val serial: String?,
         val sensorName: String?,
         /**
-         * True when this phone has a key for the sensor. The phone always asks for the phone slot,
+         * True when this phone has a key for the sensor, or lost it only because the sensor refused
+         * it (see [sensorOf]). The phone always asks for the phone slot,
          * so a key means this phone holds the phone slot and the watch slot is the one left free.
          */
         val holdsPhoneSlot: Boolean,
@@ -41,15 +44,26 @@ object DexcomOnePlusWatchDirectRules {
     /**
      * The production sensor, as the handover sees it. Only the PRODUCTION store may be passed here:
      * a pre-soak sensor is never handed to the watch. Null when no sensor is stored.
+     *
+     * The phone still holds the phone slot when the sensor refused its saved key: the phone then
+     * deletes the key and pairs again, which can fail for a long time on a phone with a bad
+     * Bluetooth. That is just when the watch is needed, so the watch keeps the sensor.
+     *
+     * @param refusals the production slot's refusals in a row, from the same store
      */
-    fun sensorOf(production: OnePlusStoredSession?): Sensor? {
+    fun sensorOf(production: OnePlusStoredSession?, refusals: OnePlusAuthRefusals = OnePlusAuthRefusals()): Sensor? {
         if (production == null) return null
+        val hasKey = production.sharedKey?.size == SHARED_KEY_SIZE
+        val lostKeyToRefusal = refusals.count > 0 &&
+            refusals.lastWithSavedKey &&
+            !production.lastMac.isNullOrBlank() &&
+            refusals.address.equals(production.lastMac, ignoreCase = true)
         return Sensor(
             address = production.lastMac,
             pairingCode = production.identity.pin,
             serial = production.identity.serial,
             sensorName = production.lastDeviceName,
-            holdsPhoneSlot = production.sharedKey?.size == SHARED_KEY_SIZE,
+            holdsPhoneSlot = hasKey || lostKeyToRefusal,
         )
     }
 
@@ -64,8 +78,12 @@ object DexcomOnePlusWatchDirectRules {
             sensor.pairingCode != null &&
             OnePlusSessionStart.isValidPairingCode(sensor.pairingCode)
 
-    /** The message the watch should act on now. Inactive when off, or when nothing can be handed over. */
-    fun wanted(enabled: Boolean, sensor: Sensor?): EventData.CgmWatchDirect =
+    /**
+     * The message the watch should act on now. Inactive when off, or when nothing can be handed over.
+     *
+     * @param readingsToLoop the watch sends its readings back, for the loop
+     */
+    fun wanted(enabled: Boolean, sensor: Sensor?, readingsToLoop: Boolean = false): EventData.CgmWatchDirect =
         if (enabled && sensor != null && isAvailable(sensor))
             EventData.CgmWatchDirect(
                 active = true,
@@ -73,6 +91,7 @@ object DexcomOnePlusWatchDirectRules {
                 address = sensor.address,
                 serial = sensor.serial,
                 sensorName = sensor.sensorName,
+                sendReadings = readingsToLoop,
             )
         else EventData.CgmWatchDirect(active = false)
 
@@ -92,7 +111,8 @@ object DexcomOnePlusWatchDirectRules {
         lastSent == null ||
             lastSent.active != wanted.active ||
             lastSent.address != wanted.address ||
-            lastSent.pairingCode != wanted.pairingCode
+            lastSent.pairingCode != wanted.pairingCode ||
+            lastSent.sendReadings != wanted.sendReadings
 
     /**
      * True when a watch [status] that does not match [wanted] earns a corrective message now, at

@@ -18,6 +18,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScannerAndroid
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.source.activities.DexcomOnePlusStartActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.logs.DriverLogReader
@@ -100,6 +101,10 @@ class DexcomOnePlusAndroidHost(
     override fun cancelWarmupNotification() = warmupNotification.cancel()
 
     override fun alert(message: String) = warmupNotification.alert(message)
+
+    override fun showWatchOnly(sinceMs: Long?) = warmupNotification.watchOnly(sinceMs)
+
+    override fun showBondRepair(state: OnePlusBondRepairState) = warmupNotification.bondRepair(state)
 
     /** The start screen's own scanner instance, with no hint until the screen sets one. */
     override fun screenScanner(): OnePlusBleScanner =

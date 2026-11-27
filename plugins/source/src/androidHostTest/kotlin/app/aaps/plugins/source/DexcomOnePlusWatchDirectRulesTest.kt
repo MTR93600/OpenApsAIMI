@@ -3,6 +3,7 @@ package app.aaps.plugins.source
 import app.aaps.core.interfaces.rx.weardata.EventData
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorIdentity
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusStoredSession
+import app.aaps.plugins.dexcomoneplus.session.OnePlusAuthRefusals
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -49,12 +50,46 @@ class DexcomOnePlusWatchDirectRulesTest {
     }
 
     @Test
+    fun `a key lost to a refusal of the same sensor keeps the watch on`() {
+        // The sensor refused the saved key: the phone deleted it and pairs again. The watch keeps the sensor.
+        val lostKey = paired().copy(sharedKey = null)
+        val refused = OnePlusAuthRefusals(address = "aa:bb:cc:dd:ee:01", count = 1, lastAtMs = 1L, lastWithSavedKey = true)
+        assertTrue(DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(lostKey, refused)).active)
+    }
+
+    @Test
+    fun `a refusal does not count for another sensor or without a saved key`() {
+        val lostKey = paired().copy(sharedKey = null)
+        val otherSensor = OnePlusAuthRefusals(address = "AA:BB:CC:DD:EE:02", count = 1, lastAtMs = 1L, lastWithSavedKey = true)
+        val neverHadKey = OnePlusAuthRefusals(address = "AA:BB:CC:DD:EE:01", count = 1, lastAtMs = 1L, lastWithSavedKey = false)
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(lostKey, otherSensor)).active)
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(lostKey, neverHadKey)).active)
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(false, DexcomOnePlusWatchDirectRules.sensorOf(lostKey, otherSensor.copy(address = "AA:BB:CC:DD:EE:01"))).active)
+    }
+
+    @Test
     fun `a forgotten sensor revokes the watch`() {
         assertNull(DexcomOnePlusWatchDirectRules.sensorOf(null))
         assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, null).active)
         // A stored identity without an address is no sensor to follow either.
         assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(paired().copy(lastMac = null))).active)
         assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, DexcomOnePlusWatchDirectRules.sensorOf(paired(pin = "12"))).active)
+    }
+
+    @Test
+    fun `the watch sends its readings back only when the loop may use them`() {
+        val sensor = DexcomOnePlusWatchDirectRules.sensorOf(paired())
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(true, sensor).sendReadings)
+        assertTrue(DexcomOnePlusWatchDirectRules.wanted(true, sensor, readingsToLoop = true).sendReadings)
+        // Direct to watch off: nothing at all, the loop setting alone does nothing.
+        assertFalse(DexcomOnePlusWatchDirectRules.wanted(false, sensor, readingsToLoop = true).sendReadings)
+        // Turning the loop setting on or off must reach the watch.
+        assertTrue(
+            DexcomOnePlusWatchDirectRules.changed(
+                DexcomOnePlusWatchDirectRules.wanted(true, sensor),
+                DexcomOnePlusWatchDirectRules.wanted(true, sensor, readingsToLoop = true)
+            )
+        )
     }
 
     @Test

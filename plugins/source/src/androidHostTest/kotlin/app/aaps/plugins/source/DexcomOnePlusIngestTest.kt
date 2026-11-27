@@ -143,4 +143,91 @@ class DexcomOnePlusIngestTest {
         val reRead = OnePlusGlucoseSample(mgdl = 120.0, timestampMs = 2_000_000L + 30_000L) // 30 s off, no sequence
         assertThat(DexcomOnePlusIngest.shouldAccept(reRead)).isFalse()
     }
+
+    private val now = 1_700_000_000_000L
+    private val sensor = "AA:BB:CC:DD:EE:01"
+
+    private fun fromWatch(enabled: Boolean = true, address: String? = sensor, phoneAddress: String? = sensor, mgdl: Double = 120.0, timestampMs: Long = now) =
+        DexcomOnePlusIngest.mayFeedLoopFromWatch(enabled, address, phoneAddress, mgdl, timestampMs, now)
+
+    private fun watchSample(timestampMs: Long, sequence: Long? = null) =
+        OnePlusGlucoseSample(mgdl = 120.0, timestampMs = timestampMs, sequence = sequence, displaySlot = OnePlusDisplaySlot.WATCH)
+
+    @Test
+    fun `a watch reading of the same sensor may feed the loop when the setting is on`() {
+        assertThat(fromWatch()).isTrue()
+        assertThat(fromWatch(timestampMs = now - DexcomOnePlusIngest.WATCH_MAX_AGE_MS)).isTrue()
+    }
+
+    @Test
+    fun `a watch reading older than the sensor backfill is refused`() {
+        assertThat(fromWatch(timestampMs = now - DexcomOnePlusIngest.WATCH_MAX_AGE_MS - 1)).isFalse()
+        assertThat(fromWatch(timestampMs = now - 24 * 3_600_000L)).isFalse()
+    }
+
+    @Test
+    fun `watch readings are refused when the watch clock does not agree with the phone clock`() {
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now, now)).isTrue()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now - DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS, now)).isTrue()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now + DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS, now)).isTrue()
+        // A watch clock behind: its readings would look older or newer than they are.
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now - DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS - 1, now)).isFalse()
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(now + DexcomOnePlusIngest.WATCH_MAX_CLOCK_SKEW_MS + 1, now)).isFalse()
+        // A watch app that does not send its clock.
+        assertThat(DexcomOnePlusIngest.watchClockAgrees(null, now)).isFalse()
+    }
+
+    @Test
+    fun `a watch reading is refused when the setting is off`() {
+        assertThat(fromWatch(enabled = false)).isFalse()
+    }
+
+    @Test
+    fun `a watch reading of another sensor, or with no sensor on the phone, is refused`() {
+        assertThat(fromWatch(address = "AA:BB:CC:DD:EE:02")).isFalse()
+        assertThat(fromWatch(address = null)).isFalse()
+        assertThat(fromWatch(phoneAddress = null)).isFalse()
+        assertThat(fromWatch(address = "", phoneAddress = "")).isFalse()
+    }
+
+    @Test
+    fun `a watch reading out of the sensor's range is refused`() {
+        assertThat(fromWatch(mgdl = 39.0)).isFalse()
+        assertThat(fromWatch(mgdl = 401.0)).isFalse()
+        assertThat(fromWatch(mgdl = 40.0)).isTrue()
+        assertThat(fromWatch(mgdl = 400.0)).isTrue()
+    }
+
+    @Test
+    fun `a watch reading in the future is refused`() {
+        assertThat(fromWatch(timestampMs = now + DexcomOnePlusIngest.WATCH_MAX_AHEAD_MS)).isTrue()
+        assertThat(fromWatch(timestampMs = now + DexcomOnePlusIngest.WATCH_MAX_AHEAD_MS + 1)).isFalse()
+        assertThat(fromWatch(timestampMs = 0L)).isFalse()
+    }
+
+    @Test
+    fun `a watch reading fills a hole behind a newer phone reading`() {
+        DexcomOnePlusIngest.seed(lastSequence = 100L, recentTimestampsMs = emptyList())
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 100.0, timestampMs = now, sequence = 101L))).isTrue()
+        // 20 minutes older than the phone's newest reading: the sequence floor does not apply to it.
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now - 20 * 60_000L))).isTrue()
+    }
+
+    @Test
+    fun `the watch copy and the phone copy of the same reading go in once`() {
+        // The watch first, then the phone's backfill of the same reading, a few seconds apart.
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now))).isTrue()
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 120.0, timestampMs = now + 5_000L, sequence = 200L))).isFalse()
+        // The phone first, then the watch.
+        assertThat(DexcomOnePlusIngest.shouldAccept(OnePlusGlucoseSample(mgdl = 120.0, timestampMs = now + 300_000L, sequence = 201L))).isTrue()
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now + 303_000L))).isFalse()
+        // The same watch reading sent again.
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now))).isFalse()
+    }
+
+    @Test
+    fun `only a watch slot reading with no sequence takes the watch path`() {
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now).copy(displaySlot = OnePlusDisplaySlot.PHONE))).isFalse()
+        assertThat(DexcomOnePlusIngest.shouldAcceptFromWatch(watchSample(now, sequence = 5L))).isFalse()
+    }
 }

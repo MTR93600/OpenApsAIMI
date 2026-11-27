@@ -5,15 +5,16 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * The hard rule of direct-to-watch: a reading the watch takes from the sensor itself never reaches
- * the insulin loop.
+ * The rule of direct-to-watch: a reading the watch takes from the sensor itself reaches the loop
+ * only through the phone, and only when the phone asked for it.
  *
  * The loop only gets glucose through `insertCgmSourceData` on the phone. So the rule holds when
- * (1) the watch app cannot store glucose at all, and (2) the direct-to-watch code sends nothing to
- * the phone but its link status. The phone side has its own guard on top
- * (`DexcomOnePlusIngest.mayFeedLoop`, tested in `:plugins:source`).
+ * (1) the watch app cannot store glucose at all, (2) the direct-to-watch code sends the phone only
+ * its link status and the readings of [WatchReadingsForPhone], which gives none unless the phone
+ * asked (tested in [WatchReadingsForPhoneTest]). The phone checks each watch reading again
+ * (`DexcomOnePlusIngest.mayFeedLoopFromWatch`, tested in `:plugins:source`).
  */
-class WatchReadingNeverReachesLoopTest {
+class WatchReadingReachesLoopOnlyThroughPhoneTest {
 
     private val mainSources = File("src/main/kotlin").absoluteFile
     private val watchDirectSources = File(mainSources, "app/aaps/wear/watchdirect")
@@ -35,13 +36,18 @@ class WatchReadingNeverReachesLoopTest {
     }
 
     @Test
-    fun `direct to watch sends only its link status to the phone`() {
+    fun `direct to watch sends the phone only its status and the readings the phone asked for`() {
         val sent = kotlinFiles(watchDirectSources).flatMap { file ->
             SENT_TO_PHONE.findAll(file.readText()).map { it.groupValues[1].trim() }.toList()
         }
-        // Each EventWearToMobile in this package carries a CgmWatchStatus, never a reading.
         assertThat(sent).isNotEmpty()
-        assertThat(sent.all { it == "status" }).isTrue()
+        assertThat(sent.toSet()).containsExactly("status", "EventData.CgmWatchReadings(address, readings, sentAt = now")
+    }
+
+    @Test
+    fun `the readings sent are the ones of WatchReadingsForPhone`() {
+        val text = File(watchDirectSources, "WatchDirect.kt").readText()
+        assertThat(text).contains("val readings = forPhone.toSend(")
     }
 
     @Test
