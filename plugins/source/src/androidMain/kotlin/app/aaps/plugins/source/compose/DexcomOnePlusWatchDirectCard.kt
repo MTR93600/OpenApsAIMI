@@ -44,14 +44,16 @@ internal fun DexcomOnePlusWatchDirectCard(
             Text(
                 text = when {
                     feed.feed == DexcomOnePlusFeed.PHONE                     -> stringResource(SourceStrings.dexcom_oneplus_feed_phone)
+                    feed.feed == DexcomOnePlusFeed.STARTING                  -> stringResource(SourceStrings.dexcom_oneplus_feed_starting)
                     feed.feed == DexcomOnePlusFeed.WATCH_ONLY && since != null ->
                         stringResource(SourceStrings.dexcom_oneplus_feed_watch_only, formatTime(since))
 
                     else                                                    -> stringResource(SourceStrings.dexcom_oneplus_feed_none)
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                // Not the normal case: the loop depends on the watch, or gets nothing.
-                color = if (feed.feed == DexcomOnePlusFeed.PHONE) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                // Not the normal case: the loop depends on the watch, or gets nothing. A start is normal.
+                color = if (feed.feed == DexcomOnePlusFeed.PHONE || feed.feed == DexcomOnePlusFeed.STARTING) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.error,
             )
         }
         if (available && report?.status?.batteryRestricted == true) {

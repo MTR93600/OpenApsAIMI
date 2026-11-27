@@ -486,6 +486,7 @@ class DexcomOnePlusPlugin @Inject constructor(
     override suspend fun onStart() {
         super.onStart()
         sensorAlertsRunning = true
+        sensorAlertsLock.withLock { sensorAlerts.onStart(nowMs()) }
         workScopeLock.withLock { stopped = false }
         ioScope()
         syncDriverFromPrefs()

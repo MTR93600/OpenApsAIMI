@@ -7,12 +7,16 @@ package app.aaps.plugins.source
  * - [PHONE]: the phone got a reading of its own lately. The normal case.
  * - [WATCH_ONLY]: the phone lost the sensor, but the watch still sends readings. The loop runs, but
  *   only while the watch stays near the sensor and the phone. The user must know it.
+ * - [STARTING]: the plugin just started and no reading came yet. The times of the last readings
+ *   are kept in memory only, so after a restart nothing says where the next one will come from.
+ *   Shown until the first reading, or for [FRESH_MS] at most.
  * - [NONE]: no recent reading from either. The usual signal loss alarm takes care of it.
  */
 internal enum class DexcomOnePlusFeed {
 
     PHONE,
     WATCH_ONLY,
+    STARTING,
     NONE;
 
     companion object {
@@ -33,9 +37,11 @@ internal enum class DexcomOnePlusFeed {
 
         fun isFresh(readingAtMs: Long?, nowMs: Long): Boolean = readingAtMs != null && nowMs - readingAtMs < FRESH_MS
 
-        fun of(lastPhoneReadingAtMs: Long?, lastWatchReadingAtMs: Long?, nowMs: Long): DexcomOnePlusFeed = when {
+        /** @param startedAtMs when the plugin started, null when not known (then never [STARTING]) */
+        fun of(lastPhoneReadingAtMs: Long?, lastWatchReadingAtMs: Long?, nowMs: Long, startedAtMs: Long? = null): DexcomOnePlusFeed = when {
             isFresh(lastPhoneReadingAtMs, nowMs) -> PHONE
             isFresh(lastWatchReadingAtMs, nowMs) -> WATCH_ONLY
+            lastPhoneReadingAtMs == null && lastWatchReadingAtMs == null && isFresh(startedAtMs, nowMs) -> STARTING
             else                                 -> NONE
         }
     }

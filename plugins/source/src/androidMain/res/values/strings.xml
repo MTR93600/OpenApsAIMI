@@ -90,6 +90,7 @@
     <string name="dexcom_oneplus_watch_state_waiting">Paired, waiting for the next reading</string>
     <string name="dexcom_oneplus_feed_phone">Glucose comes from the phone.</string>
     <string name="dexcom_oneplus_feed_watch_only" comment="%1$s = time of day the phone lost the sensor. Example: Glucose comes from the watch only. The phone lost the sensor at 16:05.">Glucose comes from the watch only. The phone lost the sensor at %1$s.</string>
+    <string name="dexcom_oneplus_feed_starting">Waiting for the first reading since the app started.</string>
     <string name="dexcom_oneplus_feed_none">No recent glucose from the phone or the watch.</string>
     <string name="dexcom_oneplus_notif_watch_only_title">Phone lost the sensor</string>
     <string name="dexcom_oneplus_notif_watch_only_text" comment="%1$s = time of day the phone lost the sensor. Example: Since 16:05 the loop uses the readings of the watch.">Since %1$s the loop uses the readings of the watch. Keep the watch on you and near the phone.</string>

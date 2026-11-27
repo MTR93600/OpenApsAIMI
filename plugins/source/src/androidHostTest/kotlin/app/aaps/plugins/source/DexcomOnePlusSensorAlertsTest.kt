@@ -47,6 +47,24 @@ class DexcomOnePlusSensorAlertsTest {
     }
 
     @Test
+    fun afterAStartTheFeedWaitsForTheFirstReadingInsteadOfSayingNone() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onStart(now)
+        assertEquals(DexcomOnePlusFeed.STARTING, alerts.feed(now + minute).feed)
+        // The first reading answers it.
+        alerts.onReading(now + 2 * minute)
+        assertEquals(DexcomOnePlusFeed.PHONE, alerts.feed(now + 2 * minute).feed)
+    }
+
+    @Test
+    fun withNoReadingAfterAStartTheFeedSaysNoneOnceReadingsShouldHaveCome() {
+        val alerts = DexcomOnePlusSensorAlerts()
+        alerts.onStart(now)
+        assertEquals(DexcomOnePlusFeed.STARTING, alerts.feed(now + DexcomOnePlusFeed.FRESH_MS - 1).feed)
+        assertEquals(DexcomOnePlusFeed.NONE, alerts.feed(now + DexcomOnePlusFeed.FRESH_MS).feed)
+    }
+
+    @Test
     fun theWatchOnlyNoticeShowsAgainAtScreenOnAtMostOnceAnHour() {
         assertEquals(false, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS - 1))
         assertEquals(true, DexcomOnePlusFeed.remindAtScreenOn(now, now + DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS))

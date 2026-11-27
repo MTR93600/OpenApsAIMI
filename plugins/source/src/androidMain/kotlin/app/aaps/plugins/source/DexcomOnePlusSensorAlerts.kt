@@ -39,6 +39,14 @@ internal class DexcomOnePlusSensorAlerts {
     private var lastWatchReadingAtMs: Long? = null
     private var watchOnlySinceMs: Long? = null
 
+    /** When the plugin started, for [DexcomOnePlusFeed.STARTING]. */
+    private var startedAtMs: Long? = null
+
+    /** The plugin started: until the first reading, [feed] says so instead of "no recent glucose". */
+    fun onStart(nowMs: Long) {
+        startedAtMs = nowMs
+    }
+
     /** The last WARMING was a sensor issue, not a warm-up, so READY after it is no "warm-up done". */
     private var lastWasIssue = false
 
@@ -83,7 +91,7 @@ internal class DexcomOnePlusSensorAlerts {
 
     /** Where the glucose comes from now, see [DexcomOnePlusFeed]. Keeps the start of a watch-only time. */
     fun feed(nowMs: Long): DexcomOnePlusFeedState {
-        val feed = DexcomOnePlusFeed.of(lastReadingAtMs, lastWatchReadingAtMs, nowMs)
+        val feed = DexcomOnePlusFeed.of(lastReadingAtMs, lastWatchReadingAtMs, nowMs, startedAtMs)
         watchOnlySinceMs = if (feed == DexcomOnePlusFeed.WATCH_ONLY) watchOnlySinceMs ?: lastReadingAtMs ?: nowMs else null
         return DexcomOnePlusFeedState(feed, watchOnlySinceMs)
     }
