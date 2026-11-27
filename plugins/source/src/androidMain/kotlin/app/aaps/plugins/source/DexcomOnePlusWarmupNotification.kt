@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.source.activities.DexcomOnePlusStatusActivity
 import app.aaps.plugins.source.activities.DexcomOnePlusWarmupActivity
 import app.aaps.plugins.source.compose.DexcomOnePlusWarmupCountdown
@@ -261,6 +262,40 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
     }
 
     /**
+     * The silent notice of a stale Android bond (`OnePlusBondRepair`). A tap opens the status screen,
+     * where the Repair button is. No sound: the user may be asleep, and the repair needs them awake
+     * and in front of the phone anyway, to accept the pairing request.
+     */
+    fun bondRepair(state: OnePlusBondRepairState) {
+        val text = when (state) {
+            OnePlusBondRepairState.NONE      -> {
+                try {
+                    NotificationManagerCompat.from(context).cancel(BOND_REPAIR_ID)
+                } catch (_: Throwable) {
+                }
+                return
+            }
+
+            OnePlusBondRepairState.BROKEN    -> context.getString(R.string.dexcom_oneplus_bond_broken_text)
+            OnePlusBondRepairState.REPAIRING -> context.getString(R.string.dexcom_oneplus_bond_repairing_text)
+        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(CoreUiR.drawable.notif_icon)
+            .setContentTitle(context.getString(R.string.dexcom_oneplus_bond_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setOngoing(true)
+            .setContentIntent(openDetailIntent(warmupPage = false))
+        try {
+            NotificationManagerCompat.from(context).notify(BOND_REPAIR_ID, builder.build())
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied — the status screen still shows the state and its button.
+        }
+    }
+
+    /**
      * Where a tap goes: the warm-up page while a warm-up runs or has failed, the status screen in
      * every other state. The warm-up page says nothing useful about a sensor that is long past its
      * warm-up, and its title would be wrong there.
@@ -303,6 +338,9 @@ class DexcomOnePlusWarmupNotification(private val context: Context) {
 
         /** The watch-only notice, apart from the warm-up one: both can show at the same time. */
         private const val WATCH_ONLY_ID = 8934
+
+        /** Its own id: it stays next to the warm-up notice and the alerts. */
+        private const val BOND_REPAIR_ID = 8935
 
         private const val REQUEST_WARMUP = 0
         private const val REQUEST_STATUS = 1

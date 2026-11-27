@@ -13,6 +13,7 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.plugins.dexcomoneplus.OnePlusCalibrationOutcome
 import app.aaps.plugins.dexcomoneplus.OnePlusCgmDrivers
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 import app.aaps.plugins.source.DexcomOnePlusHost
 import app.aaps.plugins.source.DexcomOnePlusPlugin
 import app.aaps.plugins.source.DexcomOnePlusFeedState
@@ -175,4 +176,10 @@ class DexcomOnePlusStatusViewModel(
 
     /** The direct-to-watch switch, live. */
     val watchDirectEnabled: StateFlow<Boolean> = preferences.observe(DexcomOnePlusBooleanKey.WatchDirect)
+
+    /** Where a stale Android bond and its repair stand, see `OnePlusBondRepair`. */
+    val bondRepair: StateFlow<OnePlusBondRepairState> get() = plugin.bondRepair
+
+    /** The Repair button: the bond goes after the current link, see [DexcomOnePlusPlugin.requestBondRepair]. */
+    fun repairBond() = plugin.requestBondRepair()
 }

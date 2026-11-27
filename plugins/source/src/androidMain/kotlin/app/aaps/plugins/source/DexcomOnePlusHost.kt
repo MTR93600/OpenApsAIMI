@@ -9,6 +9,7 @@ import app.aaps.plugins.dexcomoneplus.OnePlusInstalledApps
 import app.aaps.plugins.dexcomoneplus.OnePlusWarmupState
 import app.aaps.plugins.dexcomoneplus.identity.OnePlusSensorStore
 import app.aaps.plugins.dexcomoneplus.scan.OnePlusBleScanner
+import app.aaps.plugins.dexcomoneplus.session.OnePlusBondRepairState
 
 /**
  * Everything [DexcomOnePlusPlugin] needs from the phone it runs on.
@@ -90,6 +91,13 @@ interface DexcomOnePlusHost {
      * A silent notice, shown again at screen on, see [DexcomOnePlusFeed.WATCH_ONLY_REMIND_MS].
      */
     fun showWatchOnly(sinceMs: Long?) {}
+
+    /**
+     * Show, update or take down the silent notice of a stale Android bond, see `OnePlusBondRepair`.
+     * The status screen shows the same state with its Repair button, so a host without
+     * notifications (a test host) loses nothing the user needs.
+     */
+    fun showBondRepair(state: OnePlusBondRepairState) {}
 
     /**
      * How direct-to-watch messages reach a watch, or null when this host has no watch link.

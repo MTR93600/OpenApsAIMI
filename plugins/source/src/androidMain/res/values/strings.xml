@@ -295,6 +295,10 @@
     <string name="dexcom_oneplus_staging_last_label">Last reading</string>
     <string name="dexcom_oneplus_end_of_life_title">Sensor is near its end</string>
     <string name="dexcom_oneplus_end_of_life_text">Starting a pre-soak sensor now means the next one is already warm when this one stops.</string>
+    <string name="dexcom_oneplus_bond_title">Phone link to the sensor is broken</string>
+    <string name="dexcom_oneplus_bond_broken_text">The sensor accepts the phone, then closes the link at once. The Bluetooth pairing saved on the phone is probably out of date. When you can watch the phone for a few minutes, open the sensor screen and tap Repair.</string>
+    <string name="dexcom_oneplus_bond_repairing_text">Repair started. In the next minutes Android asks to pair with the sensor: accept it at once, it only waits a few seconds. It can take a few sensor cycles.</string>
+    <string name="dexcom_oneplus_bond_repair">Repair</string>
     <string name="dexcom_oneplus_start_presoak">Start a pre-soak sensor</string>
     <string name="dexcom_oneplus_staging_none_short">A pre-soak sensor collects readings alongside the one in use. It never feeds the loop until you switch to it here.</string>
 
