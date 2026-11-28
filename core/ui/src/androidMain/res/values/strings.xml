@@ -1009,7 +1009,9 @@
     <string name="maintenance_send_logs_desc">Share log files for troubleshooting</string>
     <string name="maintenance_delete_logs_desc">Remove old log files</string>
     <string name="maintenance_aaps_directory_desc">Select local storage folder</string>
-    <string name="maintenance_aaps_directory_ios" comment="iPhone only. Where the app folder is in the iOS Files app. %1$s=app name, e.g. AAPS. Use the words the Files app shows in your language, e.g. French: Sur mon iPhone › %1$s">On My iPhone › %1$s</string>
+    <string name="maintenance_aaps_directory_ios" comment="iPhone only. Where the AAPS folder is in the iOS Files app. %1$s=app name, e.g. AAPS or AAPSClient. %2$s=folder name inside it, always AAPS, do not translate. Use the words the Files app shows in your language, e.g. French: Sur mon iPhone › %1$s › %2$s">On My iPhone › %1$s › %2$s</string>
+    <string name="aaps_folder_problem_ios">AAPS could not set up its AAPS folder. Settings exports, logs or the UAM model may be missing. Check that the phone has free space, then open the app again.</string>
+    <string name="aaps_folder_open_files_ios" comment="iPhone only. Button that opens the iOS Files app.">Open Files</string>
     <string name="maintenance_cloud_directory_desc">Set up cloud storage (Google Drive)</string>
     <string name="maintenance_export_desc">Save encrypted settings backup</string>
     <string name="maintenance_stop_aaps">Stop AAPS</string>

@@ -3,12 +3,10 @@ package app.aaps.implementation.utils.fabric
 import app.aaps.core.interfaces.sharedPreferences.KeyValueStore
 import app.aaps.core.interfaces.utils.fabric.CrashReporter
 import app.aaps.implementation.logging.AAPSLoggerIos
+import app.aaps.implementation.logging.IosLogFiles
 import app.aaps.core.keys.BooleanKey
 import kotlinx.cinterop.ExperimentalForeignApi
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -143,7 +141,7 @@ class FabricPrivacyImplTest {
 
     @AfterTest
     fun removeTheLog() {
-        (NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String)
+        IosLogFiles.defaultDirectory()
             ?.let { NSFileManager.defaultManager.removeItemAtPath("$it/$fileName", null) }
     }
 

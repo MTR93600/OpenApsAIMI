@@ -54,7 +54,7 @@ class AAPSLoggerIos(
     private val maxBytes: Long = 5L * 1024 * 1024,
     /** How many files to keep, the live one included. */
     private val maxFiles: Int = 20,
-    /** Where the files go. Null means the app's Documents directory; a test passes its own. */
+    /** Where the files go. Null means `Documents/AAPS/logs` ([IosLogFiles.defaultDirectory]); a test passes its own. */
     private val directory: String? = null,
     /** Reads the stored per-tag switches. Null before the graph can supply one - see [enabled]. */
     private val logConfig: (() -> L)? = null

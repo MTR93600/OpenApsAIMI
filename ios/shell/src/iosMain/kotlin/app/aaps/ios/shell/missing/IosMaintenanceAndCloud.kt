@@ -48,7 +48,8 @@ import kotlin.coroutines.resume
  * files are shared instead, so a user can still send something.
  *
  * The result is "sent" only when the user really sent it from the sheet; closing the sheet is
- * "not sent". The files are also always reachable by hand in **Files > On My iPhone > AAPS**.
+ * "not sent". The files are also always reachable by hand in
+ * **Files > On My iPhone > AAPS > AAPS > logs** (`IosAapsDirectories.logs`).
  */
 @OptIn(ExperimentalForeignApi::class)
 @SingleIn(AppScope::class)

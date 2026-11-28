@@ -3,9 +3,9 @@ package app.aaps.ios.shell.config
 import app.aaps.core.interfaces.configuration.Config
 import app.aaps.core.interfaces.configuration.ExternalOptions
 import app.aaps.core.interfaces.configuration.InitProgress
+import app.aaps.core.interfaces.ios.IosAapsDirectories
 import app.aaps.core.keys.interfaces.AppPlatform
 import app.aaps.core.keys.interfaces.TextRef
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -14,10 +14,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import platform.Foundation.NSBundle
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIDevice
 
 /**
@@ -43,12 +40,13 @@ class IosConfig(
     /**
      * Where the option marker files are looked for. A test points it elsewhere.
      *
-     * `extra` inside the app's Documents directory, which the Files app shows as
-     * **On My iPhone → AAPS**. That is the whole reason this can work at all: the folder is
-     * reachable by the person using the phone, so `extra/engineering_mode` can be created by hand
-     * there exactly as it is created in `AAPS/extra` on Android.
+     * `Documents/AAPS/extra` ([IosAapsDirectories.extra]), which the Files app shows as
+     * **On My iPhone › AAPS › AAPS › extra**. The folder is reachable by the person using the
+     * phone, so `extra/engineering_mode` can be created by hand there, exactly as it is created in
+     * `AAPS/extra` on Android. The folder is made at app start by [IosAapsDirectories.prepare], not
+     * here.
      */
-    private val extraDir: String? = defaultExtraDir(),
+    private val extraDir: String? = IosAapsDirectories().extra,
     /** Master or follower. From the Info.plist; a test passes it. */
     val role: IosAppRole = IosAppRole.fromBundle(),
 ) : Config {
@@ -189,8 +187,9 @@ class IosConfig(
      * This answered a flat `false` before, on the grounds that iOS had nowhere for a user to put such
      * a file. That was true when it was written and stopped being true when the app's Documents
      * directory was exposed to the Files app: a person can now create
-     * **On My iPhone → AAPS → extra → engineering_mode** with no computer and no cable, which
-     * is the same gesture as `touch AAPS/extra/engineering_mode` on the other two platforms.
+     * **On My iPhone → AAPS → AAPS → extra → engineering_mode** with no computer and no cable,
+     * which is the same gesture as `touch AAPS/extra/engineering_mode` on the other two platforms.
+     * The folder has a `README.txt` that lists every option file name.
      *
      * Checked on each call rather than cached, because the file appears while the app is running -
      * the user has no way to restart it first, and a value read once at start up would ignore them
@@ -236,20 +235,4 @@ enum class IosAppRole {
         fun fromBundle(): IosAppRole =
             fromValue(NSBundle.mainBundle.objectForInfoDictionaryKey(INFO_PLIST_KEY) as? String)
     }
-}
-
-/**
- * `extra` inside the app's own Documents directory, created if it is not there yet.
- *
- * Made rather than merely looked for, so the folder is visible in the Files app before anyone needs
- * it - a user told to create `extra/engineering_mode` should find `extra` already waiting rather
- * than have to guess the name and spelling.
- */
-@OptIn(ExperimentalForeignApi::class)
-private fun defaultExtraDir(): String? {
-    val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
-        ?: return null
-    val extra = "$documents/extra"
-    NSFileManager.defaultManager.createDirectoryAtPath(extra, withIntermediateDirectories = true, attributes = null, error = null)
-    return extra
 }

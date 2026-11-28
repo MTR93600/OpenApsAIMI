@@ -106,11 +106,11 @@ class IosPrefsFileInfoTest {
     fun `the folder is named the way the Files app shows it and not by its real path`() {
         val filesAppText = object : TextResolver {
             override fun gs(ref: TextRef): String = "?"
-            override fun gs(ref: TextRef, vararg args: Any?): String = "On My iPhone › ${args.single()}"
+            override fun gs(ref: TextRef, vararg args: Any?): String = "On My iPhone › ${args.joinToString(" › ")}"
             override fun gsNotLocalised(ref: TextRef): String = "?"
         }
         val info = IosPrefsFileInfo(logger, lister, filesAppText, temporaryDirectory, appName = "AAPS 2")
-        assertEquals("On My iPhone › AAPS 2", info.directoryPath())
+        assertEquals("On My iPhone › AAPS 2 › AAPS", info.directoryPath())
     }
 
     @Test

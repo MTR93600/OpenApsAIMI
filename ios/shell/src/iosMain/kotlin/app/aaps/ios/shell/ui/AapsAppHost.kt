@@ -85,6 +85,7 @@ import app.aaps.ios.shell.platform.IosLanguage
 import app.aaps.ios.shell.platform.notOnThisPlatform
 import app.aaps.ios.shell.prefs.IosStorage
 import app.aaps.plugins.aps.openAPSAIMI.background.IosAimiBackgroundTasks
+import app.aaps.plugins.aps.openAPSAIMI.isIosUamModelMissingAfterInstall
 import app.aaps.plugins.aps.openAPSAIMI.dashboard.AimiGlassDashboardSnapshotFeed
 import app.aaps.plugins.sync.nsclientV3.ws.NsSocketFactory
 import app.aaps.shared.clientbindings.ClientViewModelFactory
@@ -125,11 +126,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import platform.Foundation.NSBundle
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
@@ -218,6 +216,10 @@ private var startedApp: StartedApp? = null
  * [StartupFailedScreen] if it fails again.
  */
 fun startAapsApp(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter) {
+    // First of all: make `Documents/AAPS` and move the files of older builds into it. Before the
+    // logger writes its first line (or a new `logs/aaps.log` would block moving the old one), before
+    // `IosConfig` reads `extra`, and before AIMI installs the UAM model into `ml`.
+    AapsFolderStartup.prepare()
     installCrashLogging()
     runCatching { startedOnce(nsSocketFactory, crashReporter) }
         .onFailure { e -> AAPSLoggerIos().error(LTag.CORE, "The app could not start: ${e.message}", e) }
@@ -233,6 +235,8 @@ fun startAapsApp(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter)
  */
 private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashReporter): StartedApp {
     startedApp?.let { return it }
+    // Does nothing when `startAapsApp` already did it; the view can reach this function first.
+    AapsFolderStartup.prepare()
     val store = IosStorage.open()
     // Built once, outside the composition: a graph rebuilt on each recomposition would hand out new
     // singletons every frame - a new database wrapper, a new preference store.
@@ -250,6 +254,10 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
     // collection on for precisely the users whose settings screen never shows them the row.
     crashReporter.setCollectionEnabled(graph.fabricPrivacy.fabricEnabled())
     setBuildIdentityKeys(crashReporter, graph.config)
+
+    // What `AapsFolderStartup.prepare` did at the very start, now that there is a logger and a
+    // notification manager to tell.
+    AapsFolderStartup.report(logger, graph.notificationManager)
 
     // Before the composition, not beside it: the first view model built reads the active pump, and
     // an empty plugin list there throws from a coroutine and takes the process with it.
@@ -284,7 +292,11 @@ private fun startedOnce(nsSocketFactory: NsSocketFactory, crashReporter: CrashRe
         // start after the phone stopped being a client. It has to be finished before the Nightscout
         // plugin starts, or its first upload could still use the old marks.
         beforePluginsStart = { runBlocking { graph.nsRoleChange.applyIfChanged() } },
-        afterStart = { recordAppStart(graph) },
+        afterStart = {
+            recordAppStart(graph)
+            // The model is installed by AIMI's `onStart`, so this is the first moment to check it.
+            if (graph.config.APS) AapsFolderStartup.reportMissingUamModel(isIosUamModelMissingAfterInstall(), logger, graph.notificationManager)
+        },
         // The wait for the plugins runs here, not on the main thread `startAapsApp` is called on.
         startupScope = graph.appScope,
         // Started on the main thread, as they were before the wait was added.
@@ -660,8 +672,12 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                 // Only for a path that reaches the navigator with EXIT without going through
                 // `handleOnIos` below. iOS gives an app no way to quit itself.
                 onExit = { reportNotAvailable("exit from the menu") },
-                // Needs a UIDocumentPicker, which nothing on iOS has yet.
-                onRequestDirectoryAccess = { reportNotReady("directory access") },
+                // Reached from the AAPS folder notification. There is no folder to pick and no
+                // permission on iOS, so this opens the Files app at the AAPS folder instead.
+                onRequestDirectoryAccess = {
+                    AapsFolderStartup.filesAppFolder()?.let { graph.urlOpener.open("shareddocuments://$it") }
+                        ?: reportNotAvailable("no Documents directory")
+                },
                 onOpenUrl = { url -> graph.urlOpener.open(url) }
             )
 
@@ -799,12 +815,12 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
                             // already handed to it above, so this is the same call the other two
                             // shells make. It was a placeholder only while iOS had no importer.
                             onImportSettingsNavigate = { source -> navController.navigate(AppRoute.ImportSettings.createRoute(source.name)) },
-                            // Nothing to choose on iOS: the app's Documents folder is the AAPS
-                            // folder. This opens it in the Files app instead, where the user puts
-                            // exports and the `extra` files. `shareddocuments://` is the link the
-                            // Files app answers to.
+                            // Nothing to choose on iOS: the app has its own `Documents/AAPS`
+                            // folder. This opens it in the Files app instead, where the user finds
+                            // exports, logs and the `extra` files. `shareddocuments://` is the link
+                            // the Files app answers to.
                             onDirectoryClick = {
-                                documentsDirectory()?.let { graph.urlOpener.open("shareddocuments://$it") }
+                                AapsFolderStartup.filesAppFolder()?.let { graph.urlOpener.open("shareddocuments://$it") }
                                     ?: reportNotAvailable("no Documents directory")
                             },
                             // The Google sign in, and the only thing that reaches this callback.
@@ -850,6 +866,9 @@ private fun AapsApp(app: StartedApp, navigationRelay: NavigationRelay, onPending
  * Keep the two apart.
  */
 fun registerAimiBackgroundTasks() {
+    // One of the first Kotlin calls of the Swift `init` and the first that can write files, so the
+    // AAPS folder is prepared here. `startAapsApp` calls it again, which then does nothing.
+    AapsFolderStartup.prepare()
     IosAimiBackgroundTasks.register()
 }
 
@@ -981,7 +1000,3 @@ private fun failureExplanation(error: Throwable): List<String> = when (error) {
 
     else                            -> emptyList()
 }
-
-/** The app's Documents folder, shown as "On My iPhone › AAPS" in the Files app. Null only if iOS gives none. */
-private fun documentsDirectory(): String? =
-    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String

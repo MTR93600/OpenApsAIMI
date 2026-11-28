@@ -2,6 +2,7 @@ package app.aaps.plugins.aps.openAPSAIMI.ml
 
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.core.interfaces.ios.IosAapsDirectories
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.plugins.aps.ApsStrings
 import app.aaps.plugins.aps.openAPSAIMI.AimiUamHandler
@@ -12,17 +13,14 @@ import app.aaps.plugins.aps.openAPSAIMI.aimiFmt2
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readBytes
 import platform.Foundation.NSData
-import platform.Foundation.NSDocumentDirectory
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dataWithContentsOfFile
 import kotlin.concurrent.Volatile
 
 /**
  * The iPhone side of the UAM model, the same steps as Android's `AimiModelHandler`.
  *
- * The model file is `Documents/AAPS/ml/modelUAM.tflite` in the app's container, the same relative
- * path as on Android. It is read once and kept; a missing file is tried again on the next tick, and
+ * The model file is `Documents/AAPS/ml/modelUAM.tflite` in the app's container
+ * ([IosAapsDirectories.ml]), the same relative path as on Android. It is read once and kept; a missing file is tried again on the next tick, and
  * until then the answer is 0f, exactly like Android.
  *
  * Android keeps a result cache keyed on the inputs. It only saves time: the model gives the same
@@ -78,12 +76,9 @@ internal object IosUamPredictor : AimiUamHandler.AimiUamPredictor {
         return rh.gs(ApsStrings.uam_model_status, flag, "Documents/${AimiUamInference.MODEL_RELATIVE_PATH}", size)
     }
 
-    @OptIn(ExperimentalForeignApi::class)
-    internal fun modelPath(): String? {
-        val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
-            ?: return null
-        return "$documents/${AimiUamInference.MODEL_RELATIVE_PATH}"
-    }
+    /** `Documents/AAPS/ml/modelUAM.tflite`. The folder comes from [IosAapsDirectories]. */
+    internal fun modelPath(): String? =
+        IosAapsDirectories().ml?.let { "$it/${AimiUamInference.MODEL_RELATIVE_PATH.substringAfterLast('/')}" }
 
     @OptIn(ExperimentalForeignApi::class)
     private fun readFile(path: String): ByteArray? {

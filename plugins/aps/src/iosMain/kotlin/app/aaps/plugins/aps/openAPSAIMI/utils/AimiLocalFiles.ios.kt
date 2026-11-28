@@ -2,20 +2,18 @@ package app.aaps.plugins.aps.openAPSAIMI.utils
 
 import app.aaps.core.interfaces.concurrent.AapsLock
 import app.aaps.core.interfaces.concurrent.withLock
+import app.aaps.core.interfaces.ios.IosAapsDirectories
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.get
 import kotlinx.cinterop.reinterpret
 import platform.Foundation.NSDate
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileModificationDate
 import platform.Foundation.NSFileSize
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.closeFile
 import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
@@ -31,12 +29,10 @@ import platform.Foundation.writeToFile
 
 internal actual fun aimiLocalFiles(): AimiLocalFiles = IosAimiLocalFiles
 
+/** `Documents/AAPS` ([IosAapsDirectories.root]), where the AIMI data files are written. */
 @OptIn(ExperimentalForeignApi::class)
 internal actual fun iosTickAimiRoot(): String {
-    val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
-        .firstOrNull() as? String
-        ?: error("no Documents directory")
-    val root = "$documents/AAPS"
+    val root = IosAapsDirectories().root ?: error("no Documents directory")
     NSFileManager.defaultManager.createDirectoryAtPath(
         root,
         withIntermediateDirectories = true,

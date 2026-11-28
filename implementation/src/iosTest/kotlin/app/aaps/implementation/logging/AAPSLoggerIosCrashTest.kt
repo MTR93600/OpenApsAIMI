@@ -2,12 +2,9 @@ package app.aaps.implementation.logging
 
 import app.aaps.core.interfaces.logging.LTag
 import kotlinx.cinterop.ExperimentalForeignApi
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.stringWithContentsOfFile
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -35,8 +32,8 @@ class AAPSLoggerIosCrashTest {
     /** A folder that does not exist yet, to prove the logger makes the one it needs. */
     private val missingFolder = "unit-test-missing-folder"
 
-    private fun documents(): String? =
-        NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
+    /** Where the logger writes by default: `Documents/AAPS/logs`. */
+    private fun documents(): String? = IosLogFiles.defaultDirectory()
 
     private fun path(name: String = fileName): String? = documents()?.let { "$it/$name" }
 

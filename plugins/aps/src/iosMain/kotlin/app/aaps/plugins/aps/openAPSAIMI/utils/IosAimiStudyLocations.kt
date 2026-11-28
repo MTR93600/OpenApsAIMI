@@ -1,14 +1,12 @@
 package app.aaps.plugins.aps.openAPSAIMI.utils
 
+import app.aaps.core.interfaces.ios.IosAapsDirectories
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.cinterop.ExperimentalForeignApi
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 
 /**
  * iOS half of [AimiStudyLocations]: one directory, inside the app's own container.
@@ -24,11 +22,12 @@ import platform.Foundation.NSUserDomainMask
  *
  * ## Why a subfolder and not `Documents` itself
  *
- * The container's `Documents` root is already in use - `AppDatabaseBuilder.ios.kt` puts the app
- * database there. Study exports are append-only JSONL that tools walk a whole directory to collect,
- * and pointing such a walk at the folder holding the live database is asking for a copy of it in
- * someone's support package. `AAPS` also keeps the folder name the same as on Android, so a file
- * moved between the two platforms needs no renaming.
+ * `Documents/AAPS` ([IosAapsDirectories.root]) is the one folder that holds everything the app
+ * shows the user: settings exports, logs, option files and these study files. Study exports are
+ * append-only JSONL that tools walk one directory (not its subfolders) to collect, so keeping them
+ * apart from the `Documents` root keeps anything else out of a support package. `AAPS` also keeps
+ * the folder name the same as on Android, so a file moved between the two platforms needs no
+ * renaming.
  *
  * The directory is created here, unlike on Android. Inside the app's own container that costs nothing
  * and the user cannot see a difference; on shared Android storage it would be creating a folder in
@@ -43,17 +42,9 @@ import platform.Foundation.NSUserDomainMask
 @SingleIn(AppScope::class)
 class IosAimiStudyLocations @Inject constructor() : AimiStudyLocations {
 
-    private companion object {
-
-        /** Same folder name as the Android shared directory, so a file reads the same on both. */
-        const val DIRECTORY_NAME = "AAPS"
-    }
-
     @OptIn(ExperimentalForeignApi::class)
     override fun studyDirectories(): List<AimiPath> {
-        val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
-            ?: return emptyList()
-        val directory = "$documents/$DIRECTORY_NAME"
+        val directory = IosAapsDirectories().root ?: return emptyList()
         NSFileManager.defaultManager.createDirectoryAtPath(directory, withIntermediateDirectories = true, attributes = null, error = null)
         return listOf(AimiPath(directory))
     }

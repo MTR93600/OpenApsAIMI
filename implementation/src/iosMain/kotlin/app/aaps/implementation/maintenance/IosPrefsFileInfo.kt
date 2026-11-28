@@ -1,5 +1,6 @@
 package app.aaps.implementation.maintenance
 
+import app.aaps.core.interfaces.ios.IosAapsDirectories
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
 import app.aaps.core.interfaces.maintenance.PrefsFile
@@ -12,11 +13,8 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import platform.Foundation.NSBundle
 import platform.Foundation.NSDate
-import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSRelativeDateTimeFormatter
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dateWithTimeIntervalSince1970
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -49,12 +47,16 @@ import kotlin.time.Instant
  *
  * Android has to ask: the user picks a folder through the Storage Access Framework, the permission
  * is persisted, and it can be revoked later. iOS has no such grant. Every app owns its Documents
- * directory and can always read and write it, so the only thing that can go wrong is the directory
- * not being there, which is what is actually checked.
+ * directory and can always read and write it, so the only thing that can go wrong is the folder
+ * not being there or not being writable, which is what is actually checked.
+ *
+ * [exportDirectory] is where settings exports really are: `Documents/AAPS/preferences`
+ * ([IosAapsDirectories.preferences]), the folder [IosPrefsFileAccess] writes them to.
  *
  * [directoryPath] is what the user sees, not the real path. The real one is
- * `/var/mobile/Containers/Data/Application/<id>/Documents`, which the user never sees anywhere. The
- * Files app shows the same folder as "On My iPhone › AAPS", so that is what the screen says.
+ * `/var/mobile/Containers/Data/Application/<id>/Documents/AAPS`, which the user never sees anywhere.
+ * The Files app shows the same folder as "On My iPhone › AAPS › AAPS", so that is what the screen
+ * says.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -63,7 +65,7 @@ class IosPrefsFileInfo(
     private val aapsLogger: AAPSLogger,
     private val lister: PrefsFileLister,
     private val rh: TextResolver,
-    private val exportDirectory: String? = defaultDocumentsDirectory(),
+    private val exportDirectory: String? = IosAapsDirectories().preferences,
     private val appName: String = bundleAppName()
 ) : PrefsFileInfo {
 
@@ -86,14 +88,14 @@ class IosPrefsFileInfo(
     override fun isDirectoryAccessGranted(): Boolean {
         val directory = exportDirectory
         if (directory == null) {
-            aapsLogger.debug(LTag.UI, "No documents directory, so nothing can be exported")
+            aapsLogger.debug(LTag.UI, "No Documents directory, so nothing can be exported")
             return false
         }
         return NSFileManager.defaultManager.isWritableFileAtPath(directory)
     }
 
     override fun directoryPath(): String? =
-        exportDirectory?.let { rh.gs(CoreUiStrings.maintenance_aaps_directory_ios, appName) }
+        exportDirectory?.let { rh.gs(CoreUiStrings.maintenance_aaps_directory_ios, appName, IosAapsDirectories.ROOT_NAME) }
 }
 
 /**
@@ -106,10 +108,3 @@ private fun bundleAppName(): String =
         ?: "AAPS"
 
 private fun Instant.toNSDate(): NSDate = NSDate.dateWithTimeIntervalSince1970(toEpochMilliseconds() / 1000.0)
-
-/**
- * The app's own Documents directory, the only place an iOS app may write without being given
- * anything. Null would mean iOS did not report one at all, which should not happen.
- */
-private fun defaultDocumentsDirectory(): String? =
-    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstOrNull() as? String
